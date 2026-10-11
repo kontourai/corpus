@@ -79,7 +79,7 @@ export function checkReachability(root, manifest) {
     .map((file) => `${file} is neither listed in documents nor matched by exclude`);
 }
 
-/** Gate 4: topic anchors resolve to top-level headings (GitHub slug rules). */
+/** Gate 4: topic anchors resolve to headings outside blockquotes and lists (GitHub slug rules). */
 export function checkTopics(manifest, read) {
   const failures = [];
   manifest.topics.forEach((topic) => {
@@ -91,7 +91,7 @@ export function checkTopics(manifest, read) {
       const known = analysis.headings.map((heading) => `#${heading.slug}`).slice(0, 12).join(', ');
       failures.push(`topic "${topic.id}": #${anchor} does not match a heading in ${path}${known ? ` (headings: ${known})` : ''}`);
     } else if (!matches.some((heading) => heading.topLevel)) {
-      failures.push(`topic "${topic.id}": #${anchor} in ${path} is a heading nested in a quote or list; topics need a top-level heading`);
+      failures.push(`topic "${topic.id}": #${anchor} in ${path} is a heading nested in a quote or list; topics need a heading outside blockquotes and lists`);
     }
   });
   return failures;
