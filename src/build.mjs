@@ -1,19 +1,48 @@
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
 import { assembleBundle, defaultSiteUrl, normalizeBaseUrl } from './bundle.mjs';
 import { formatCheckReport, publishedSources, runChecks } from './check.mjs';
 import { EXIT_OK, GateFailure, UsageError } from './errors.mjs';
-import { headSha, repoPrefix } from './git.mjs';
+import { headSha, repoPrefix, trackedFiles } from './git.mjs';
+import { execFileSync } from 'node:child_process';
 import { outputPathFor } from './manifest.mjs';
-import { analyzeMarkdown, decodeEntities, documentTitle, firstParagraph, resolveLink } from './markdown.mjs';
+import { analyzeMarkdown, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
 import { encodePath, relativeUrl, statInRepo, toFsPath } from './paths.mjs';
 import { SITE_CSS, escapeHtml, sitePage } from './site-template.mjs';
 
 const IMAGE_FILE = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|bmp)$/i;
 const SAFE_EXTERNAL = /^(?:https?:|mailto:|\/\/)/i;
 const SAFE_DATA_IMAGE = /^data:image\/(?:png|jpe?g|gif|webp|avif);/i;
-const HTML_URL_ATTRIBUTE = /(\s(?:href|src)\s*=\s*)(["'])(.*?)\2/gi;
+
+/**
+ * Every product site shares the https://kontourai.github.io origin, so a
+ * script in one product's docs could act on every other product's pages.
+ * Rendered Markdown is sanitized to GitHub-like output: no script/style, no
+ * on* handlers, and only http(s)/mailto URLs (plus data: images).
+ */
+const SANITIZE_OPTIONS = {
+  allowedTags: [
+    ...new Set([
+      ...sanitizeHtml.defaults.allowedTags,
+      'img', 'picture', 'source', 'h1', 'h2', 'details', 'summary', 'del', 'ins', 's', 'kbd', 'sup', 'sub', 'input', 'div', 'span',
+    ]),
+  ],
+  allowedAttributes: {
+    '*': ['id', 'class', 'title', 'align', 'dir', 'lang', 'aria-label', 'aria-hidden'],
+    a: ['href', 'name'],
+    img: ['src', 'srcset', 'alt', 'width', 'height', 'loading'],
+    source: ['srcset', 'media', 'type'],
+    input: ['type', 'checked', 'disabled'],
+    td: ['colspan', 'rowspan'],
+    th: ['colspan', 'rowspan'],
+    ol: ['start'],
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesByTag: { img: ['http', 'https', 'data'], source: ['http', 'https', 'data'] },
+  allowProtocolRelative: true,
+};
 
 /**
  * Map a link written in `fromSource` to its URL on the generated site:
@@ -63,17 +92,12 @@ function renderMarkdown(markdown, fromSource, rewrite) {
   md.walkTokens(tokens, (token) => {
     if (token.type === 'link' || token.type === 'image') token.href = rewrite(token.href, fromSource, { image: token.type === 'image' });
     else if (token.type === 'html' && token.text) {
-      const rewritten = token.text.replace(HTML_URL_ATTRIBUTE, (_match, lead, quote, value) => {
-        const isSrc = /src/i.test(lead);
-        const next = rewrite(decodeEntities(value), fromSource, { image: isSrc });
-        return `${lead}${quote}${escapeHtml(next)}${quote}`;
-      });
+      const rewritten = rewriteHtmlReferences(token.text, (url, attr) => rewrite(url, fromSource, { image: attr !== 'href' }));
       token.text = rewritten;
       if ('raw' in token) token.raw = rewritten;
     }
   });
-  return md
-    .parser(tokens)
+  return sanitizeHtml(md.parser(tokens), SANITIZE_OPTIONS)
     .replaceAll('<table>', '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>')
     .replaceAll('</table>', '</table></div>');
 }
@@ -114,18 +138,49 @@ function sectionCards(manifest, titles, descriptions) {
   return `<section class="section-cards" aria-labelledby="docs-heading">\n<h2 id="docs-heading">Documentation</h2>\n${blocks.join('\n')}\n</section>`;
 }
 
-/** Refuse output directories whose deletion would destroy sources. */
-function assertSafeOut(root, out, manifest) {
+function gitIn(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+/**
+ * `build` deletes --out before writing, so refuse any directory whose loss
+ * is not regenerable: the repository root or an ancestor, anything inside a
+ * .git directory, a directory holding tracked files, or one holding untracked
+ * files that are not git-ignored. A path that does not exist yet, or holds
+ * only ignored files (a previous build in an ignored dist dir), is allowed.
+ */
+function assertSafeOut(root, out) {
   const resolvedRoot = path.resolve(root);
   const resolvedOut = path.resolve(out);
   const relative = path.relative(resolvedOut, resolvedRoot);
   if (relative === '' || !relative.startsWith('..'))
     throw new UsageError(`--out ${out} is the repository root or one of its parents; refusing to delete it`);
-  for (const source of [...publishedSources(manifest), 'docs-kit.json']) {
-    const inside = path.relative(resolvedOut, toFsPath(resolvedRoot, source));
-    if (!inside.startsWith('..') && !path.isAbsolute(inside))
-      throw new UsageError(`--out ${out} contains the source ${source}; refusing to delete it`);
+  if (resolvedOut.split(path.sep).includes('.git')) throw new UsageError(`--out ${out} is inside a .git directory; refusing to delete it`);
+  let stat;
+  try {
+    stat = statSync(resolvedOut);
+  } catch {
+    return;
   }
+  if (!stat.isDirectory()) throw new UsageError(`--out ${out} exists and is not a directory; refusing to delete it`);
+  let gitDir;
+  try {
+    gitDir = path.resolve(resolvedOut, gitIn(resolvedOut, ['rev-parse', '--absolute-git-dir']).trim());
+  } catch {
+    return; // not inside any git checkout
+  }
+  const insideGitDir = path.relative(gitDir, resolvedOut);
+  if (insideGitDir === '' || (!insideGitDir.startsWith('..') && !path.isAbsolute(insideGitDir)))
+    throw new UsageError(`--out ${out} is inside a .git directory; refusing to delete it`);
+  const tracked = trackedFiles(resolvedOut) ?? [];
+  if (tracked.length > 0)
+    throw new UsageError(`--out ${out} contains ${tracked.length} git-tracked file(s) (e.g. ${tracked[0]}); refusing to delete it`);
+  const untracked = gitIn(resolvedOut, ['ls-files', '-z', '--others', '--exclude-standard']).split('\0').filter(Boolean);
+  if (untracked.length > 0)
+    throw new UsageError(
+      `--out ${out} contains ${untracked.length} untracked file(s) that are not git-ignored (e.g. ${untracked[0]}); ` +
+        'refusing to delete it. Add the output directory to .gitignore or choose another --out.',
+    );
 }
 
 /** Every internal href/src in the generated site must resolve, including #fragments. */
@@ -141,18 +196,16 @@ export function checkGeneratedSite(out) {
   visit(out);
   const idCache = new Map();
   const idsOf = (file) => {
-    if (!idCache.has(file)) {
-      const html = readFileSync(file, 'utf8');
-      idCache.set(file, new Set([...html.matchAll(/\sid="([^"]*)"/g)].map((match) => decodeEntities(match[1]))));
-    }
+    if (!idCache.has(file)) idCache.set(file, new Set(extractHtmlAnchors(readFileSync(file, 'utf8'))));
     return idCache.get(file);
   };
   const failures = [];
   for (const file of files.sort()) {
     const html = readFileSync(file, 'utf8');
     const page = path.relative(out, file).split(path.sep).join('/');
-    for (const match of html.matchAll(/\s(href|src)="([^"]*)"/g)) {
-      const value = decodeEntities(match[2]).trim();
+    for (const { attr, url } of extractHtmlReferences(html)) {
+      const value = url.trim();
+      const label = `${attr}="${value}"`;
       if (/^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//')) continue;
       const hashIndex = value.indexOf('#');
       const pathPart = (hashIndex === -1 ? value : value.slice(0, hashIndex)).split('?')[0];
@@ -162,7 +215,7 @@ export function checkGeneratedSite(out) {
         decodedPath = decodeURIComponent(pathPart);
         fragment = decodeURIComponent(fragment);
       } catch {
-        failures.push(`${page}: ${match[1]}="${value}" - malformed percent-encoding`);
+        failures.push(`${page}: ${label} - malformed percent-encoding`);
         continue;
       }
       let target = file;
@@ -170,26 +223,25 @@ export function checkGeneratedSite(out) {
         target = decodedPath.startsWith('/') ? path.join(out, decodedPath) : path.resolve(path.dirname(file), decodedPath);
         const inside = path.relative(out, target);
         if (inside.startsWith('..') || path.isAbsolute(inside)) {
-          failures.push(`${page}: ${match[1]}="${value}" - points outside the generated site`);
+          failures.push(`${page}: ${label} - points outside the generated site`);
           continue;
         }
         let stat;
         try {
           stat = statSync(target);
         } catch {
-          failures.push(`${page}: ${match[1]}="${value}" - missing generated target`);
+          failures.push(`${page}: ${label} - missing generated target`);
           continue;
         }
         if (stat.isDirectory()) target = path.join(target, 'index.html');
         try {
           statSync(target);
         } catch {
-          failures.push(`${page}: ${match[1]}="${value}" - directory without index.html`);
+          failures.push(`${page}: ${label} - directory without index.html`);
           continue;
         }
       }
-      if (fragment && target.endsWith('.html') && !idsOf(target).has(fragment))
-        failures.push(`${page}: ${match[1]}="${value}" - missing anchor #${fragment}`);
+      if (fragment && target.endsWith('.html') && !idsOf(target).has(fragment)) failures.push(`${page}: ${label} - missing anchor #${fragment}`);
     }
   }
   return { files: files.length, failures };
@@ -209,7 +261,7 @@ export function runBuild({ root, out, baseUrl }) {
   const siteUrl = baseUrl ? normalizeBaseUrl(baseUrl) : defaultSiteUrl(manifest.product);
   const sha = headSha(root);
   const prefix = repoPrefix(root);
-  assertSafeOut(root, out, manifest);
+  assertSafeOut(root, out);
 
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });

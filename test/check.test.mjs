@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, cpSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { FIXTURES, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
@@ -161,4 +161,56 @@ test('freshness uses the merge base, so main moving ahead does not mark docs sta
   const result = await runCli(['check', '--root', repo, '--base', 'main']);
   assert.equal(result.status, 0, result.output);
   assert.match(result.stdout, /PASS freshness \(1 changed files since main\)/);
+});
+
+function editManifest(repo, edit) {
+  const file = path.join(repo, 'docs-kit.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  edit(manifest);
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+test('covers: a bare directory expands to dir/**; a glob matching no tracked file is exit 2', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  editManifest(repo, (manifest) => {
+    manifest.documents[0].covers = ['src/cli'];
+    delete manifest.documents[2].covers;
+  });
+  commitAll(repo, 'bare directory covers');
+  appendFileSync(path.join(repo, 'src', 'cli', 'main.js'), 'export const more = 1;\n');
+  commitAll(repo, 'touch covered code');
+  const stale = await runCli(['check', '--root', repo, '--base', 'HEAD~1']);
+  assert.equal(stale.status, 1, stale.output);
+  assert.match(stale.stderr, /docs\/getting-started\.md is stale: covered files changed since HEAD~1 \(src\/cli\/main\.js\)/);
+
+  editManifest(repo, (manifest) => {
+    manifest.documents[1].covers = ['src/nope/**', 'src/cli/*.js'];
+  });
+  const unmatched = await runCli(['check', '--root', repo]);
+  assert.equal(unmatched.status, 2, unmatched.output);
+  assert.match(unmatched.stderr, /documents\[1\]\.covers\[0\] "src\/nope\/\*\*" matches no tracked file/);
+  assert.doesNotMatch(unmatched.stderr, /covers\[1\]/);
+});
+
+test('freshness counts the old path of a renamed file', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(path.join(repo, 'src', 'cli', 'helper.js'), 'export const helper = 1;\n');
+  editManifest(repo, (manifest) => {
+    manifest.documents[0].covers = ['src/cli/*.js'];
+    delete manifest.documents[2].covers;
+  });
+  commitAll(repo, 'covers by glob');
+  mkdirSync(path.join(repo, 'lib'));
+  git(repo, ['mv', 'src/cli/main.js', 'lib/main.js']);
+  commitAll(repo, 'move main.js out of the covered directory');
+  const result = await runCli(['check', '--root', repo, '--base', 'HEAD~1']);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.stderr, /FAIL freshness \(2 changed files since HEAD~1\)/);
+  assert.match(result.stderr, /docs\/getting-started\.md is stale: covered files changed since HEAD~1 \(src\/cli\/main\.js\)/);
+});
+
+test('anchors use GitHub slugs from github-slugger (a superscript is dropped)', async () => {
+  const result = await runCli(['check', '--root', fixture('valid')]);
+  assert.equal(result.status, 0, result.output);
+  assert.match(readFileSync(path.join(fixture('valid'), 'docs', 'concepts.md'), 'utf8'), /## Area in m² units[\s\S]*\(#area-in-m-units\)/);
 });

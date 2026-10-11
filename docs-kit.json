@@ -6,19 +6,76 @@
   "repo": "kontourai/docs-kit",
   "landing": "README.md",
   "documents": [
-    { "source": "docs/bundle-format.md", "section": "Reference", "covers": ["src/bundle.mjs", "src/manifest.mjs", "src/hub.mjs", "src/mcp.mjs"] },
-    { "source": "docs/site-output.md", "section": "Reference", "covers": ["src/build.mjs", "src/site-template.mjs"] },
-    { "source": "AGENTS.md", "section": "Contribute" }
+    {
+      "source": "docs/bundle-format.md",
+      "section": "Reference",
+      "covers": [
+        "src/bundle.mjs",
+        "src/manifest.mjs",
+        "src/hub.mjs",
+        "src/mcp.mjs"
+      ]
+    },
+    {
+      "source": "docs/site-output.md",
+      "section": "Reference",
+      "covers": [
+        "src/build.mjs",
+        "src/site-template.mjs",
+        "src/markdown.mjs"
+      ]
+    },
+    {
+      "source": "AGENTS.md",
+      "section": "Contribute"
+    }
   ],
   "topics": [
-    { "id": "manifest", "title": "docs-kit.json manifest reference", "source": "README.md#manifest-reference" },
-    { "id": "check", "title": "docs-kit check and its gates", "source": "README.md#check" },
-    { "id": "build", "title": "docs-kit build", "source": "README.md#build" },
-    { "id": "mcp-server", "title": "MCP server tools and sources", "source": "README.md#mcp-server" },
-    { "id": "hub", "title": "Hub site and product states", "source": "README.md#hub" },
-    { "id": "adoption", "title": "Adopting docs-kit in a repo", "source": "README.md#adopting-docs-kit-in-a-repo" },
-    { "id": "bundle-format", "title": "docs-bundle.json format", "source": "docs/bundle-format.md#docs-bundlejson" },
-    { "id": "link-rewriting", "title": "How links are rewritten on the site", "source": "docs/site-output.md#link-rewriting" }
+    {
+      "id": "manifest",
+      "title": "docs-kit.json manifest reference",
+      "source": "README.md#manifest-reference"
+    },
+    {
+      "id": "check",
+      "title": "docs-kit check and its gates",
+      "source": "README.md#check"
+    },
+    {
+      "id": "build",
+      "title": "docs-kit build",
+      "source": "README.md#build"
+    },
+    {
+      "id": "mcp-server",
+      "title": "MCP server tools and sources",
+      "source": "README.md#mcp-server"
+    },
+    {
+      "id": "hub",
+      "title": "Hub site and product states",
+      "source": "README.md#hub"
+    },
+    {
+      "id": "adoption",
+      "title": "Adopting docs-kit in a repo",
+      "source": "README.md#adopting-docs-kit-in-a-repo"
+    },
+    {
+      "id": "bundle-format",
+      "title": "docs-bundle.json format",
+      "source": "docs/bundle-format.md#docs-bundlejson"
+    },
+    {
+      "id": "link-rewriting",
+      "title": "How links are rewritten on the site",
+      "source": "docs/site-output.md#link-rewriting"
+    },
+    {
+      "id": "known-limits",
+      "title": "Known limits",
+      "source": "README.md#known-limits"
+    }
   ],
   "exclude": []
 }

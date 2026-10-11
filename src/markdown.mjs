@@ -1,33 +1,16 @@
 import path from 'node:path';
+import GithubSlugger, { slug } from 'github-slugger';
 import { Lexer, marked } from 'marked';
 
-/**
- * GitHub heading slug: lowercase, drop everything except letters, marks,
- * numbers, connector punctuation (`_`), hyphens and spaces, then turn each
- * space into a hyphen. This mirrors github-slugger, which GitHub uses for
- * rendered Markdown anchors.
- */
+/** GitHub heading slug for one heading, via github-slugger (what GitHub uses). */
 export function githubSlug(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
-    .replace(/ /g, '-');
+  return slug(text);
 }
 
-/** Repeated headings get `-1`, `-2`, ... exactly as github-slugger counts them. */
+/** Per-document slugger: repeated headings get `-1`, `-2`, ... */
 export function createSlugger() {
-  const occurrences = new Map();
-  return (text) => {
-    const original = githubSlug(text);
-    let result = original;
-    while (occurrences.has(result)) {
-      const next = occurrences.get(original) + 1;
-      occurrences.set(original, next);
-      result = `${original}-${next}`;
-    }
-    occurrences.set(result, 0);
-    return result;
-  };
+  const slugger = new GithubSlugger();
+  return (text) => slugger.slug(text);
 }
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -55,7 +38,86 @@ export function plainText(tokens = []) {
   return text;
 }
 
-const HTML_ID = /\s(?:id|name)\s*=\s*["']([^"']+)["']/gi;
+const HTML_TAG = /<[A-Za-z][^\s/>]*((?:"[^"]*"|'[^']*'|[^'">])*)>/dg;
+const HTML_ATTRIBUTE = /(\s+)([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/dg;
+const URL_ATTRIBUTES = new Set(['href', 'src', 'srcset']);
+const ANCHOR_ATTRIBUTES = new Set(['id', 'name']);
+
+/**
+ * Every attribute of every start tag in an HTML fragment, in any quoting
+ * (double, single, unquoted). `start`/`end` cover the attribute including its
+ * leading whitespace, so callers can rewrite it in place. Values are
+ * entity-decoded. This one scanner backs raw-HTML link checking, rewriting,
+ * anchor collection, and the generated-site check.
+ */
+export function scanHtmlAttributes(html) {
+  const attributes = [];
+  for (const tag of html.matchAll(HTML_TAG)) {
+    const [areaStart] = tag.indices[1];
+    for (const attribute of tag[1].matchAll(HTML_ATTRIBUTE)) {
+      const raw = attribute[3] ?? attribute[4] ?? attribute[5];
+      attributes.push({
+        name: attribute[2].toLowerCase(),
+        value: raw === undefined ? '' : decodeEntities(raw),
+        start: areaStart + attribute.index,
+        end: areaStart + attribute.index + attribute[0].length,
+      });
+    }
+  }
+  return attributes;
+}
+
+/** URLs in a srcset value: each comma-separated candidate's first token. */
+function srcsetUrls(value) {
+  return value
+    .split(',')
+    .map((candidate) => candidate.trim().split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+/** Raw-HTML references: { attr, url } for href, src, and each srcset candidate. */
+export function extractHtmlReferences(html) {
+  const references = [];
+  for (const { name, value } of scanHtmlAttributes(html)) {
+    if (!URL_ATTRIBUTES.has(name)) continue;
+    if (name === 'srcset') for (const url of srcsetUrls(value)) references.push({ attr: name, url });
+    else references.push({ attr: name, url: value });
+  }
+  return references;
+}
+
+function escapeAttributeValue(value) {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/** Rewrite every href/src/srcset URL with `rewrite(url, attr)`; output is double-quoted. */
+export function rewriteHtmlReferences(html, rewrite) {
+  const targets = scanHtmlAttributes(html).filter((attribute) => URL_ATTRIBUTES.has(attribute.name));
+  let output = html;
+  for (const attribute of targets.reverse()) {
+    const leading = html.slice(attribute.start).match(/^\s+/)[0];
+    const value =
+      attribute.name === 'srcset'
+        ? attribute.value
+            .split(',')
+            .map((candidate) => {
+              const [url, ...descriptor] = candidate.trim().split(/\s+/);
+              return url ? [rewrite(url, 'srcset'), ...descriptor].join(' ') : '';
+            })
+            .filter(Boolean)
+            .join(', ')
+        : rewrite(attribute.value, attribute.name);
+    output = `${output.slice(0, attribute.start)}${leading}${attribute.name}="${escapeAttributeValue(value)}"${output.slice(attribute.end)}`;
+  }
+  return output;
+}
+
+/** Fragment targets declared in HTML: `id` and `name` attributes in any quoting. */
+export function extractHtmlAnchors(html) {
+  return scanHtmlAttributes(html)
+    .filter((attribute) => ANCHOR_ATTRIBUTES.has(attribute.name) && attribute.value !== '')
+    .map((attribute) => attribute.value);
+}
 
 function lineAt(source, index) {
   let line = 1;
@@ -65,8 +127,9 @@ function lineAt(source, index) {
 
 /**
  * Lex a Markdown document once and report what the gates and the builder
- * need: headings with GitHub slugs, every anchor id, every Markdown link and
- * image, and the title (first top-level H1).
+ * need: headings with GitHub slugs, every anchor (heading slugs plus raw-HTML
+ * id/name), every Markdown link and image plus raw-HTML href/src/srcset, and
+ * the title (first top-level H1).
  */
 export function analyzeMarkdown(source) {
   const tokens = Lexer.lex(source, { gfm: true });
@@ -85,7 +148,15 @@ export function analyzeMarkdown(source) {
       anchors.add(id);
       headings.push({ depth: token.depth, text, slug: id, topLevel: topLevel.has(token), token });
     } else if (token.type === 'html' && token.text) {
-      for (const match of token.text.matchAll(HTML_ID)) anchors.add(decodeEntities(match[1]));
+      for (const anchor of extractHtmlAnchors(token.text)) anchors.add(anchor);
+      const references = extractHtmlReferences(token.text);
+      if (references.length > 0) {
+        let index = source.indexOf(token.raw, cursor);
+        if (index === -1) index = source.indexOf(token.raw);
+        if (index !== -1) cursor = index + token.raw.length;
+        for (const { attr, url } of references)
+          links.push({ kind: 'html', attr, href: url, text: attr, line: index === -1 ? null : lineAt(source, index) });
+      }
     } else if ((token.type === 'link' || token.type === 'image') && typeof token.href === 'string') {
       let index = source.indexOf(token.raw, cursor);
       if (index === -1) index = source.indexOf(token.raw);

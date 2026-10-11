@@ -28,9 +28,10 @@ section.install h2 { margin-bottom: .5rem; }
 `;
 
 /**
- * Client-side status: the bundle comes from the same origin, main HEAD from
- * the GitHub API (cached in sessionStorage to stay under the anonymous rate
- * limit). Precedence: unpublished, behind, thin, current; "unknown" when the
+ * Client-side status: the bundle comes from the same origin (the hub must be
+ * served at the origin root, e.g. https://kontourai.github.io/), and the
+ * default-branch HEAD from the GitHub API, cached in localStorage for 10
+ * minutes to stay under the anonymous rate limit. Precedence: unpublished, behind, thin, current; "unknown" when the
  * main commit could not be read and nothing else applies.
  */
 const HUB_SCRIPT = `
@@ -55,14 +56,14 @@ const HUB_SCRIPT = `
     });
   }
   function mainCommit(repo) {
-    var key = 'docs-kit-hub:main:' + repo;
+    var key = 'docs-kit-hub:head:' + repo;
     try {
-      var hit = JSON.parse(sessionStorage.getItem(key) || 'null');
+      var hit = JSON.parse(localStorage.getItem(key) || 'null');
       if (hit && Date.now() - hit.at < TTL) return Promise.resolve(hit.value);
     } catch (e) {}
-    return getJson('https://api.github.com/repos/' + repo + '/commits/main', { headers: { Accept: 'application/vnd.github+json' } }).then(function (c) {
+    return getJson('https://api.github.com/repos/' + repo + '/commits/HEAD', { headers: { Accept: 'application/vnd.github+json' } }).then(function (c) {
       var value = { sha: c.sha, date: c.commit && c.commit.committer ? c.commit.committer.date : null };
-      try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), value: value })); } catch (e) {}
+      try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), value: value })); } catch (e) {}
       return value;
     });
   }
@@ -86,22 +87,22 @@ const HUB_SCRIPT = `
         state = 'unpublished';
         detail = 'No docs bundle is published at /' + p.product + '/docs-bundle.json.';
       } else {
-        var docs = (bundle.documents || []).length, topics = (bundle.topics || []).length;
+        var docs = (bundle.documents || []).filter(function (d) { return !d.landing; }).length, topics = (bundle.topics || []).length;
         var counts = docs + ' doc' + (docs === 1 ? '' : 's') + ', ' + topics + ' topic' + (topics === 1 ? '' : 's');
         var built = 'built ' + ago(bundle.builtAt) + ' from ' + String(bundle.sha || '').slice(0, 7);
         if (bundle.tagline) text(tagline, bundle.tagline);
         if (main && main.sha && bundle.sha !== main.sha) {
           state = 'behind';
-          detail = counts + '; ' + built + '; main is ' + main.sha.slice(0, 7) + (main.date ? ', committed ' + ago(main.date) : '') + '.';
+          detail = counts + '; ' + built + '; HEAD is ' + main.sha.slice(0, 7) + (main.date ? ', committed ' + ago(main.date) : '') + '.';
         } else if (docs < 3) {
           state = 'thin';
           detail = counts + '; ' + built + '. Fewer than 3 documents.';
         } else if (main && main.sha) {
           state = 'current';
-          detail = counts + '; ' + built + ', matching main.';
+          detail = counts + '; ' + built + ', matching HEAD.';
         } else {
           state = 'unknown';
-          detail = counts + '; ' + built + '. Could not read the main branch from GitHub to compare.';
+          detail = counts + '; ' + built + '. Could not read the default branch from GitHub to compare.';
         }
       }
       badge.className = 'state state-' + state;
@@ -143,10 +144,10 @@ export function renderHub(products) {
 </header>
 <main id="main">
   <h1>Kontour documentation</h1>
-  <p class="lede">Every Kontour building block publishes its docs here from its own repository. Status compares each published bundle with the repository's main branch.</p>
+  <p class="lede">Every Kontour building block publishes its docs here from its own repository. Status compares each published bundle with the HEAD of the repository's default branch.</p>
   <ul class="legend" aria-label="Status legend">
-    <li><span class="state state-current">current</span> built from main HEAD</li>
-    <li><span class="state state-behind">behind</span> main has moved since the build</li>
+    <li><span class="state state-current">current</span> built from the default branch HEAD</li>
+    <li><span class="state state-behind">behind</span> the default branch has moved since the build</li>
     <li><span class="state state-thin">thin</span> fewer than 3 documents</li>
     <li><span class="state state-unpublished">unpublished</span> no bundle found</li>
     <li><span class="state state-unknown">unknown</span> GitHub could not be reached to compare</li>

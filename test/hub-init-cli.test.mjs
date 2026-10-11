@@ -20,8 +20,8 @@ test('hub writes index.html and a byte-identical copy of products.json', async (
   }
   assert.match(html, /fetch\(url, init\)/);
   assert.match(html, /'\/' \+ p\.product \+ '\/docs-bundle\.json'/, 'bundle fetched from the same origin');
-  assert.match(html, /https:\/\/api\.github\.com\/repos\/' \+ repo \+ '\/commits\/main/);
-  assert.match(html, /sessionStorage/);
+  assert.match(html, /https:\/\/api\.github\.com\/repos\/' \+ repo \+ '\/commits\/HEAD/);
+  assert.match(html, /localStorage/);
   assert.match(html, /prefers-color-scheme: dark/);
   assert.ok(html.includes('npx -y github:kontourai/docs-kit#&lt;sha&gt; docs-kit mcp'));
   assert.ok(html.includes('claude mcp add kontour-docs -- npx -y github:kontourai/docs-kit#&lt;sha&gt; docs-kit mcp'));
@@ -47,10 +47,10 @@ async function runHubScript(html, { bundles, mains }) {
       fetched.push(url);
       const bundle = url.match(/^\/([^/]+)\/docs-bundle\.json$/);
       if (bundle) return respond(bundles[bundle[1]]);
-      const main = url.match(/^https:\/\/api\.github\.com\/repos\/(.+)\/commits\/main$/);
+      const main = url.match(/^https:\/\/api\.github\.com\/repos\/(.+)\/commits\/HEAD$/);
       return respond(main ? mains[main[1]] : undefined);
     },
-    sessionStorage: { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) },
+    localStorage: { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) },
     Date, JSON, Math, Promise, String, isFinite,
   };
   vm.runInNewContext(script, context);
@@ -68,8 +68,10 @@ test('hub page derives current, behind, thin, unpublished (and unknown) from bun
   assert.equal(result.status, 0, result.output);
   const html = readFileSync(path.join(out, 'index.html'), 'utf8');
 
-  const doc = { source: 'x.md', section: 'S', title: 'X', url: 'u', markdown: '# X' };
-  const bundle = (sha, docs) => ({ schemaVersion: 1, product: 'p', sha, builtAt: new Date(Date.now() - 3 * 86400000).toISOString(), documents: Array(docs).fill(doc), topics: [] });
+  const doc = { source: 'x.md', section: 'S', title: 'X', landing: false, url: 'u', markdown: '# X' };
+  const landing = { ...doc, source: 'README.md', section: null, landing: true };
+  // The landing page never counts toward the thin threshold of 3 documents.
+  const bundle = (sha, docs) => ({ schemaVersion: 1, product: 'p', sha, builtAt: new Date(Date.now() - 3 * 86400000).toISOString(), documents: [landing, ...Array(docs).fill(doc)], topics: [] });
   const { cards, fetched, store } = await runHubScript(html, {
     bundles: { current: bundle('aaa1111', 3), behind: bundle('old2222', 5), thin: bundle('ccc3333', 2), noapi: bundle('ddd4444', 4) },
     mains: {
@@ -82,13 +84,13 @@ test('hub page derives current, behind, thin, unpublished (and unknown) from bun
   const state = (name) => cards[`product-${name}`].attributes['data-state'];
   assert.equal(state('current'), 'current');
   assert.equal(state('behind'), 'behind');
-  assert.match(cards['product-behind'].parts['.meta'].textContent, /built 3 days ago from old2222; main is new9999/);
+  assert.match(cards['product-behind'].parts['.meta'].textContent, /5 docs, 0 topics; built 3 days ago from old2222; HEAD is new9999/);
   assert.equal(state('thin'), 'thin');
   assert.equal(state('gone'), 'unpublished');
   assert.equal(state('noapi'), 'unknown', 'no main commit to compare: say so instead of claiming current');
   assert.equal(cards['product-current'].parts['.state'].textContent, 'current');
   assert.ok(fetched.includes('/current/docs-bundle.json'));
-  assert.ok(store.has('docs-kit-hub:main:kontourai/current'), 'main commit cached in sessionStorage');
+  assert.ok(store.has('docs-kit-hub:head:kontourai/current'), 'HEAD commit cached in localStorage');
 });
 
 test('hub refuses an invalid products.json (exit 2)', async (t) => {

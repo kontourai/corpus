@@ -22,13 +22,19 @@ export function publishedSources(manifest) {
   return [manifest.landing, ...manifest.documents.map((document) => document.source)];
 }
 
-/** Gate 2: Markdown links and images in published sources. External URLs are not fetched. */
+/**
+ * Gate 2: Markdown links and images, plus raw-HTML href/src/srcset, in
+ * published sources. External URLs are not fetched. A leading `/` resolves
+ * from --root.
+ */
 export function checkLinks(root, manifest, read) {
   const failures = [];
   for (const source of publishedSources(manifest)) {
     const { analysis } = read(source);
     for (const link of analysis.links) {
-      const at = `${source}${link.line ? `:${link.line}` : ''}: ${link.kind === 'image' ? '!' : ''}[${link.text}](${link.href})`;
+      const where = `${source}${link.line ? `:${link.line}` : ''}`;
+      const at =
+        link.kind === 'html' ? `${where}: <... ${link.attr}="${link.href}">` : `${where}: ${link.kind === 'image' ? '!' : ''}[${link.text}](${link.href})`;
       const target = resolveLink(link.href, source);
       if (target.kind === 'external') continue;
       if (target.kind === 'invalid') {

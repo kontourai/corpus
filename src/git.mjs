@@ -66,11 +66,34 @@ export function changedFiles(root, base) {
     );
   }
   try {
-    return git(root, ['diff', '--name-only', '--relative', '-z', `${base}...HEAD`])
+    // --no-renames lists a renamed file's old path too, so covers on it still match.
+    return git(root, ['diff', '--name-only', '--no-renames', '--relative', '-z', `${base}...HEAD`])
       .split('\0')
       .filter(Boolean);
   } catch (error) {
     throw new UsageError(`git diff ${base}...HEAD failed: ${gitError(error)}`);
+  }
+}
+
+/**
+ * Tracked files under `root` (repo-relative to root), or null outside git.
+ * `git ls-files` lists paths relative to the working directory and limits
+ * them to that subtree.
+ */
+export function trackedFiles(root) {
+  try {
+    return git(root, ['ls-files', '-z', '--cached']).split('\0').filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/** True when the checkout has uncommitted changes (tracked or untracked). */
+export function isDirty(root) {
+  try {
+    return git(root, ['status', '--porcelain', '--untracked-files=normal', '--', '.']).trim() !== '';
+  } catch {
+    return false;
   }
 }
 

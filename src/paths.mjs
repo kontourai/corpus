@@ -96,6 +96,21 @@ export function listMarkdownFiles(root, directory) {
   return found.sort();
 }
 
+/** Every file under root (repo-relative), skipping .git and node_modules. Fallback outside git. */
+export function listFiles(root) {
+  const found = [];
+  const visit = (fsDir, repoDir) => {
+    for (const entry of readdirSync(fsDir, { withFileTypes: true })) {
+      if (entry.name === '.git' || entry.name === 'node_modules') continue;
+      const repoPath = repoDir ? `${repoDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path.join(fsDir, entry.name), repoPath);
+      else if (entry.isFile()) found.push(repoPath);
+    }
+  };
+  visit(root, '');
+  return found.sort();
+}
+
 /** Relative URL from one generated page to another generated file. */
 export function relativeUrl(fromOutput, toOutput) {
   const relative = path.posix.relative(path.posix.dirname(fromOutput), toOutput);

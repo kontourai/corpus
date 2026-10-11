@@ -26,8 +26,12 @@ Every page has the product title and tagline, navigation grouped by `section` in
 | `http(s):` and `mailto:` | unchanged |
 | other schemes, such as `javascript:` | `#` |
 
-The same rewriting is applied to `href` and `src` attributes in raw HTML.
+The same rewriting applies to `href`, `src`, and `srcset` attributes in raw HTML, in any quoting style. `check` and `build` use one shared extractor for them.
+
+## Sanitization
+
+Every product site shares the `https://kontourai.github.io` origin, so a script in one product's docs could act on every other product's pages. The rendered Markdown is passed through `sanitize-html` with a GitHub-like allowlist. `script`, `style`, `iframe`, and `on*` attributes are removed, and URLs are limited to `http(s)`, `mailto`, and `data:` images. Heading `id`s, anchor links, images, tables, `details`/`summary`, and task-list checkboxes are kept.
 
 ## Generated-site check
 
-Raw HTML is not checked by the Markdown gates; `check` covers Markdown links and images only. After rendering, `build` scans every generated `href` and `src` and fails if an internal target or `#fragment` is missing. A broken raw-HTML link therefore stops `build`, even though it passes `check`.
+After rendering, `build` scans every generated `href`, `src`, and `srcset` with the same extractor and fails if an internal target or `#fragment` is missing. `check` already validates the sources, so this catches what rendering changes. For example, a `name` anchor on a non-`<a>` element passes `check`, but the sanitizer removes it, so links to it break on the site.

@@ -9,19 +9,36 @@ import { MANIFEST_FILE, validateProducts } from './manifest.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
 export const HUB_CACHE_MS = 10 * 60 * 1000;
+export const HUB_RETRY_MS = 30 * 1000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 export const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-/** Minimal shape check for a fetched docs-bundle.json; anything else is "unavailable". */
+const isString = (value) => typeof value === 'string';
+
+/**
+ * Shape check for a docs-bundle.json, down to each document and topic, so a
+ * malformed product is reported as unavailable instead of throwing inside a
+ * tool. `landing` is optional for bundles built before it existed.
+ */
 export function bundleShapeError(bundle, product) {
   if (bundle === null || typeof bundle !== 'object' || Array.isArray(bundle)) return 'bundle is not a JSON object';
   if (bundle.schemaVersion !== 1) return `unsupported bundle schemaVersion ${JSON.stringify(bundle.schemaVersion)}`;
   if (product && bundle.product !== product) return `bundle is for product "${bundle.product}", expected "${product}"`;
-  for (const key of ['product', 'title', 'repo', 'builtAt', 'siteUrl', 'digest'])
-    if (typeof bundle[key] !== 'string') return `bundle field "${key}" is missing`;
-  if (!(typeof bundle.sha === 'string' || bundle.sha === null)) return 'bundle field "sha" is missing';
-  if (!Array.isArray(bundle.documents) || !Array.isArray(bundle.topics)) return 'bundle documents/topics are missing';
+  for (const key of ['product', 'title', 'tagline', 'repo', 'builtAt', 'siteUrl', 'digest'])
+    if (!isString(bundle[key])) return `bundle field "${key}" must be a string`;
+  if (!(isString(bundle.sha) || bundle.sha === null)) return 'bundle field "sha" must be a string or null';
+  if (!Array.isArray(bundle.documents) || !Array.isArray(bundle.topics)) return 'bundle documents and topics must be arrays';
+  for (const [index, document] of bundle.documents.entries()) {
+    if (document === null || typeof document !== 'object') return `documents[${index}] is not an object`;
+    for (const key of ['source', 'title', 'url', 'markdown']) if (!isString(document[key])) return `documents[${index}].${key} must be a string`;
+    if (!(isString(document.section) || document.section === null)) return `documents[${index}].section must be a string or null`;
+    if (document.landing !== undefined && typeof document.landing !== 'boolean') return `documents[${index}].landing must be a boolean`;
+  }
+  for (const [index, topic] of bundle.topics.entries()) {
+    if (topic === null || typeof topic !== 'object') return `topics[${index}] is not an object`;
+    for (const key of ['id', 'title', 'source', 'url', 'markdown']) if (!isString(topic[key])) return `topics[${index}].${key} must be a string`;
+  }
   return null;
 }
 
@@ -30,37 +47,95 @@ function snapshot(bundles, unavailable) {
   return { bundles: new Map(bundles.map((bundle) => [bundle.product, bundle])), unavailable };
 }
 
-export function repoSource(dir) {
-  const root = path.resolve(dir);
-  const bundle = bundleFromCheckout(root);
-  const loaded = snapshot([bundle], []);
-  return { describe: `repo ${root}`, load: async () => loaded };
+/** Non-landing documents: the count the hub's "thin" rule and list_products use. */
+export function pageCount(bundle) {
+  return bundle.documents.filter((document) => !document.landing).length;
 }
 
-export function workspaceSource(dir) {
+/**
+ * One checkout, rebuilt on every tool call so a long session sees current
+ * docs. An invalid checkout at startup is a usage error; a later failure
+ * (mid-edit) is reported as unavailable.
+ */
+export function repoSource(dir) {
   const root = path.resolve(dir);
-  let entries;
+  const first = bundleFromCheckout(root);
+  return {
+    describe: `repo ${root}`,
+    load: async () => {
+      try {
+        return snapshot([bundleFromCheckout(root)], []);
+      } catch (error) {
+        return snapshot([], [{ product: first.product, error: error.message }]);
+      }
+    },
+  };
+}
+
+function manifestProduct(dir, fallback) {
   try {
-    entries = readdirSync(root, { withFileTypes: true });
-  } catch (error) {
-    throw new UsageError(`--workspace ${dir}: ${error.message}`);
+    const raw = JSON.parse(readFileSync(path.join(dir, MANIFEST_FILE), 'utf8'));
+    return typeof raw?.product === 'string' && raw.product.trim() ? raw.product : fallback;
+  } catch {
+    return fallback;
   }
-  const candidates = entries
+}
+
+function scanWorkspace(root) {
+  const entries = readdirSync(root, { withFileTypes: true });
+  return entries
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && existsSync(path.join(root, entry.name, MANIFEST_FILE)))
     .map((entry) => entry.name)
     .sort();
-  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${MANIFEST_FILE}`);
+}
+
+/** Build every product in a workspace. Unavailable entries are keyed by the manifest's product. */
+export function loadWorkspace(root) {
+  const byProduct = new Map();
+  for (const name of scanWorkspace(root)) {
+    const dir = path.join(root, name);
+    const product = manifestProduct(dir, name);
+    if (!byProduct.has(product)) byProduct.set(product, []);
+    byProduct.get(product).push({ name, dir });
+  }
   const bundles = [];
   const unavailable = [];
-  for (const name of candidates) {
+  for (const [product, dirs] of byProduct) {
+    if (dirs.length > 1) {
+      const names = dirs.map((entry) => entry.name).join(', ');
+      for (const entry of dirs)
+        unavailable.push({ product, directory: entry.name, error: `product "${product}" is declared by more than one directory (${names}); rename or remove one` });
+      continue;
+    }
     try {
-      bundles.push(bundleFromCheckout(path.join(root, name)));
+      bundles.push(bundleFromCheckout(dirs[0].dir));
     } catch (error) {
-      unavailable.push({ product: name, error: error.message });
+      unavailable.push({ product, directory: dirs[0].name, error: error.message });
     }
   }
-  const loaded = snapshot(bundles, unavailable);
-  return { describe: `workspace ${root}`, load: async () => loaded };
+  return snapshot(bundles, unavailable);
+}
+
+/** Every immediate subdirectory with docs-kit.json, rescanned and rebuilt on every tool call. */
+export function workspaceSource(dir) {
+  const root = path.resolve(dir);
+  let candidates;
+  try {
+    candidates = scanWorkspace(root);
+  } catch (error) {
+    throw new UsageError(`--workspace ${dir}: ${error.message}`);
+  }
+  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${MANIFEST_FILE}`);
+  return {
+    describe: `workspace ${root}`,
+    load: async () => {
+      try {
+        return loadWorkspace(root);
+      } catch (error) {
+        return snapshot([], [{ product: '*', error: `workspace ${root} unavailable: ${error.message}` }]);
+      }
+    },
+  };
 }
 
 async function fetchJson(url, fetchImpl) {
@@ -74,50 +149,53 @@ async function fetchJson(url, fetchImpl) {
 }
 
 /**
- * Fetch <hub>/products.json and each <hub>/<product>/docs-bundle.json, caching
- * the whole snapshot for HUB_CACHE_MS. A failed product is reported as
- * unavailable; a failed products.json makes every result report the hub error.
+ * Fetch <hub>/products.json and each <hub>/<product>/docs-bundle.json.
+ * Successes are cached for HUB_CACHE_MS; failures only for HUB_RETRY_MS, so a
+ * product that comes back is picked up on a later call. A failed product is
+ * reported as unavailable; a failed products.json makes every result report
+ * the hub error.
  */
-export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_CACHE_MS } = {}) {
+export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_CACHE_MS, retryMs = HUB_RETRY_MS } = {}) {
   const base = normalizeBaseUrl(hub, '--hub');
-  let cached = null;
-  let inflight = null;
-  const refresh = async () => {
-    let products;
-    try {
-      const { products: list, errors } = validateProducts(await fetchJson(new URL('products.json', base).href, fetchImpl));
-      if (errors.length > 0) throw new Error(`products.json is invalid: ${errors.join('; ')}`);
-      products = list;
-    } catch (error) {
-      return snapshot([], [{ product: '*', error: `hub ${base} unavailable: ${error.message}` }]);
-    }
-    const results = await Promise.all(
-      products.map(async ({ product, repo }) => {
-        try {
-          const bundle = await fetchJson(new URL(`${product}/docs-bundle.json`, base).href, fetchImpl);
-          const problem = bundleShapeError(bundle, product);
-          if (problem) throw new Error(problem);
-          return { bundle };
-        } catch (error) {
-          return { unavailable: { product, repo, error: error.message } };
-        }
-      }),
-    );
-    return snapshot(
-      results.filter((result) => result.bundle).map((result) => result.bundle),
-      results.filter((result) => result.unavailable).map((result) => result.unavailable),
-    );
+  const cache = new Map(); // url -> { at, ok, value | error }
+  const inflight = new Map();
+  const cachedFetch = (url) => {
+    const hit = cache.get(url);
+    if (hit && now() - hit.at < (hit.ok ? ttlMs : retryMs)) return Promise.resolve(hit);
+    if (!inflight.has(url))
+      inflight.set(
+        url,
+        fetchJson(url, fetchImpl)
+          .then(
+            (value) => ({ ok: true, value }),
+            (error) => ({ ok: false, error: error.message }),
+          )
+          .then((entry) => {
+            cache.set(url, { at: now(), ...entry });
+            inflight.delete(url);
+            return entry;
+          }),
+      );
+    return inflight.get(url);
   };
   return {
     describe: `hub ${base}`,
     load: async () => {
-      if (cached && now() - cached.at < ttlMs) return cached.value;
-      inflight ??= refresh().then((value) => {
-        cached = { at: now(), value };
-        inflight = null;
-        return value;
-      });
-      return inflight;
+      const list = await cachedFetch(new URL('products.json', base).href);
+      if (!list.ok) return snapshot([], [{ product: '*', error: `hub ${base} unavailable: ${list.error}` }]);
+      const { products, errors } = validateProducts(list.value);
+      if (errors.length > 0) return snapshot([], [{ product: '*', error: `hub ${base} unavailable: products.json is invalid: ${errors.join('; ')}` }]);
+      const results = await Promise.all(
+        products.map(async ({ product, repo }) => {
+          const entry = await cachedFetch(new URL(`${product}/docs-bundle.json`, base).href);
+          const problem = entry.ok ? bundleShapeError(entry.value, product) : entry.error;
+          return problem ? { unavailable: { product, repo, error: problem } } : { bundle: entry.value };
+        }),
+      );
+      return snapshot(
+        results.filter((result) => result.bundle).map((result) => result.bundle),
+        results.filter((result) => result.unavailable).map((result) => result.unavailable),
+      );
     },
   };
 }
@@ -174,7 +252,7 @@ export function searchBundles(bundles, query, limit = 10) {
         title: item.title,
         source: item.source,
         url: item.url,
-        sha: bundle.sha,
+        ...stamp(bundle),
         score: Math.round(score * (matched / terms.length) * 100) / 100,
         snippet: snippetFor(item.markdown, terms),
       });
@@ -184,6 +262,11 @@ export function searchBundles(bundles, query, limit = 10) {
   const kindRank = { topic: 0, document: 1 };
   results.sort((a, b) => b.score - a.score || kindRank[a.kind] - kindRank[b.kind] || a.product.localeCompare(b.product) || a.source.localeCompare(b.source));
   return results.slice(0, limit);
+}
+
+/** Source identity on every result: the bundle sha, plus `dirty: true` for an uncommitted checkout. */
+function stamp(bundle) {
+  return bundle.dirty ? { sha: bundle.sha, dirty: true } : { sha: bundle.sha };
 }
 
 function json(data) {
@@ -206,8 +289,18 @@ function pickBundle(loaded, product) {
 export function createDocsServer(source) {
   const server = new McpServer({ name: 'docs-kit', version: PACKAGE_VERSION });
   const readOnly = { readOnlyHint: true };
+  // A tool never throws: anything unexpected (a malformed bundle that slipped
+  // past validation, a filesystem race) becomes an isError result.
+  const tool = (name, config, handler) =>
+    server.registerTool(name, config, async (args) => {
+      try {
+        return await handler(args ?? {});
+      } catch (error) {
+        return toolError(`${name} failed: ${error?.message ?? error}`);
+      }
+    });
 
-  server.registerTool(
+  tool(
     'list_products',
     {
       description: 'List the Kontour products whose published documentation this server can answer from, with each bundle\'s source commit (sha), build time, site URL, and topic/document counts. Products whose docs could not be loaded are listed as unavailable.',
@@ -222,11 +315,11 @@ export function createDocsServer(source) {
             product: bundle.product,
             title: bundle.title,
             tagline: bundle.tagline,
-            sha: bundle.sha,
+            ...stamp(bundle),
             builtAt: bundle.builtAt,
             siteUrl: bundle.siteUrl,
             topicCount: bundle.topics.length,
-            docCount: bundle.documents.length,
+            docCount: pageCount(bundle),
             status: 'available',
           })),
           ...loaded.unavailable.map((entry) => ({ ...entry, status: 'unavailable' })),
@@ -235,7 +328,7 @@ export function createDocsServer(source) {
     },
   );
 
-  server.registerTool(
+  tool(
     'list_topics',
     {
       description: 'List curated documentation topics (id, title, source, url) for one product or all products. Use get_topic to read one.',
@@ -252,14 +345,14 @@ export function createDocsServer(source) {
       }
       return json({
         topics: bundles.flatMap((bundle) =>
-          bundle.topics.map(({ id, title, source: topicSource, url }) => ({ product: bundle.product, id, title, source: topicSource, url, sha: bundle.sha })),
+          bundle.topics.map(({ id, title, source: topicSource, url }) => ({ product: bundle.product, id, title, source: topicSource, url, ...stamp(bundle) })),
         ),
         ...(product === undefined && loaded.unavailable.length > 0 ? { unavailable: loaded.unavailable } : {}),
       });
     },
   );
 
-  server.registerTool(
+  tool(
     'get_topic',
     {
       description: 'Read one documentation topic as Markdown (the heading section it points at). Use list_topics for ids.',
@@ -270,15 +363,15 @@ export function createDocsServer(source) {
       const picked = pickBundle(await source.load(), product);
       if (picked.error) return picked.error;
       const topic = picked.bundle.topics.find((entry) => entry.id === id);
-      if (!topic) return toolError(`unknown topic "${id}" in ${product}`, { availableTopics: picked.bundle.topics.map((entry) => entry.id), sha: picked.bundle.sha });
-      return json({ product, sha: picked.bundle.sha, topic });
+      if (!topic) return toolError(`unknown topic "${id}" in ${product}`, { availableTopics: picked.bundle.topics.map((entry) => entry.id), ...stamp(picked.bundle) });
+      return json({ product, ...stamp(picked.bundle), topic });
     },
   );
 
-  server.registerTool(
+  tool(
     'get_document',
     {
-      description: 'Read one whole published document as Markdown by its repository source path (e.g. "docs/getting-started.md").',
+      description: 'Read one whole published document as Markdown by its repository source path (e.g. "docs/getting-started.md"; the landing page, usually README.md, is included).',
       inputSchema: z.object({ product: z.string().describe('Product slug.'), source: z.string().describe('Document source path from list_products/search.') }),
       annotations: readOnly,
     },
@@ -287,12 +380,12 @@ export function createDocsServer(source) {
       if (picked.error) return picked.error;
       const document = picked.bundle.documents.find((entry) => entry.source === wanted);
       if (!document)
-        return toolError(`unknown document "${wanted}" in ${product}`, { availableDocuments: picked.bundle.documents.map((entry) => entry.source), sha: picked.bundle.sha });
-      return json({ product, sha: picked.bundle.sha, document });
+        return toolError(`unknown document "${wanted}" in ${product}`, { availableDocuments: picked.bundle.documents.map((entry) => entry.source), ...stamp(picked.bundle) });
+      return json({ product, ...stamp(picked.bundle), document });
     },
   );
 
-  server.registerTool(
+  tool(
     'search',
     {
       description: 'Ranked keyword search over topics and documents of one or all products. Returns snippets with product, source, url, and the source commit sha.',

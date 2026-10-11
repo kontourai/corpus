@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { UsageError } from './errors.mjs';
-import { headShaOrNull } from './git.mjs';
+import { headShaOrNull, isDirty } from './git.mjs';
 import { loadManifest, outputPathFor, splitTopicSource } from './manifest.mjs';
 import { checkTopics, createDocumentReader } from './check.mjs';
 import { documentTitle, extractSection } from './markdown.mjs';
@@ -28,13 +28,13 @@ export function normalizeBaseUrl(value, flag = '--base-url') {
 }
 
 /**
- * Digest of the canonical content: documents and topics, in manifest order,
+ * Digest of the canonical content: documents (landing first) and topics, in manifest order,
  * without URLs, sha, or build time. Two builds of the same docs at different
  * commits or base URLs share a digest.
  */
 export function bundleDigest(documents, topics) {
   const canonical = JSON.stringify({
-    documents: documents.map(({ source, section, title, markdown }) => ({ source, section, title, markdown })),
+    documents: documents.map(({ source, section, title, landing, markdown }) => ({ source, section, title, landing, markdown })),
     topics: topics.map(({ id, title, source, markdown }) => ({ id, title, source, markdown })),
   });
   return createHash('sha256').update(canonical).digest('hex');
@@ -46,10 +46,13 @@ export function bundleDigest(documents, topics) {
  */
 export function assembleBundle({ manifest, read, sha, siteUrl, builtAt = new Date().toISOString() }) {
   const pageUrl = (source) => `${siteUrl}${encodePath(outputPathFor(manifest, source))}`;
-  const documents = manifest.documents.map(({ source, section }) => {
-    const { markdown, analysis } = read(source);
-    return { source, section, title: documentTitle(analysis, source), url: pageUrl(source), markdown };
-  });
+  // The landing page is documents[0] with `landing: true` and no section.
+  const documents = [{ source: manifest.landing, section: null, landing: true }, ...manifest.documents.map(({ source, section }) => ({ source, section, landing: false }))].map(
+    ({ source, section, landing }) => {
+      const { markdown, analysis } = read(source);
+      return { source, section, title: documentTitle(analysis, source), landing, url: pageUrl(source), markdown };
+    },
+  );
   const topics = manifest.topics.map(({ id, title, source }) => {
     const { path, anchor } = splitTopicSource(source);
     const { markdown, analysis } = read(path);
@@ -75,12 +78,16 @@ export function assembleBundle({ manifest, read, sha, siteUrl, builtAt = new Dat
 /**
  * Build a bundle in memory from a checkout (used by `mcp --repo` and
  * `--workspace`). Requires a valid manifest and resolvable topics; link and
- * reachability gates are not required to serve docs. `sha` is null outside git.
+ * reachability gates are not required to serve docs. `sha` is null outside git;
+ * `dirty: true` is added when the working tree has uncommitted changes.
  */
 export function bundleFromCheckout(root, { siteUrl } = {}) {
   const manifest = loadManifest(root);
   const read = createDocumentReader(root);
   const topicFailures = checkTopics(manifest, read);
   if (topicFailures.length > 0) throw new UsageError(`topics do not resolve:\n${topicFailures.map((f) => `  - ${f}`).join('\n')}`);
-  return assembleBundle({ manifest, read, sha: headShaOrNull(root), siteUrl: siteUrl ?? defaultSiteUrl(manifest.product) });
+  const bundle = assembleBundle({ manifest, read, sha: headShaOrNull(root), siteUrl: siteUrl ?? defaultSiteUrl(manifest.product) });
+  // A checkout with uncommitted changes serves content that `sha` alone does not identify.
+  if (bundle.sha !== null && isDirty(root)) bundle.dirty = true;
+  return bundle;
 }

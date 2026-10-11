@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
 
 async function buildValid(t, extraArgs = []) {
   const repo = fixtureRepo(t, 'valid', { as: 'sample' });
@@ -66,14 +66,15 @@ test('build writes docs-bundle.json with the contract fields', async (t) => {
   assert.equal(bundle.siteUrl, 'https://kontourai.github.io/sample/');
 
   assert.deepEqual(
-    bundle.documents.map(({ source, section, title, url }) => ({ source, section, title, url })),
+    bundle.documents.map(({ source, section, title, landing, url }) => ({ source, section, title, landing, url })),
     [
-      { source: 'docs/getting-started.md', section: 'Start Here', title: 'Getting started', url: 'https://kontourai.github.io/sample/docs/getting-started.html' },
-      { source: 'docs/concepts.md', section: 'Understand Sample', title: 'Concepts', url: 'https://kontourai.github.io/sample/docs/concepts.html' },
-      { source: 'docs/reference/cli.md', section: 'Reference', title: 'CLI reference', url: 'https://kontourai.github.io/sample/docs/reference/cli.html' },
+      { source: 'README.md', section: null, title: 'Sample', landing: true, url: 'https://kontourai.github.io/sample/index.html' },
+      { source: 'docs/getting-started.md', section: 'Start Here', title: 'Getting started', landing: false, url: 'https://kontourai.github.io/sample/docs/getting-started.html' },
+      { source: 'docs/concepts.md', section: 'Understand Sample', title: 'Concepts', landing: false, url: 'https://kontourai.github.io/sample/docs/concepts.html' },
+      { source: 'docs/reference/cli.md', section: 'Reference', title: 'CLI reference', landing: false, url: 'https://kontourai.github.io/sample/docs/reference/cli.html' },
     ],
   );
-  assert.equal(bundle.documents[1].markdown, readFileSync(path.join(import.meta.dirname, 'fixtures/valid/docs/concepts.md'), 'utf8'));
+  assert.equal(bundle.documents[2].markdown, readFileSync(path.join(import.meta.dirname, 'fixtures/valid/docs/concepts.md'), 'utf8'));
 
   const workflows = bundle.topics.find((topic) => topic.id === 'workflows');
   assert.equal(workflows.url, 'https://kontourai.github.io/sample/docs/concepts.html#workflows');
@@ -82,10 +83,10 @@ test('build writes docs-bundle.json with the contract fields', async (t) => {
   assert.equal(install.url, 'https://kontourai.github.io/sample/index.html#install');
   assert.ok(install.markdown.startsWith('## Install\n') && !install.markdown.includes('# Sample'));
   const whole = bundle.topics.find((topic) => topic.id === 'getting-started');
-  assert.equal(whole.markdown, bundle.documents[0].markdown, 'a topic without an anchor is the whole document');
+  assert.equal(whole.markdown, bundle.documents[1].markdown, 'a topic without an anchor is the whole document');
 
   const canonical = JSON.stringify({
-    documents: bundle.documents.map(({ source, section, title, markdown }) => ({ source, section, title, markdown })),
+    documents: bundle.documents.map(({ source, section, title, landing, markdown }) => ({ source, section, title, landing, markdown })),
     topics: bundle.topics.map(({ id, title, source, markdown }) => ({ id, title, source, markdown })),
   });
   assert.equal(bundle.digest, createHash('sha256').update(canonical).digest('hex'));
@@ -97,7 +98,7 @@ test('build honors --base-url and keeps the digest independent of it', async (t)
   const a = JSON.parse(first.read('docs-bundle.json'));
   const b = JSON.parse(second.read('docs-bundle.json'));
   assert.equal(b.siteUrl, 'https://docs.example.test/sample/');
-  assert.equal(b.documents[0].url, 'https://docs.example.test/sample/docs/getting-started.html');
+  assert.equal(b.documents[1].url, 'https://docs.example.test/sample/docs/getting-started.html');
   assert.equal(a.digest, b.digest);
 });
 
@@ -109,7 +110,7 @@ test('build fails when the generated site would contain a broken link (exit 1)',
   const result = await runCli(['build', '--root', repo, '--out', out]);
   assert.equal(result.status, 1, result.output);
   assert.match(result.stderr, /generated site has 1 broken internal link/);
-  assert.match(result.stderr, /docs\/a\.html: href="missing-page\.html" - missing generated target/);
+  assert.match(result.stderr, /docs\/a\.html: href="#legacy-anchor" - missing anchor #legacy-anchor/);
 });
 
 test('build refuses to build when check fails', async (t) => {
@@ -146,4 +147,95 @@ test('build neutralizes javascript: links', async (t) => {
   assert.equal(result.status, 0, result.output);
   const html = readFileSync(path.join(out, 'docs/concepts.html'), 'utf8');
   assert.doesNotMatch(html, /javascript:/);
+});
+
+test('build --out refuses tracked files, .git, and untracked unignored files; allows new or ignored dirs', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  mkdirSync(path.join(repo, 'site'));
+  writeFileSync(path.join(repo, 'site', 'keep.txt'), 'tracked\n');
+  commitAll(repo, 'tracked file in site/');
+
+  const tracked = await runCli(['build', '--root', repo, '--out', path.join(repo, 'site')]);
+  assert.equal(tracked.status, 2, tracked.output);
+  assert.match(tracked.stderr, /contains 1 git-tracked file\(s\) \(e\.g\. keep\.txt\); refusing to delete it/);
+  assert.ok(existsSync(path.join(repo, 'site', 'keep.txt')));
+
+  const insideGit = await runCli(['build', '--root', repo, '--out', path.join(repo, '.git', 'pages')]);
+  assert.equal(insideGit.status, 2, insideGit.output);
+  assert.match(insideGit.stderr, /inside a \.git directory/);
+
+  mkdirSync(path.join(repo, 'notes'));
+  writeFileSync(path.join(repo, 'notes', 'draft.md'), 'uncommitted work\n');
+  const untracked = await runCli(['build', '--root', repo, '--out', path.join(repo, 'notes')]);
+  assert.equal(untracked.status, 2, untracked.output);
+  assert.match(untracked.stderr, /untracked file\(s\) that are not git-ignored \(e\.g\. draft\.md\)/);
+  assert.ok(existsSync(path.join(repo, 'notes', 'draft.md')));
+
+  writeFileSync(path.join(repo, '.gitignore'), 'dist-pages/\n');
+  for (let i = 0; i < 2; i++) {
+    const ignored = await runCli(['build', '--root', repo, '--out', path.join(repo, 'dist-pages')]);
+    assert.equal(ignored.status, 0, `build ${i + 1} into an ignored dir: ${ignored.output}`);
+  }
+});
+
+test('check and build handle raw HTML href/src/srcset in every quoting style', async (t) => {
+  const broken = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(broken, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(broken, 'docs', 'concepts.md'), 'utf8')}\n<a href='gone.md'>single</a> <img src=missing.png alt=x> <img srcset="assets/diagram.svg 1x, assets/absent.svg 2x" alt="y"> <a href="#no-such-anchor">frag</a>\n`,
+  );
+  const check = await runCli(['check', '--root', broken]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /docs\/concepts\.md:\d+: <\.\.\. href="gone\.md"> - missing target docs\/gone\.md/);
+  assert.match(check.stderr, /<\.\.\. src="missing\.png"> - missing target docs\/missing\.png/);
+  assert.match(check.stderr, /<\.\.\. srcset="assets\/absent\.svg"> - missing target docs\/assets\/absent\.svg/);
+  assert.match(check.stderr, /<\.\.\. href="#no-such-anchor"> - missing anchor #no-such-anchor/);
+  assert.doesNotMatch(check.stderr, /assets\/diagram\.svg"> - missing/);
+
+  const good = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(good, 'docs', 'getting-started.md'),
+    `${readFileSync(path.join(good, 'docs', 'getting-started.md'), 'utf8')}\n<a href='concepts.md#workflows'>single</a> <img src=assets/diagram.svg alt=unquoted> <img srcset="assets/diagram.svg 1x, assets/hi.svg 2x" alt="set">\n`,
+  );
+  copyFileSync(path.join(good, 'docs', 'assets', 'diagram.svg'), path.join(good, 'docs', 'assets', 'hi.svg'));
+  commitAll(good, 'raw html');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', good, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  const html = readFileSync(path.join(out, 'docs', 'getting-started.html'), 'utf8');
+  assert.match(html, /<a href="concepts\.html#workflows">single<\/a>/);
+  assert.match(html, /<img src="assets\/diagram\.svg" alt="unquoted"/);
+  assert.match(html, /srcset="assets\/diagram\.svg 1x, assets\/hi\.svg 2x"/);
+  assert.ok(existsSync(path.join(out, 'docs', 'assets', 'hi.svg')), 'srcset-only image copied');
+});
+
+test('anchors from id/name attributes count in any quoting, in check and in the generated site', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<a id='single-id'></a><a name=bare-name></a>\n\n[to single](#single-id) and [to bare](#bare-name).\n`,
+  );
+  commitAll(repo, 'html anchors');
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 0, check.output);
+  const build = await runCli(['build', '--root', repo, '--out', path.join(scratch(t), 'site')]);
+  assert.equal(build.status, 0, build.output);
+});
+
+test('build sanitizes rendered HTML: no script, no on* handlers, no javascript: URLs', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<script>alert('pwned')</script>\n\n<img src="assets/diagram.svg" onerror="alert(1)" alt="kept"> <a href="https://example.com" onclick="steal()">ok</a> <iframe src="https://evil.example"></iframe> <a href="JaVaScRiPt:alert(2)">js</a>\n\n<details><summary>More</summary>Kept.</details>\n`,
+  );
+  commitAll(repo, 'hostile html');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  const html = readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8');
+  assert.doesNotMatch(html, /<script|pwned|onerror|onclick|<iframe|javascript:/i);
+  assert.match(html, /<img src="assets\/diagram\.svg" alt="kept"/);
+  assert.match(html, /<a href="https:\/\/example\.com">ok<\/a>/);
+  assert.match(html, /<details><summary>More<\/summary>Kept\.<\/details>/);
+  assert.match(html, /<h2 id="workflows">Workflows<a class="anchor" href="#workflows"/, 'heading ids and anchor links survive');
 });
