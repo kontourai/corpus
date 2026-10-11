@@ -424,7 +424,7 @@ export function createDocsServer(source) {
   tool(
     'get_document',
     {
-      description: 'Read one whole published document as Markdown by its repository source path (e.g. "docs/getting-started.md"; the landing page, usually README.md, is included).',
+      description: 'Read one whole document as Markdown by its repository source path (e.g. "docs/getting-started.md"; the landing page, usually README.md, is included).',
       inputSchema: z.object({ product: z.string().describe('Product slug.'), source: z.string().describe('Document source path from list_products/search.') }),
       annotations: readOnly,
     },

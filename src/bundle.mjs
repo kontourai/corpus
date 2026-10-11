@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { UsageError } from './errors.mjs';
-import { headShaOrNull, isDirty } from './git.mjs';
+import { headShaOrNull, isDirty, repoPrefix } from './git.mjs';
 import { loadManifest, outputPathFor, splitTopicSource } from './manifest.mjs';
-import { checkTopics, createDocumentReader } from './check.mjs';
-import { documentTitle, extractSection } from './markdown.mjs';
-import { encodePath } from './paths.mjs';
+import { checkTopics, createDocumentReader, publishedSources } from './check.mjs';
+import { analyzeMarkdown, documentTitle, extractSection, resolveLink, rewriteMarkdownLinks } from './markdown.mjs';
+import { encodePath, statInRepo } from './paths.mjs';
 
 export const DEFAULT_SITE_ORIGIN = 'https://kontourai.github.io/';
 
@@ -43,26 +43,67 @@ export function bundleDigest(documents, topics) {
 /**
  * Assemble docs-bundle.json from a validated manifest. `read` is the shared
  * document reader. Topic anchors must already have passed the topics gate.
+ *
+ * A bundle-only document (`publish: false`) has no page: its `url` is the
+ * GitHub blob at `sha` (`HEAD` outside git), and its `markdown`, and topics
+ * taken from it, have relative links made absolute (published targets to
+ * their page, anything else to GitHub) so the text stands alone for MCP
+ * readers. The digest is computed over the Markdown as written, so it still
+ * identifies the content and not the commit or base URL.
  */
-export function assembleBundle({ manifest, read, sha, siteUrl, builtAt = new Date().toISOString() }) {
-  const pageUrl = (source) => `${siteUrl}${encodePath(outputPathFor(manifest, source))}`;
+export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = '', builtAt = new Date().toISOString() }) {
+  const published = new Set(publishedSources(manifest));
+  const githubUrl = (kind, repoPath) => `https://github.com/${manifest.repo}/${kind}/${sha ?? 'HEAD'}/${encodePath(`${prefix}${repoPath}`)}`;
+  const pageUrl = (source) => (published.has(source) ? `${siteUrl}${encodePath(outputPathFor(manifest, source))}` : githubUrl('blob', source));
+  const absolute = (href, fromSource) => {
+    const target = resolveLink(href, fromSource);
+    if (target.kind === 'fragment') return target.rawFragment ? `${pageUrl(fromSource)}#${target.rawFragment}` : href;
+    if (target.kind !== 'local') return href;
+    const hash = target.rawFragment ? `#${target.rawFragment}` : '';
+    if (published.has(target.path)) return `${pageUrl(target.path)}${hash}`;
+    // A missing target fails the links gate; leave it as written.
+    const stat = statInRepo(root, target.path);
+    if (!stat) return href;
+    return `${githubUrl(stat.kind === 'dir' ? 'tree' : 'blob', target.path).replace(/\/$/, '')}${hash}`;
+  };
+  const bundleOnly = new Map(); // source -> { markdown, analysis } with links made absolute
+  const readForBundle = (source) => {
+    if (published.has(source)) return read(source);
+    if (!bundleOnly.has(source)) {
+      const markdown = rewriteMarkdownLinks(read(source).markdown, (href) => absolute(href, source));
+      bundleOnly.set(source, { markdown, analysis: analyzeMarkdown(markdown) });
+    }
+    return bundleOnly.get(source);
+  };
   // The landing page is documents[0] with `landing: true` and no section.
   const documents = [
     { source: manifest.landing, section: null, title: null, landing: true },
     ...manifest.documents.map(({ source, section, title }) => ({ source, section, title, landing: false })),
   ].map(
     ({ source, section, title, landing }) => {
-      const { markdown, analysis } = read(source);
-      return { source, section, title: documentTitle(analysis, source, title), landing, url: pageUrl(source), markdown };
+      // The title comes from the source as written, so it never depends on rewriting.
+      const { analysis } = read(source);
+      return { source, section, title: documentTitle(analysis, source, title), landing, url: pageUrl(source), markdown: readForBundle(source).markdown };
     },
   );
-  const topics = manifest.topics.map(({ id, title, source }) => {
-    const { path, anchor } = splitTopicSource(source);
-    const { markdown, analysis } = read(path);
+  const topicSection = (id, path, anchor, reader) => {
+    const { markdown, analysis } = reader(path);
     const section = anchor === null ? markdown : extractSection(analysis, anchor);
     if (section === null) throw new UsageError(`topic "${id}": #${anchor} does not resolve in ${path}`);
-    return { id, title, source, url: anchor === null ? pageUrl(path) : `${pageUrl(path)}#${encodeURIComponent(anchor)}`, markdown: section };
+    return section;
+  };
+  const topics = manifest.topics.map(({ id, title, source }) => {
+    const { path, anchor } = splitTopicSource(source);
+    const markdown = topicSection(id, path, anchor, readForBundle);
+    return { id, title, source, url: anchor === null ? pageUrl(path) : `${pageUrl(path)}#${encodeURIComponent(anchor)}`, markdown };
   });
+  const asWritten = {
+    documents: documents.map((document) => ({ ...document, markdown: read(document.source).markdown })),
+    topics: manifest.topics.map(({ id, title, source }) => {
+      const { path, anchor } = splitTopicSource(source);
+      return { id, title, source, markdown: topicSection(id, path, anchor, read) };
+    }),
+  };
   return {
     schemaVersion: 1,
     product: manifest.product,
@@ -72,7 +113,7 @@ export function assembleBundle({ manifest, read, sha, siteUrl, builtAt = new Dat
     sha,
     builtAt,
     siteUrl,
-    digest: bundleDigest(documents, topics),
+    digest: bundleDigest(asWritten.documents, asWritten.topics),
     documents,
     topics,
   };
@@ -89,7 +130,14 @@ export function bundleFromCheckout(root, { siteUrl } = {}) {
   const read = createDocumentReader(root);
   const topicFailures = checkTopics(manifest, read);
   if (topicFailures.length > 0) throw new UsageError(`topics do not resolve:\n${topicFailures.map((f) => `  - ${f}`).join('\n')}`);
-  const bundle = assembleBundle({ manifest, read, sha: headShaOrNull(root), siteUrl: siteUrl ?? defaultSiteUrl(manifest.product) });
+  const bundle = assembleBundle({
+    manifest,
+    read,
+    sha: headShaOrNull(root),
+    siteUrl: siteUrl ?? defaultSiteUrl(manifest.product),
+    root,
+    prefix: repoPrefix(root),
+  });
   // A checkout with uncommitted changes serves content that `sha` alone does not identify.
   if (bundle.sha !== null && isDirty(root)) bundle.dirty = true;
   return bundle;

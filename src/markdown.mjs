@@ -375,3 +375,78 @@ export function resolveLink(href, fromSource) {
     rawFragment,
   };
 }
+
+/** Child tokens in document order, as marked.walkTokens visits them. */
+function childTokens(token) {
+  if (token.type === 'table') return [...token.header, ...token.rows.flat()].flatMap((cell) => cell.tokens ?? []);
+  if (token.type === 'list') return token.items;
+  return token.tokens ?? [];
+}
+
+/** Destination in a link/image/def `raw`, as [start, end, angled], or null when it cannot be located exactly. */
+function destinationSpan(token) {
+  const { raw, href } = token;
+  const forms = token.type === 'def' ? [raw.indexOf(']:') + 2] : [];
+  if (token.type !== 'def')
+    // The destination follows the last `](` whose text starts with it; the link text may contain `](`.
+    for (let i = raw.lastIndexOf(']('); i !== -1; i = raw.lastIndexOf('](', i - 1)) forms.push(i + 2);
+  for (const after of forms) {
+    if (after < 2) continue;
+    let start = after;
+    while (start < raw.length && /[ \t\n]/.test(raw[start])) start++;
+    if (raw.startsWith(`<${href}>`, start)) return [start, start + href.length + 2, true];
+    if (raw.startsWith(href, start)) return [start, start + href.length, false];
+  }
+  return null;
+}
+
+/**
+ * Rewrite the destination of every Markdown link, image, and reference
+ * definition, and every raw-HTML href/src/srcset/poster, in the Markdown
+ * source text. `rewrite(href, { image })` returns the new destination. Code
+ * blocks and code spans are never touched. Positions come from the lexer:
+ * top-level token raws concatenate to the source, and nested tokens are found
+ * in order inside their block. A destination written with backslash escapes,
+ * which the lexer unescapes, cannot be located exactly and is left as written.
+ */
+export function rewriteMarkdownLinks(source, rewrite) {
+  const tokens = Lexer.lex(source, { gfm: true });
+  const edits = [];
+  const visit = (token, from, limit) => {
+    const at = token.raw ? source.indexOf(token.raw, from) : -1;
+    const found = at !== -1 && at + token.raw.length <= limit;
+    if (found && (token.type === 'link' || token.type === 'image' || token.type === 'def')) {
+      // `[text][ref]` carries the definition's href; the `def` token is rewritten instead.
+      const span = typeof token.href === 'string' ? destinationSpan(token) : null;
+      const next = span && rewrite(token.href, { image: token.type === 'image' });
+      if (span && next !== token.href) {
+        const angled = span[2] || /[\s()<>]/.test(next);
+        edits.push([at + span[0], at + span[1], angled ? `<${next}>` : next]);
+      }
+      return at + token.raw.length;
+    }
+    if (found && token.type === 'html') {
+      let changed = false;
+      const rewritten = rewriteHtmlReferences(token.raw, (url, attr) => {
+        const next = rewrite(url, { image: attr !== 'href' });
+        changed ||= next !== url;
+        return next;
+      });
+      // rewriteHtmlReferences re-quotes every URL attribute; keep the block as written unless a URL changed.
+      if (changed) edits.push([at, at + token.raw.length, rewritten]);
+      return at + token.raw.length;
+    }
+    if (token.type === 'code' || token.type === 'codespan') return found ? at + token.raw.length : from;
+    let cursor = found ? at : from;
+    for (const child of childTokens(token)) cursor = visit(child, cursor, found ? at + token.raw.length : limit);
+    return found ? at + token.raw.length : cursor;
+  };
+  let offset = 0;
+  for (const token of tokens) {
+    visit(token, offset, offset + token.raw.length);
+    offset += token.raw.length;
+  }
+  let output = source;
+  for (const [start, end, text] of edits.sort((a, b) => b[0] - a[0])) output = `${output.slice(0, start)}${text}${output.slice(end)}`;
+  return output;
+}
