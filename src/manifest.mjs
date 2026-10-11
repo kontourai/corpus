@@ -121,7 +121,8 @@ function parseRedirectTarget(value) {
     }
     if (url.protocol !== 'https:' || !value.toLowerCase().startsWith('https://') || url.hostname === '')
       return { error: `must be a published source path or an absolute https:// URL, got "${value}"` };
-    return { url: value };
+    // Emit the parsed form: `HTTPS:///evil.com/x` validates but must not reach the stub raw.
+    return { url: url.href };
   }
   const { path: source, anchor } = splitTopicSource(value);
   const problem = repoPathError(source);

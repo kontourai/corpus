@@ -102,6 +102,14 @@ export function checkTopics(manifest, read) {
 /** Files every build writes besides pages and copied assets. */
 export const SITE_FILES = ['docs-kit.css', '.nojekyll', 'docs-bundle.json', '.docs-kit-build'];
 
+/**
+ * The comparison key for output paths: NFC-normalized and lowercased, so two
+ * spellings that one file on macOS or Windows would hold compare equal.
+ */
+export function foldPath(file) {
+  return file.normalize('NFC').toLowerCase();
+}
+
 /** `a/b/c.html` -> ['a', 'a/b']. */
 function ancestors(file) {
   const parts = file.split('/');
@@ -110,7 +118,8 @@ function ancestors(file) {
 
 /**
  * Gate 5: every redirects key is written once and overwrites nothing docs-kit
- * generates (compared case-insensitively, because macOS and Windows checkouts
+ * generates (compared after NFC normalization and case folding, because macOS
+ * and Windows checkouts
  * would clobber), and every source target is published with a resolvable
  * #anchor (the links-gate anchor rule). Copied assets are only known after
  * rendering, so build checks those collisions itself.
@@ -122,16 +131,16 @@ export function checkRedirects(root, manifest, read) {
     failures.push(`redirects["${key}"] appears more than once in ${MANIFEST_FILE}`);
 
   const written = new Map(); // lowercased path -> description
-  for (const source of publishedSources(manifest)) written.set(outputPathFor(manifest, source).toLowerCase(), `the page generated for ${source}`);
-  for (const file of SITE_FILES) written.set(file.toLowerCase(), `the generated ${file}`);
-  const keys = new Map(manifest.redirects.map(({ from }) => [from.toLowerCase(), from]));
+  for (const source of publishedSources(manifest)) written.set(foldPath(outputPathFor(manifest, source)), `the page generated for ${source}`);
+  for (const file of SITE_FILES) written.set(foldPath(file), `the generated ${file}`);
+  const keys = new Map(manifest.redirects.map(({ from }) => [foldPath(from), from]));
   const published = new Set(publishedSources(manifest));
 
   for (const { from, source, anchor } of manifest.redirects) {
     const at = `redirects["${from}"]`;
-    const lower = from.toLowerCase();
+    const lower = foldPath(from);
     if (written.has(lower)) failures.push(`${at} would overwrite ${written.get(lower)}`);
-    else if (keys.get(lower) !== from) failures.push(`${at} differs only in case from redirects["${keys.get(lower)}"]`);
+    else if (keys.get(lower) !== from) failures.push(`${at} differs only in case or Unicode normalization from redirects["${keys.get(lower)}"]`);
     for (const dir of ancestors(lower)) {
       if (written.has(dir)) failures.push(`${at} needs a directory where docs-kit writes ${written.get(dir)}`);
       else if (keys.has(dir)) failures.push(`${at} needs a directory where redirects["${keys.get(dir)}"] writes a page`);

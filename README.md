@@ -80,9 +80,9 @@ GitHub Pages cannot send HTTP redirects, so when a page URL changes (for example
 
 - A key is the old page's path relative to the site root, such as `gates-and-route-back.html` or `adr/0001-x.html`. It must end in `.html` and must not start with `/` or contain `..`, `#`, or `?`.
 - GitHub Pages serves `x.html` for a request to `/x`, so a key `x.html` also redirects the extensionless URL `/x`.
-- A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which is used as written. A source must be the landing page or a listed document, and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
+- A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which the stub uses in its parsed, normalized form (`new URL(value).href`). A source must be the landing page or a listed document, and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
 - A source target becomes a relative URL from the stub's own directory, so `adr/0001-x.html` pointing at `docs/gates.md` refreshes to `../docs/gates.html`. Its canonical URL is absolute, under `--base-url`.
-- A key must not be a page docs-kit generates (`index.html` or a document's `.html`), compared case-insensitively, and must not need a directory where docs-kit writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
+- A key must not be a page docs-kit generates (`index.html` or a document's `.html`), compared after Unicode NFC normalization and case folding, and must not need a directory where docs-kit writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
 - Malformed keys or values are manifest errors (exit `2`). A target that is missing, unpublished, or has an unresolved anchor, and a colliding or repeated key, fail the `redirects` gate (exit `1`).
 - Redirects are not part of `docs-bundle.json`.
 

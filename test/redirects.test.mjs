@@ -75,7 +75,7 @@ test('redirects: docs-bundle.json is unchanged by redirects (same digest and key
   assert.deepEqual(Object.keys(a), Object.keys(b));
 });
 
-test('redirects: an absolute https target is used as written', async (t) => {
+test('redirects: an absolute https target is written in canonical form', async (t) => {
   const repo = fixtureRepo(t, 'valid');
   setRedirects(repo, { 'docs/moved.html': 'https://example.com/elsewhere/page.html#part' });
   const { result, read } = await build(t, repo);
@@ -193,4 +193,34 @@ test('redirects: build refuses a stub that would overwrite a copied asset (exit 
   const { result } = await build(t, repo);
   assert.equal(result.status, 1, result.output);
   assert.match(result.stderr, /redirects\["docs\/legacy\.html"\] would overwrite the copied asset docs\/legacy\.html\/diagram\.svg/);
+});
+
+test('redirects: a non-canonical https target is emitted normalized, never raw', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  setRedirects(repo, { 'x.html': 'HTTPS:///evil.com/a/../x' });
+  const { result, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+  const stub = read('x.html');
+  assert.equal(refreshOf(stub), 'https://evil.com/x');
+  assert.equal(linkOf(stub), 'https://evil.com/x');
+  assert.equal(canonicalOf(stub), 'https://evil.com/x');
+  assert.doesNotMatch(stub, /HTTPS:|\/\/\/evil/);
+});
+
+test('redirects: keys that differ only in Unicode normalization collide (exit 1)', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  const nfc = 'caf\u00e9.html';
+  const nfd = 'cafe\u0301.html';
+  // The generated page side too: an NFD key against an NFC page path.
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(path.join(repo, 'docs/r\u00e9sum\u00e9.md'), '# Resume\n');
+  const file = path.join(repo, 'docs-kit.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  manifest.documents.push({ source: 'docs/r\u00e9sum\u00e9.md', section: 'Reference' });
+  manifest.redirects = { [nfc]: 'README.md', [nfd]: 'README.md', ['docs/re\u0301sume\u0301.html']: 'README.md' };
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+  const result = await runCli(['check', '--root', repo]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.stderr, /differs only in case or Unicode normalization/);
+  assert.match(result.stderr, /would overwrite the page generated for docs\/r\u00e9sum\u00e9\.md/);
 });

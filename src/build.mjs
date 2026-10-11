@@ -4,7 +4,7 @@ import { Marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 import { createAssetPolicy } from './assets.mjs';
 import { assembleBundle, defaultSiteUrl, normalizeBaseUrl } from './bundle.mjs';
-import { formatCheckReport, publishedSources, runChecks } from './check.mjs';
+import { foldPath, formatCheckReport, publishedSources, runChecks } from './check.mjs';
 import { EXIT_OK, GateFailure, UsageError } from './errors.mjs';
 import { gitEnv, headSha, repoPrefix, trackedFiles } from './git.mjs';
 import { execFileSync } from 'node:child_process';
@@ -272,9 +272,9 @@ function redirectStub({ href, canonical }) {
 
 /** Write one stub per redirects key; returns the count. Refuses to overwrite a copied asset. */
 function writeRedirects({ manifest, out, siteUrl, assets }) {
-  const lowerAssets = new Map([...assets].map((asset) => [asset.toLowerCase(), asset]));
+  const lowerAssets = new Map([...assets].map((asset) => [foldPath(asset), asset]));
   for (const { from, source, anchor, url } of manifest.redirects) {
-    const clash = lowerAssets.get(from.toLowerCase()) ?? [...lowerAssets.keys()].find((asset) => asset.startsWith(`${from.toLowerCase()}/`));
+    const clash = lowerAssets.get(foldPath(from)) ?? [...lowerAssets].find(([folded]) => folded.startsWith(`${foldPath(from)}/`))?.[1];
     if (clash) throw new GateFailure(`docs-kit build: redirects["${from}"] would overwrite the copied asset ${clash}`);
     let href = url;
     let canonical = url;
