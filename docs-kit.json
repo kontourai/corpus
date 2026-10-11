@@ -13,7 +13,8 @@
         "src/bundle.mjs",
         "src/manifest.mjs",
         "src/hub.mjs",
-        "src/mcp.mjs"
+        "src/mcp.mjs",
+        "src/locate.mjs"
       ]
     },
     {
@@ -22,7 +23,8 @@
       "covers": [
         "src/build.mjs",
         "src/site-template.mjs",
-        "src/markdown.mjs"
+        "src/markdown.mjs",
+        "src/site-client.js"
       ]
     },
     {

@@ -151,6 +151,14 @@ export function rewriteHtmlReferences(html, rewrite) {
   return output;
 }
 
+/** `html` without any attribute named in `names` (a Set of lowercase names), in any quoting. */
+export function removeHtmlAttributes(html, names) {
+  let output = html;
+  for (const attribute of scanHtmlAttributes(html).filter((entry) => names.has(entry.name)).reverse())
+    output = `${output.slice(0, attribute.start).replace(/[ \t\n\r\f]+$/, ' ')}${output.slice(attribute.end)}`;
+  return output;
+}
+
 /** Fragment targets declared in HTML: `id` and `name` attributes in any quoting. */
 export function extractHtmlAnchors(html) {
   return scanHtmlAttributes(html)
@@ -300,6 +308,69 @@ function htmlH1Text(tokens) {
     if (title) return title;
   }
   return null;
+}
+
+function newlines(text) {
+  let count = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) count++;
+  return count;
+}
+
+/** 1-based [start, end] lines of `text`'s non-whitespace extent, where `text` starts on `firstLine`; null if blank. */
+function extentLines(text, firstLine) {
+  const first = text.search(/\S/);
+  if (first === -1) return null;
+  const last = text.length - (text.length - text.trimEnd().length) - 1;
+  return [firstLine + newlines(text.slice(0, first)), firstLine + newlines(text.slice(0, last))];
+}
+
+/**
+ * Source lines of each top-level block token, as [{ token, start, end }],
+ * 1-based in the lexed text (add a front-matter `lineOffset` for file lines).
+ * Top-level token raws concatenate to the lexed source (the lexer normalizes
+ * CRLF to LF, which keeps the line count), so a running newline count gives
+ * each block's first line. Blank `space` tokens are skipped.
+ */
+export function blockLines(tokens) {
+  const blocks = [];
+  let line = 1;
+  for (const token of tokens) {
+    const raw = token.raw ?? '';
+    const extent = token.type === 'space' ? null : extentLines(raw, line);
+    if (extent) blocks.push({ token, start: extent[0], end: extent[1] });
+    line += newlines(raw);
+  }
+  return blocks;
+}
+
+const LINE_ANNOTATED = new Set(['paragraph', 'heading', 'code', 'blockquote']);
+
+/**
+ * Mark tokens with the file lines they came from, for `data-src-line` on the
+ * rendered page: top-level paragraphs, headings, code blocks and blockquotes
+ * get `srcLine` ("start-end"), each item of a top-level list gets `srcLine`,
+ * and a top-level table gets `srcRows`, one entry per row (header first; a
+ * GFM row is one line, after the header and the delimiter line). Lines are
+ * 1-based file lines: `lineOffset` is the number of front-matter lines removed.
+ */
+export function annotateSourceLines(tokens, lineOffset = 0) {
+  const range = (start, end) => `${start + lineOffset}-${end + lineOffset}`;
+  for (const { token, start, end } of blockLines(tokens)) {
+    if (LINE_ANNOTATED.has(token.type)) token.srcLine = range(start, end);
+    else if (token.type === 'list') {
+      let cursor = 0;
+      for (const item of token.items) {
+        const at = token.raw.indexOf(item.raw, cursor);
+        if (at === -1) continue;
+        cursor = at + item.raw.length;
+        const extent = extentLines(item.raw, start + newlines(token.raw.slice(token.raw.search(/\S/), at)));
+        if (extent) item.srcLine = range(extent[0], extent[1]);
+      }
+    } else if (token.type === 'table') {
+      token.srcRows = [range(start, start), ...token.rows.map((_, index) => range(start + 2 + index, start + 2 + index))];
+    }
+  }
+  return tokens;
 }
 
 /**

@@ -1,4 +1,15 @@
+import { readFileSync } from 'node:fs';
+
 export const HUB_URL = 'https://kontourai.github.io/';
+
+/**
+ * The selection toolbar and optional WebMCP tools, written once per site as
+ * a static file and loaded by every page. It is template output, never
+ * document content; it reads its configuration from the data-* attributes
+ * on <main> and puts selected text in the page only through textContent.
+ */
+export const SITE_SCRIPT_FILE = 'docs-kit.js';
+export const SITE_SCRIPT = readFileSync(new URL('./site-client.js', import.meta.url), 'utf8');
 
 export function escapeHtml(value) {
   return String(value)
@@ -82,6 +93,24 @@ main.content { padding: 1.5rem; min-width: 0; }
 .card:hover { border-color: var(--accent); }
 .card strong { display: block; color: var(--accent); margin-bottom: .2rem; }
 .card span { color: var(--muted); font-size: .9rem; }
+.dk-toolbar { position: absolute; z-index: 20; display: flex; gap: .25rem; padding: .3rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 6px 24px rgb(0 0 0 / .18); font: 500 .875rem/1.2 var(--font); opacity: 1; transform: translateY(0); transition: opacity .12s ease, transform .12s ease; }
+.dk-toolbar[hidden] { display: none; }
+.dk-toolbar.dk-entering { opacity: 0; transform: translateY(4px); }
+.dk-toolbar button, .dk-dialog button { font: inherit; color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: .45rem .7rem; min-height: 2.25rem; cursor: pointer; }
+.dk-toolbar button:hover { background: var(--code-bg); }
+.dk-toolbar button.dk-primary, .dk-dialog button.dk-primary { background: var(--accent); color: var(--accent-fg); }
+.dk-toolbar button.dk-primary:hover { filter: brightness(1.08); }
+.dk-toolbar kbd { font: inherit; font-size: .75em; opacity: .7; margin-left: .3rem; }
+@media (pointer: coarse) { .dk-toolbar button { min-height: 2.75rem; padding: .6rem .85rem; } .dk-toolbar kbd { display: none; } }
+.dk-toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 30; max-width: min(90vw, 36rem); transform: translate(-50%, 0); padding: .6rem 1rem; border-radius: var(--radius); background: var(--fg); color: var(--bg); font-size: .9rem; box-shadow: 0 6px 24px rgb(0 0 0 / .25); opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; }
+.dk-toast.dk-visible { opacity: 1; transform: translate(-50%, -.25rem); }
+.dk-dialog { max-width: min(92vw, 44rem); width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); padding: 1.25rem; }
+.dk-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.dk-dialog h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+.dk-dialog p { margin: 0 0 .75rem; color: var(--muted); }
+.dk-dialog textarea { width: 100%; min-height: 14rem; font: .85rem/1.45 var(--mono); color: var(--fg); background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: .6rem; resize: vertical; }
+.dk-dialog .dk-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }
+@media (prefers-reduced-motion: reduce) { .dk-toolbar, .dk-toast { transition: none; } .dk-toolbar.dk-entering { transform: none; } .dk-toast.dk-visible { transform: translate(-50%, 0); } }
 `;
 
 /**
@@ -106,8 +135,23 @@ const MERMAID_SCRIPTS = `<script src="${MERMAID_SRC}" integrity="${MERMAID_INTEG
 <script>mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', htmlLabels: false, flowchart: { htmlLabels: false }, theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });</script>
 `;
 
+/** Provenance on <main>, read by the selection toolbar: one place per page, not per block. */
+function mainAttributes(manifest, sha, sourcePath) {
+  return Object.entries({
+    'data-src-path': sourcePath,
+    'data-src-sha': sha,
+    'data-repo': manifest.repo,
+    'data-product': manifest.product,
+    'data-title': manifest.title,
+    'data-branch': manifest.branch,
+    'data-selection-primary': manifest.selectionActions.primary,
+  })
+    .map(([name, value]) => `${name}="${escapeHtml(value)}"`)
+    .join(' ');
+}
+
 /** One page of a product site. `toRoot` is the relative prefix back to the site root. */
-export function sitePage({ manifest, title, description, navHtml, content, toRoot, sha, mermaid = false }) {
+export function sitePage({ manifest, title, description, navHtml, content, toRoot, sha, sourcePath, mermaid = false }) {
   const repoUrl = `https://github.com/${manifest.repo}`;
   return `<!doctype html>
 <html lang="en">
@@ -117,6 +161,7 @@ export function sitePage({ manifest, title, description, navHtml, content, toRoo
 <title>${escapeHtml(title)}</title>
 ${description ? `<meta name="description" content="${escapeHtml(description)}">\n` : ''}<meta name="generator" content="@kontourai/docs-kit">
 <link rel="stylesheet" href="${toRoot}docs-kit.css">
+<script src="${toRoot}${SITE_SCRIPT_FILE}" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
@@ -131,7 +176,7 @@ ${description ? `<meta name="description" content="${escapeHtml(description)}">\
   <nav class="site-nav" aria-label="Documentation">
 ${navHtml}
   </nav>
-  <main id="main" class="content">
+  <main id="main" class="content" ${mainAttributes(manifest, sha, sourcePath)}>
 ${content}
   </main>
 </div>

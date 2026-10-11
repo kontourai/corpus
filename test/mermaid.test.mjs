@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { commitAll, fixtureRepo, runCli, scratch } from './helpers.mjs';
+import { commitAll, fixtureRepo, runCli, scratch, withoutToolbarScript } from './helpers.mjs';
 
 // Pinned literally so a silent change to the template's pin fails here.
 const MERMAID_TAG =
@@ -26,7 +26,7 @@ async function buildWith(t, edits) {
 test('a page with a mermaid fence renders <pre class="mermaid"> and loads the pinned, SRI-checked Mermaid', async (t) => {
   const { repo, read } = await buildWith(t, { 'docs/concepts.md': DIAGRAM });
   const html = read('docs/concepts.html');
-  assert.ok(html.includes('<pre class="mermaid">graph TD\n  A[&lt;b&gt;Start&lt;/b&gt;] --&gt; B &amp; C</pre>'), 'diagram source is escaped text, not a code block');
+  assert.ok(html.includes('<pre class="mermaid" data-src-line="25-28">graph TD\n  A[&lt;b&gt;Start&lt;/b&gt;] --&gt; B &amp; C</pre>'), 'diagram source is escaped text, not a code block');
   assert.doesNotMatch(html, /language-mermaid/);
   assert.equal(html.split(MERMAID_TAG).length - 1, 1, 'exactly one pinned Mermaid script with integrity and crossorigin');
   assert.match(html, /<script>mermaid\.initialize\(\{ startOnLoad: true, securityLevel: 'strict', htmlLabels: false, flowchart: \{ htmlLabels: false \}, theme: window\.matchMedia\('\(prefers-color-scheme: dark\)'\)\.matches \? 'dark' : 'default' \}\);<\/script>/);
@@ -41,11 +41,11 @@ test('a page with a mermaid fence renders <pre class="mermaid"> and loads the pi
 test('pages without a mermaid fence load no script, and other fences stay code', async (t) => {
   const { read } = await buildWith(t, { 'docs/concepts.md': DIAGRAM, 'docs/getting-started.md': '```js\nconst mermaid = 1;\n```\n' });
   for (const page of ['index.html', 'docs/getting-started.html', 'docs/reference/cli.html']) {
-    const html = read(page);
-    assert.doesNotMatch(html, /<script/, `${page} has no script`);
+    const html = withoutToolbarScript(read(page));
+    assert.doesNotMatch(html, /<script/, `${page} has no script besides the toolbar's`);
     assert.doesNotMatch(html, /class="mermaid"|jsdelivr/, `${page} does not reference Mermaid`);
   }
-  assert.match(read('docs/getting-started.html'), /<pre><code class="language-js">const mermaid = 1;/);
+  assert.match(read('docs/getting-started.html'), /<pre data-src-line="\d+-\d+"><code class="language-js">const mermaid = 1;/);
 });
 
 test('a <script> written in Markdown is still stripped, on mermaid pages and elsewhere', async (t) => {
@@ -53,11 +53,11 @@ test('a <script> written in Markdown is still stripped, on mermaid pages and els
   const { read } = await buildWith(t, { 'docs/concepts.md': `${DIAGRAM}\n${hostile}`, 'docs/getting-started.md': hostile });
   const withDiagram = read('docs/concepts.html');
   assert.doesNotMatch(withDiagram, /pwned|loose/);
-  assert.equal(withDiagram.match(/<script/g).length, 2, 'only the template\'s two scripts');
+  assert.equal(withoutToolbarScript(withDiagram).match(/<script/g).length, 2, 'only the template\'s two Mermaid scripts besides the toolbar\'s');
   assert.equal(withDiagram.split(MERMAID_TAG).length - 1, 1, 'the Markdown copy of the Mermaid tag was stripped');
   const article = withDiagram.match(/<article class="doc">[\s\S]*?<\/article>/)[0];
   assert.doesNotMatch(article, /<script/i, 'no script inside the document content');
 
-  const without = read('docs/getting-started.html');
+  const without = withoutToolbarScript(read('docs/getting-started.html'));
   assert.doesNotMatch(without, /<script|pwned|loose|jsdelivr/i);
 });

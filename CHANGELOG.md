@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+Additive: v0.5.0 manifests stay valid, `products.json` is unchanged, and the bundle gains two optional per-document fields.
+
+- **Select text, then ask, challenge, or edit.** Every page now loads `docs-kit.js`, a static template script with no dependencies, and its CSS in `docs-kit.css`. Selecting text in the page content shows a toolbar: **Ask** (Alt+A) and **Challenge** (Alt+C) copy a prompt for your agent with the product, repository, `path:start-end@sha`, section heading, page URL and anchor, and the quoted selection, telling the agent to call the MCP `locate` tool and read the source code. **Open issue** opens a prefilled `issues/new` URL, labelled `docs-challenge`, capped at 8,000 characters by truncating the quote. **Edit** opens `edit/<branch>/<path>#L<start>`. Alt+T focuses the toolbar. It has an `aria-live` toast, a selectable-textarea dialog when the clipboard is unavailable, touch placement below the selection, light and dark themes, and no animation under `prefers-reduced-motion`. Selected text is only ever set as text, never as HTML. Pages without content changes now contain this one script tag.
+- **Source provenance in the HTML.** `<main>` carries `data-src-path`, `data-src-sha`, `data-repo`, `data-product`, `data-title`, `data-branch`, and `data-selection-primary`. Top-level paragraphs, headings, code blocks, and blockquotes, each item of a top-level list, and each row of a top-level table carry `data-src-line="<start>-<end>"`: 1-based source-file lines, still correct after front matter is stripped. The sanitizer allows exactly `data-src-line`, and docs-kit removes it from a document's raw HTML, so provenance comes only from the build.
+- **Manifest fields.** Optional `branch` (a valid git branch name, default `main`) for Edit links, and optional `selectionActions: { "primary": "ask" | "challenge-issue" }` for the leading toolbar action. Both are validated strictly (exit 2).
+- **MCP `locate` tool.** `locate {product, quote, source?}` finds a quoted passage in a product's documents, tolerating whitespace, Markdown formatting, and punctuation, and returns the source path, file line range, sha, enclosing heading and anchor, surrounding Markdown, a GitHub blob URL with `#Lstart-Lend`, a `confidence`, and `alternatives` when the quote is ambiguous.
+- **Bundle.** Each document gains `repoPath` (its path from the git top level) and `lineOffset` (front-matter lines stripped), so `locate` reports file lines. Both are optional for readers, and `digest` is unchanged.
+- **Optional WebMCP tools.** Where the browser exposes `document.modelContext` (or the older `navigator.modelContext`), the page registers `get_selection_context`, `search_docs`, and `get_topic`, with an `AbortSignal`, and does nothing when the API is absent or fails. WebMCP is a Chromium-only draft.
+- **Tests.** `npm run test:browser` drives the toolbar and the WebMCP tools in headless Chromium through `playwright-core` (a dev dependency). It needs a Chromium for playwright-core and is not part of `npm test`.
+
 ## 0.5.0
 
 Additive: v0.4.0 manifests stay valid, and the bundle and `products.json` formats are unchanged.

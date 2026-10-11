@@ -11,12 +11,29 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents'];
 const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers', 'publish'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
 const TOPIC_KEYS = ['id', 'title', 'source'];
 const TOPIC_REQUIRED = ['id', 'title', 'source'];
+
+export const DEFAULT_BRANCH = 'main';
+export const SELECTION_PRIMARY_ACTIONS = ['ask', 'challenge-issue'];
+const SELECTION_ACTIONS_KEYS = ['primary'];
+
+/**
+ * A branch name the Edit link can put in https://github.com/<repo>/edit/<branch>/:
+ * the rules of `git check-ref-format --branch`, minus the forms that need a
+ * shell (`@{-1}`). Returns an error string or null.
+ */
+function branchError(name) {
+  if (/[\x00-\x20\x7f~^:?*[\\]/.test(name)) return 'must not contain whitespace, control characters, or any of ~ ^ : ? * [ \\';
+  if (name.startsWith('-') || name.startsWith('/') || name.endsWith('/') || name.endsWith('.')) return 'must not start with "-" or "/" or end with "/" or "."';
+  if (name.includes('..') || name.includes('//') || name.includes('@{') || name === '@') return 'must not contain "..", "//", or "@{", and must not be "@"';
+  if (name.split('/').some((part) => part.startsWith('.') || part.endsWith('.lock'))) return 'must not have a component that starts with "." or ends with ".lock"';
+  return null;
+}
 
 const PRODUCTS_KEYS = ['schemaVersion', 'products'];
 const PRODUCT_ENTRY_KEYS = ['product', 'repo'];
@@ -169,6 +186,19 @@ export function validateManifest(raw, root) {
   else if (!landing.endsWith('.md')) errors.push(`${where}: landing must be a .md file`);
   else if (!isRepoFile(root, landing)) errors.push(`${where}: landing "${landing}" does not exist (or is outside the repository)`);
 
+  if (Object.hasOwn(raw, 'branch') && checkString(raw.branch, `${where}: branch`, errors)) {
+    const problem = branchError(raw.branch);
+    if (problem) errors.push(`${where}: branch "${raw.branch}" ${problem}`);
+  }
+  let selectionPrimary = 'ask';
+  if (Object.hasOwn(raw, 'selectionActions')) {
+    const at = `${where}: selectionActions`;
+    if (checkKeys(raw.selectionActions, at, SELECTION_ACTIONS_KEYS, SELECTION_ACTIONS_KEYS, errors) && Object.hasOwn(raw.selectionActions, 'primary')) {
+      if (SELECTION_PRIMARY_ACTIONS.includes(raw.selectionActions.primary)) selectionPrimary = raw.selectionActions.primary;
+      else errors.push(`${at}.primary must be one of ${SELECTION_PRIMARY_ACTIONS.map((name) => `"${name}"`).join(', ')} (got ${JSON.stringify(raw.selectionActions.primary)})`);
+    }
+  }
+
   const exclude = Object.hasOwn(raw, 'exclude') ? raw.exclude : [];
   if (Object.hasOwn(raw, 'exclude')) checkGlobs(raw.exclude, `${where}: exclude`, errors);
   const isExcluded = Array.isArray(exclude) && exclude.every((glob) => !repoGlobError(glob)) ? globMatcher(exclude) : () => false;
@@ -286,6 +316,8 @@ export function validateManifest(raw, root) {
       tagline: raw.tagline ?? '',
       repo: raw.repo,
       landing,
+      branch: typeof raw.branch === 'string' ? raw.branch : DEFAULT_BRANCH,
+      selectionActions: { primary: selectionPrimary },
       documents,
       topics,
       exclude: Array.isArray(exclude) ? exclude : [],

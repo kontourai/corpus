@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "product": "sample",
+  "title": "Sample",
+  "tagline": "A fixture for the selection toolbar",
+  "repo": "kontourai/sample",
+  "landing": "README.md",
+  "branch": "trunk",
+  "documents": [
+    { "source": "docs/guide.md", "section": "Guide" },
+    { "source": "docs/twins.md", "section": "Guide" }
+  ],
+  "topics": [
+    { "id": "setup", "title": "Setup", "source": "docs/guide.md#setup" }
+  ]
+}

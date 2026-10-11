@@ -103,7 +103,7 @@ test('a leading thematic break and a later --- are content, not front matter, un
   const repo = repoWith(t, { 'breaks.md': breaks, 'prose.md': prose, 'keyed.md': keyed });
   const { read, doc } = await build(t, repo);
   assert.equal(doc('docs/breaks.md').markdown, breaks, 'nothing is deleted');
-  assert.match(read('docs/breaks.html'), /<p>Intro\.<\/p>[\s\S]*<p>More prose\.<\/p>/);
+  assert.match(read('docs/breaks.html'), /<p data-src-line="2-2">Intro\.<\/p>[\s\S]*<p data-src-line="6-6">More prose\.<\/p>/);
   assert.equal(doc('docs/prose.md').markdown, prose, 'no column-0 key line, so nothing is stripped');
   assert.equal(doc('docs/keyed.md').markdown, '\n# Stripped\n');
 });

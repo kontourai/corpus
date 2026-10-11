@@ -42,6 +42,8 @@ Each repository has a `docs-kit.json` at its root:
     { "id": "workflows", "title": "Workflows", "source": "docs/concepts.md#workflows" }
   ],
   "exclude": ["docs/plans/**"],
+  "branch": "main",
+  "selectionActions": { "primary": "ask" },
   "redirects": {
     "gates-and-route-back.html": "docs/gates.md#route-back",
     "releasing.html": "https://example.com/releasing"
@@ -62,6 +64,8 @@ Each repository has a `docs-kit.json` at its root:
 | `topics` | no | Curated entry points for agents. Each has `id` (a lowercase slug), `title`, and `source`, which is either `path` or `path#anchor`. |
 | `exclude` | no | Globs for `docs/**/*.md` files that are deliberately unpublished. |
 | `redirects` | no | Old page URLs that moved, mapped to their new place. Each key is a site-relative `.html` path; each value is a published source (`path` or `path#anchor`) or an absolute `https://` URL. See [Redirects](#redirects). |
+| `branch` | no | The default branch, for the site's **Edit** links (`https://github.com/<repo>/edit/<branch>/<path>`). Default `main`. It must be a valid git branch name (no whitespace, `..`, `~^:?*[\\`, leading `-` or `/`, or `.lock` component). |
+| `selectionActions` | no | The [selection toolbar](docs/site-output.md#selection-toolbar). Its only key, `primary` (required in the object), is `"ask"` (the default) or `"challenge-issue"`: the action that leads the toolbar. |
 | `allowLocalPaths` | no | Exact paths of documents (the landing page or `documents` sources) that may contain absolute home-directory paths, such as deliberate examples. The [paths gate](#check) skips them. No globs. |
 
 The validation rules:
@@ -139,6 +143,7 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 - `index.html` (the landing page), one page per published document (not [bundle-only](#bundle-only-documents) ones), and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository. The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` when there is no tagline.
 - Links between published documents, rewritten to the generated pages, in Markdown and in raw HTML (`href`, `src`, `srcset`). Links to other repository files go to `https://github.com/<repo>/blob/<sha>/<path>`, or to `tree` for directories.
 - Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/` or through a symlink, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link. Assets are collected after sanitization, so a file referenced only by a stripped tag (`iframe`, `embed`, `script`, ...) is never copied.
+- A selection toolbar on every page (`docs-kit.js`, a static template script): select text in the page content to copy an **Ask** or **Challenge** prompt for your agent with the source path, line range, and sha, open a prefilled GitHub issue, or open the source in GitHub's editor. Rendered blocks carry `data-src-line` with their source-file lines, and `<main>` carries the page's path, sha, and repository. Where the browser offers [WebMCP](docs/site-output.md#webmcp-tools), the script also registers in-page tools. See [the generated site](docs/site-output.md#selection-toolbar).
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
 - Mermaid diagrams. A fenced ` ```mermaid ` block becomes `<pre class="mermaid">` holding the escaped diagram source. Only pages with such a block load Mermaid, from jsDelivr, pinned to one version with an SRI `integrity` hash, with `securityLevel: 'strict'` and `htmlLabels: false` (labels are plain SVG text, so diagram HTML never bypasses the sanitizer), and a theme that follows `prefers-color-scheme`. That script is part of the page template; a `script` in the Markdown is still stripped. See [the generated site](docs/site-output.md#mermaid-diagrams).
 - A redirect stub for each `redirects` key. See [Redirects](#redirects).
@@ -182,7 +187,7 @@ docs-kit init [--root dir]
 
 ## MCP server
 
-The server exposes five read-only tools. Every result carries the source commit `sha` of the bundle it came from, and `dirty: true` when a local checkout has uncommitted changes. A tool never throws: problems come back as results with `isError` set.
+The server exposes six read-only tools. Every result carries the source commit `sha` of the bundle it came from, and `dirty: true` when a local checkout has uncommitted changes. A tool never throws: problems come back as results with `isError` set.
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
@@ -191,6 +196,9 @@ The server exposes five read-only tools. Every result carries the source commit 
 | `get_topic` | `product`, `id` | the topic's Markdown section |
 | `get_document` | `product`, `source` | one whole document, including the landing page (`landing: true`) |
 | `search` | `query`, `product?`, `limit?` (1-50, default 10) | ranked matches over topics and documents, with snippet, product, source, url, sha |
+| `locate` | `product`, `quote`, `source?` | where a quoted passage lives: `source`, `repoPath`, 1-based file `startLine` and `endLine`, sha, the enclosing `heading` and `anchor`, the page `url`, the surrounding `markdown` blocks, a GitHub `blobUrl` ending in `#Lstart-Lend`, `match`, `confidence`, and, when the quote matches more than one place, `ambiguous: true` and `alternatives` |
+
+`locate` is what the site's Ask and Challenge prompts tell an agent to call. It compares letters and digits only, lowercased, so whitespace, punctuation, and Markdown formatting (emphasis, code marks, link destinations, HTML tags, list and table markers, fence lines) do not matter. `match` is `verbatim` (confidence 1) when the quote also appears as written, `normalized` (0.9) when it matched only after that normalization, or `head-and-tail` (0.5) when only its first and last four words matched within a nearby window, for example across an image. With more than one candidate, the confidence is divided by their number and the first in document order is returned, with the others as `alternatives`. No match, a quote with fewer than 3 letters or digits, or an unknown `source` is an error result. Line numbers are file lines, after front matter; a bundle built before 0.6.0 does not record front matter, so `locate` adds a `note` saying it assumes none.
 
 The server has three sources:
 
@@ -267,6 +275,9 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 - Empty directories that someone adds by hand inside the output directory are removed on rebuild. Only files are checked against the `.docs-kit-build` manifest.
 - In a bundle-only document, a link destination written with backslash escapes (such as `[x](a\(b\).md)`) cannot be located in the source text, so it is left relative in the bundle. A topic's Markdown does not carry reference definitions from outside its section, so `[text][ref]` links in a topic stay unresolved.
 - The paths gate matches home directories by shape. It does not catch a path relative to `~`, a percent-encoded path, or a home directory outside `/Users`, `/home`, and `C:\Users`.
+- The selection toolbar's line ranges cover whole annotated blocks (a top-level paragraph, list item, table row, code block, or blockquote), not the selected characters. Raw HTML blocks have no line attribute, so a selection inside one carries only the page's path and sha.
+- `locate` matches letters and digits, so it cannot tell apart passages that differ only in punctuation, and text that renders differently from its source (an image's alt text, a Mermaid diagram) needs the head-and-tail fallback.
+- WebMCP is a Chromium-only draft whose API is still changing; the in-page tools follow the October 2026 draft and the earlier synchronous form, and may need updating as it evolves.
 - The hub's install snippet shows `<sha>` as a placeholder. It cannot know which docs-kit commit to recommend.
 
 ## License

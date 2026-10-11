@@ -32,7 +32,7 @@ test('mcp --repo serves list_topics, get_topic, get_document and search with the
 
   assert.deepEqual(client.getServerVersion(), { name: 'docs-kit', version: VERSION });
   const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
-  assert.deepEqual(tools, ['get_document', 'get_topic', 'list_products', 'list_topics', 'search']);
+  assert.deepEqual(tools, ['get_document', 'get_topic', 'list_products', 'list_topics', 'locate', 'search']);
 
   const products = await call(client, 'list_products');
   assert.deepEqual(products.data.products, [
