@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { Marked } from 'marked';
+import { Marked, Renderer } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 import { createAssetPolicy } from './assets.mjs';
 import { assembleBundle, defaultSiteUrl, normalizeBaseUrl } from './bundle.mjs';
@@ -9,9 +9,9 @@ import { EXIT_OK, GateFailure, UsageError } from './errors.mjs';
 import { gitEnv, headSha, repoPrefix, trackedFiles } from './git.mjs';
 import { execFileSync } from 'node:child_process';
 import { outputPathFor } from './manifest.mjs';
-import { analyzeMarkdown, decodeEntities, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
+import { analyzeMarkdown, annotateSourceLines, decodeEntities, removeHtmlAttributes, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
 import { encodePath, relativeUrl, statInRepo, toFsPath } from './paths.mjs';
-import { SITE_CSS, escapeHtml, sitePage } from './site-template.mjs';
+import { SITE_CSS, SITE_SCRIPT, SITE_SCRIPT_FILE, escapeHtml, sitePage } from './site-template.mjs';
 
 const IMAGE_FILE = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|bmp)$/i;
 const SAFE_EXTERNAL = /^(?:https?:|mailto:|\/\/)/i;
@@ -23,6 +23,9 @@ const SAFE_DATA_IMAGE = /^data:image\/(?:png|jpe?g|gif|webp|avif);/i;
  * Rendered Markdown is sanitized to GitHub-like output: no script/style, no
  * on* handlers, and only http(s)/mailto URLs (plus data: images).
  */
+const TEMPLATE_ONLY_ATTRIBUTES = new Set(['data-src-line']);
+const SOURCE_LINE_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'tr', 'pre', 'blockquote'];
+
 const SANITIZE_OPTIONS = {
   allowedTags: [
     ...new Set([
@@ -41,6 +44,9 @@ const SANITIZE_OPTIONS = {
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
     ol: ['start'],
+    // Source provenance for the selection toolbar, written by renderMarkdown.
+    // Exactly this one data-* name, on exactly the elements that carry it.
+    ...Object.fromEntries(SOURCE_LINE_TAGS.map((tag) => [tag, ['data-src-line']])),
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: { img: ['http', 'https', 'data'], source: ['http', 'https', 'data'], video: ['http', 'https'] },
@@ -96,33 +102,61 @@ function isMermaidFence(token) {
  * is never copied. Returns { html, mermaid }, where `mermaid` says whether a
  * mermaid fence was rendered, so the page template loads Mermaid only there.
  */
-function renderMarkdown(markdown, fromSource, rewrite, assets) {
+function renderMarkdown(markdown, fromSource, rewrite, assets, lineOffset = 0) {
   const pending = new Map();
   let mermaid = false;
   const md = new Marked({ gfm: true });
+  // `data-src-line` on the first tag of a default rendering. The value is
+  // computed by annotateSourceLines ("start-end" digits), never from content.
+  const withLine = (html, line) => (line ? html.replace(/^<([a-z][a-z0-9]*)/, `<$1 data-src-line="${line}"`) : html);
   md.use({
     renderer: {
       // Mermaid reads the diagram source from the element's text, so it is
       // escaped like any code block and passes the sanitizer as plain text.
       code(token) {
-        if (!isMermaidFence(token)) return false;
+        if (!isMermaidFence(token)) return withLine(Renderer.prototype.code.call(this, token), token.srcLine);
         mermaid = true;
-        return `<pre class="mermaid">${escapeHtml(token.text)}</pre>\n`;
+        const line = token.srcLine ? ` data-src-line="${token.srcLine}"` : '';
+        return `<pre class="mermaid"${line}>${escapeHtml(token.text)}</pre>\n`;
       },
       heading(token) {
         const inner = this.parser.parseInline(token.tokens);
         const id = escapeHtml(token.slugId);
-        return `<h${token.depth} id="${id}">${inner}<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h${token.depth}>\n`;
+        const line = token.srcLine ? ` data-src-line="${token.srcLine}"` : '';
+        return `<h${token.depth} id="${id}"${line}>${inner}<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h${token.depth}>\n`;
+      },
+      paragraph(token) {
+        return withLine(Renderer.prototype.paragraph.call(this, token), token.srcLine);
+      },
+      blockquote(token) {
+        return withLine(Renderer.prototype.blockquote.call(this, token), token.srcLine);
+      },
+      listitem(item) {
+        return withLine(Renderer.prototype.listitem.call(this, item), item.srcLine);
+      },
+      // GFM table cells cannot hold a table, so one queue of row lines is enough.
+      table(token) {
+        this.docsKitRows = token.srcRows ? [...token.srcRows] : [];
+        try {
+          return Renderer.prototype.table.call(this, token);
+        } finally {
+          this.docsKitRows = [];
+        }
+      },
+      tablerow(row) {
+        return withLine(Renderer.prototype.tablerow.call(this, row), this.docsKitRows?.shift());
       },
     },
   });
   // analyzeMarkdown assigns GitHub slugs in walk order; reuse it so page ids
   // and the anchors the gates validated are the same function.
   const { tokens } = analyzeMarkdown(markdown);
+  annotateSourceLines(tokens, lineOffset);
   md.walkTokens(tokens, (token) => {
     if (token.type === 'link' || token.type === 'image') token.href = rewrite(token.href, fromSource, { image: token.type === 'image', pending });
     else if (token.type === 'html' && token.text) {
-      const rewritten = rewriteHtmlReferences(token.text, (url, attr) => rewrite(url, fromSource, { image: attr !== 'href', pending }));
+      // Provenance comes only from annotateSourceLines: raw HTML cannot set its own.
+      const rewritten = rewriteHtmlReferences(removeHtmlAttributes(token.text, TEMPLATE_ONLY_ATTRIBUTES), (url, attr) => rewrite(url, fromSource, { image: attr !== 'href', pending }));
       token.text = rewritten;
       if ('raw' in token) token.raw = rewritten;
     }
@@ -435,12 +469,12 @@ export function runBuild({ root, out, baseUrl }) {
   }
 
   for (const source of published) {
-    const { markdown } = read(source);
+    const { markdown, lineOffset } = read(source);
     const output = outputPathFor(manifest, source);
     const depth = output.split('/').length - 1;
     const toRoot = '../'.repeat(depth);
     const isLanding = source === manifest.landing;
-    const { html: body, mermaid } = renderMarkdown(markdown, source, rewrite, assets);
+    const { html: body, mermaid } = renderMarkdown(markdown, source, rewrite, assets, lineOffset);
     const sourceUrl = `https://github.com/${manifest.repo}/blob/${sha}/${encodePath(`${prefix}${source}`)}`;
     const content = [
       `<article class="doc">\n${body}\n</article>`,
@@ -460,6 +494,7 @@ export function runBuild({ root, out, baseUrl }) {
       toRoot,
       sha,
       mermaid,
+      sourcePath: `${prefix}${source}`,
     });
     const target = toFsPath(out, output);
     mkdirSync(path.dirname(target), { recursive: true });
@@ -473,6 +508,7 @@ export function runBuild({ root, out, baseUrl }) {
   }
   const redirects = writeRedirects({ manifest, out, siteUrl, assets });
   writeFileSync(path.join(out, 'docs-kit.css'), SITE_CSS);
+  writeFileSync(path.join(out, SITE_SCRIPT_FILE), SITE_SCRIPT);
   writeFileSync(path.join(out, '.nojekyll'), '');
 
   const bundle = assembleBundle({ manifest, read, sha, siteUrl, root, prefix });

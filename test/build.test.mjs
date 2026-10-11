@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, copyFileSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { commitAll, fixtureRepo, git, runCli, scratch, withoutToolbarScript } from './helpers.mjs';
 
 async function buildValid(t, extraArgs = []) {
   const repo = fixtureRepo(t, 'valid', { as: 'sample' });
@@ -22,7 +22,7 @@ test('build renders the landing page, one page per document, assets and .nojekyl
   assert.ok(!existsSync(path.join(out, 'docs/plans/roadmap.html')), 'excluded docs are not published');
 
   const index = read('index.html');
-  assert.match(index, /<h1 id="sample">Sample/);
+  assert.match(index, /<h1 id="sample" data-src-line="1-1">Sample/);
   assert.match(index, /href="https:\/\/kontourai\.github\.io\/">All Kontour docs</, 'links back to the hub');
   assert.match(index, /href="https:\/\/github\.com\/kontourai\/sample">GitHub</, 'links to the repo');
   assert.match(index, /<img src="docs\/assets\/diagram\.svg" alt="Architecture"/);
@@ -41,7 +41,7 @@ test('build rewrites links between published docs and sends unpublished files to
   assert.match(gettingStarted, /<a href="concepts\.html#workflows">workflows<\/a>/);
   assert.match(gettingStarted, /<a href="\.\.\/index\.html">overview<\/a>/, 'a link to the landing page goes to index.html');
   assert.match(gettingStarted, /<a href="#run-it-1">jump<\/a>/);
-  assert.match(gettingStarted, /<h2 id="run-it-1">/);
+  assert.match(gettingStarted, /<h2 id="run-it-1" data-src-line="\d+-\d+">/);
 
   const cli = read('docs/reference/cli.html');
   assert.ok(cli.includes(`<a href="https://github.com/kontourai/sample/blob/${sha}/src/cli/main.js">main source</a>`), 'repo file -> blob');
@@ -315,12 +315,12 @@ test('build sanitizes rendered HTML: no script, no on* handlers, no javascript: 
   const out = path.join(scratch(t), 'site');
   const build = await runCli(['build', '--root', repo, '--out', out]);
   assert.equal(build.status, 0, build.output);
-  const html = readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8');
+  const html = withoutToolbarScript(readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8'));
   assert.doesNotMatch(html, /<script|pwned|onerror|onclick|<iframe|javascript:/i);
   assert.match(html, /<img src="assets\/diagram\.svg" alt="kept"/);
   assert.match(html, /<a href="https:\/\/example\.com">ok<\/a>/);
   assert.match(html, /<details><summary>More<\/summary>Kept\.<\/details>/);
-  assert.match(html, /<h2 id="workflows">Workflows<a class="anchor" href="#workflows"/, 'heading ids and anchor links survive');
+  assert.match(html, /<h2 id="workflows" data-src-line="5-5">Workflows<a class="anchor" href="#workflows"/, 'heading ids and anchor links survive');
 });
 
 test('git calls ignore GIT_DIR and friends exported by a git hook, reading --root and never writing the hook repository', async (t) => {

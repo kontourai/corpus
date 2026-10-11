@@ -34,7 +34,7 @@ test('a documents[].title overrides the H1 title in nav, <title>, landing cards,
   const page = read('docs/concepts.html');
   assert.equal(titleOf(page), 'Core ideas · Sample');
   assert.match(page, /<a href="concepts\.html" aria-current="page">Core ideas<\/a>/);
-  assert.match(page, /<h1 id="concepts">Concepts/, 'the page body keeps its own H1');
+  assert.match(page, /<h1 id="concepts" data-src-line="1-1">Concepts/, 'the page body keeps its own H1');
   assert.match(read('index.html'), /<a class="card" href="docs\/concepts\.html"><strong>Core ideas<\/strong>/);
   assert.equal(bundleTitle(bundle, 'docs/concepts.md'), 'Core ideas');
   assert.equal(bundleTitle(bundle, 'docs/getting-started.md'), 'Getting started', 'documents without an override keep the H1');

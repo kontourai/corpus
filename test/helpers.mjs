@@ -60,6 +60,16 @@ export function fixtureRepo(t, name, { into, as } = {}) {
   return dir;
 }
 
+/**
+ * A page without the template's selection-toolbar script tag (exactly one per
+ * page, in <head>), so tests about document content can assert "no script".
+ */
+export function withoutToolbarScript(html) {
+  const tag = /<script src="(?:\.\.\/)*docs-kit\.js" defer><\/script>\n/;
+  if (!tag.test(html)) throw new Error('page has no selection-toolbar script tag');
+  return html.replace(tag, '');
+}
+
 export function write(file, content) {
   writeFileSync(file, content);
 }

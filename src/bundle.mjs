@@ -86,8 +86,19 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
   ].map(
     ({ source, section, title, landing }) => {
       // The title comes from the source as written, so it never depends on rewriting.
-      const { analysis } = read(source);
-      return { source, section, title: documentTitle(analysis, source, title), landing, url: pageUrl(source), markdown: readForBundle(source).markdown };
+      const { analysis, lineOffset } = read(source);
+      return {
+        source,
+        section,
+        title: documentTitle(analysis, source, title),
+        landing,
+        url: pageUrl(source),
+        // Where `markdown` sits in the repository: the path from the git top
+        // level, and the number of front-matter lines stripped before line 1.
+        repoPath: `${prefix}${source}`,
+        lineOffset,
+        markdown: readForBundle(source).markdown,
+      };
     },
   );
   const topicSection = (id, path, anchor, reader) => {
@@ -102,7 +113,7 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
     return { id, title, source, url: anchor === null ? pageUrl(path) : `${pageUrl(path)}#${encodeURIComponent(anchor)}`, markdown };
   });
   const asWritten = {
-    documents: documents.map((document) => ({ ...document, markdown: read(document.source).markdown })),
+    documents: documents.map(({ source, section, title, landing }) => ({ source, section, title, landing, markdown: read(source).markdown })),
     topics: manifest.topics.map(({ id, title, source }) => {
       const { path, anchor } = splitTopicSource(source);
       return { id, title, source, markdown: topicSection(id, path, anchor, read) };

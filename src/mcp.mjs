@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
+import { locateInBundle } from './locate.mjs';
 import { MANIFEST_FILE, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
@@ -37,6 +38,10 @@ export function bundleShapeError(bundle, product) {
     for (const key of ['source', 'title', 'url', 'markdown']) if (!isString(document[key])) return `documents[${index}].${key} must be a string`;
     if (!(isString(document.section) || document.section === null)) return `documents[${index}].section must be a string or null`;
     if (document.landing !== undefined && typeof document.landing !== 'boolean') return `documents[${index}].landing must be a boolean`;
+    // Added in 0.6.0; optional so older bundles stay readable.
+    if (document.repoPath !== undefined && !isString(document.repoPath)) return `documents[${index}].repoPath must be a string`;
+    if (document.lineOffset !== undefined && !(Number.isInteger(document.lineOffset) && document.lineOffset >= 0))
+      return `documents[${index}].lineOffset must be a non-negative integer`;
   }
   for (const [index, topic] of bundle.topics.entries()) {
     if (topic === null || typeof topic !== 'object') return `topics[${index}] is not an object`;
@@ -462,6 +467,37 @@ export function createDocsServer(source) {
         query,
         results: searchBundles(bundles, query, limit ?? 10),
         ...(product === undefined && loaded.unavailable.length > 0 ? { unavailable: loaded.unavailable } : {}),
+      });
+    },
+  );
+
+  tool(
+    'locate',
+    {
+      description:
+        'Find where a quoted passage (for example text selected on a docs page) lives in a product\'s Markdown source. Tolerates whitespace, Markdown formatting, and punctuation differences. Returns the source path, 1-based file line range, sha, enclosing heading and anchor, the surrounding Markdown, a GitHub blob URL with #Lstart-Lend, a confidence, and alternatives when the quote matches more than one place.',
+      inputSchema: z.object({
+        product: z.string().describe('Product slug.'),
+        quote: z.string().describe('The passage to find, as copied from the page or the Markdown.'),
+        source: z.string().optional().describe('Limit the search to one document source path, e.g. "docs/concepts.md".'),
+      }),
+      annotations: readOnly,
+    },
+    async ({ product, quote, source: only }) => {
+      const picked = pickBundle(await source.load(), product);
+      if (picked.error) return picked.error;
+      const { bundle } = picked;
+      const found = locateInBundle(bundle, quote, { source: only });
+      if (found.error) return toolError(found.error, { ...(found.availableDocuments ? { availableDocuments: found.availableDocuments } : {}), ...stamp(bundle) });
+      if (found.best === null)
+        return toolError(`no match for the quote in ${product}${only === undefined ? '' : ` (${only})`}`, { documentsSearched: found.documentsSearched, ...stamp(bundle) });
+      return json({
+        product,
+        ...stamp(bundle),
+        confidence: found.confidence,
+        ...found.best,
+        // Only the first MAX_ALTERNATIVES others are listed; matchCount is the total.
+        ...(found.matchCount > 1 ? { ambiguous: true, matchCount: found.matchCount, alternatives: found.alternatives } : {}),
       });
     },
   );
