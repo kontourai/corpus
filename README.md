@@ -84,7 +84,7 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 `check` runs the gates below and reports every failure, not only the first.
 
 1. **manifest:** `docs-kit.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
-2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. A reference to a file under `.git/`, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
+2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (or is the landing page) or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a top-level heading.
 5. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
@@ -100,7 +100,7 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 
 - `index.html` (the landing page), one page per document, and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository.
 - Links between published documents, rewritten to the generated pages, in Markdown and in raw HTML (`href`, `src`, `srcset`). Links to other repository files go to `https://github.com/<repo>/blob/<sha>/<path>`, or to `tree` for directories.
-- Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/`, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link.
+- Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/` or through a symlink, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link. Assets are collected after sanitization, so a file referenced only by a stripped tag (`iframe`, `embed`, `script`, ...) is never copied.
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
 - `.nojekyll`, a `.docs-kit-build` marker, and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
 
@@ -221,6 +221,9 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 - Raw-HTML `name` attributes count as anchors in `check`, but the sanitizer keeps `name` only on `<a>`. A `name` on another element passes `check` and then fails the generated-site check in `build`. Element `id`s are not prefixed with `user-content-` as they are on GitHub.
 - MCP `search` is plain term matching with no stemming or synonyms.
 - The hub calls the GitHub API without authentication, which allows 60 requests per hour per IP. The 10-minute `localStorage` cache keeps normal use within that limit.
+- Any asset reference that goes through a symlink, as a file or as a directory in its path, is refused as unpublishable, whatever the link points at. Commit the real file instead.
+- "Tracked" means present in the git index. A local `build` publishes tracked assets with their unstaged working-tree edits. CI builds from a clean checkout, so its output matches the commit.
+- Empty directories that someone adds by hand inside the output directory are removed on rebuild. Only files are checked against the `.docs-kit-build` manifest.
 - The hub's install snippet shows `<sha>` as a placeholder. It cannot know which docs-kit commit to recommend.
 
 ## License

@@ -54,10 +54,10 @@ const SANITIZE_OPTIONS = {
  * Unresolvable local targets are left as written so the generated-site check
  * reports them.
  */
-function createHrefRewriter({ root, manifest, sha, prefix, published, assets }) {
+function createHrefRewriter({ root, manifest, sha, prefix, published }) {
   const blobBase = `https://github.com/${manifest.repo}`;
   const assetPolicy = createAssetPolicy(root);
-  return (href, fromSource, { image = false } = {}) => {
+  return (href, fromSource, { image = false, pending } = {}) => {
     const fromOutput = outputPathFor(manifest, fromSource);
     const target = resolveLink(href, fromSource);
     if (target.kind === 'external') {
@@ -75,15 +75,23 @@ function createHrefRewriter({ root, manifest, sha, prefix, published, assets }) 
     const policy = assetPolicy(target.path, stat.kind, { embed: image || IMAGE_FILE.test(target.path) });
     if (policy.action === 'unpublishable') throw new GateFailure(`${fromSource}: unpublishable reference: ${target.path} ${policy.reason}`);
     if (policy.action === 'copy') {
-      assets.add(target.path);
-      return relativeUrl(fromOutput, target.path);
+      // Recorded as pending; copied only if the URL survives sanitization.
+      const url = relativeUrl(fromOutput, target.path);
+      pending?.set(url, target.path);
+      return url;
     }
     const kind = stat.kind === 'dir' ? 'tree' : 'blob';
     return `${blobBase}/${kind}/${sha}/${encodePath(`${prefix}${target.path}`).replace(/\/$/, '')}${hash}`;
   };
 }
 
-function renderMarkdown(markdown, fromSource, rewrite) {
+/**
+ * Render one page. Assets are collected from the sanitized HTML, so a file
+ * referenced only by a tag the sanitizer strips (iframe, embed, script, ...)
+ * is never copied.
+ */
+function renderMarkdown(markdown, fromSource, rewrite, assets) {
+  const pending = new Map();
   const md = new Marked({ gfm: true });
   md.use({
     renderer: {
@@ -98,14 +106,16 @@ function renderMarkdown(markdown, fromSource, rewrite) {
   // and the anchors the gates validated are the same function.
   const { tokens } = analyzeMarkdown(markdown);
   md.walkTokens(tokens, (token) => {
-    if (token.type === 'link' || token.type === 'image') token.href = rewrite(token.href, fromSource, { image: token.type === 'image' });
+    if (token.type === 'link' || token.type === 'image') token.href = rewrite(token.href, fromSource, { image: token.type === 'image', pending });
     else if (token.type === 'html' && token.text) {
-      const rewritten = rewriteHtmlReferences(token.text, (url, attr) => rewrite(url, fromSource, { image: attr !== 'href' }));
+      const rewritten = rewriteHtmlReferences(token.text, (url, attr) => rewrite(url, fromSource, { image: attr !== 'href', pending }));
       token.text = rewritten;
       if ('raw' in token) token.raw = rewritten;
     }
   });
-  return sanitizeHtml(md.parser(tokens), SANITIZE_OPTIONS)
+  const html = sanitizeHtml(md.parser(tokens), SANITIZE_OPTIONS);
+  for (const { url } of extractHtmlReferences(html)) if (pending.has(url)) assets.add(pending.get(url));
+  return html
     .replaceAll('<table>', '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>')
     .replaceAll('</table>', '</table></div>');
 }
@@ -304,7 +314,7 @@ export function runBuild({ root, out, baseUrl }) {
 
   const published = new Set(publishedSources(manifest));
   const assets = new Set();
-  const rewrite = createHrefRewriter({ root, manifest, sha, prefix, published, assets });
+  const rewrite = createHrefRewriter({ root, manifest, sha, prefix, published });
   const titles = new Map();
   const descriptions = new Map();
   for (const source of published) {
@@ -319,7 +329,7 @@ export function runBuild({ root, out, baseUrl }) {
     const depth = output.split('/').length - 1;
     const toRoot = '../'.repeat(depth);
     const isLanding = source === manifest.landing;
-    const body = renderMarkdown(markdown, source, rewrite);
+    const body = renderMarkdown(markdown, source, rewrite, assets);
     const sourceUrl = `https://github.com/${manifest.repo}/blob/${sha}/${encodePath(`${prefix}${source}`)}`;
     const content = [
       `<article class="doc">\n${body}\n</article>`,

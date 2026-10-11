@@ -1,8 +1,22 @@
-import { statSync } from 'node:fs';
+import { lstatSync, statSync } from 'node:fs';
 import { trackedFiles } from './git.mjs';
 import { toFsPath } from './paths.mjs';
 
 export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
+
+/** The first path component (repo-relative) that is a symlink, or null. */
+function symlinkComponent(root, repoPath) {
+  const parts = repoPath.split('/').filter(Boolean);
+  for (let i = 1; i <= parts.length; i++) {
+    const prefix = parts.slice(0, i).join('/');
+    try {
+      if (lstatSync(toFsPath(root, prefix)).isSymbolicLink()) return prefix;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 /**
  * Outside git there is no tracked set, so only these media/document types are
@@ -15,7 +29,7 @@ const ALLOWED_OUTSIDE_GIT = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|p
  * Decide what a local reference may become on the published site. One policy
  * for `check` and `build`, so a reference check accepts is one build can
  * publish:
- * - unpublishable: under .git/, or (inside git) a file that is not tracked,
+ * - unpublishable: under .git/, through a symlink, or (inside git) a file that is not tracked,
  *   i.e. untracked or git-ignored. These would leak local secrets such as
  *   `.env` or `.git/config`, so they fail with exit 1.
  * - copy: inside git a tracked file, outside git an allowlisted extension;
@@ -31,6 +45,11 @@ export function createAssetPolicy(root) {
 
   return (repoPath, kind, { embed = false } = {}) => {
     if (repoPath.split('/').includes('.git')) return { action: 'unpublishable', reason: 'is inside .git' };
+    // Simplest safe rule: a symlink anywhere in the path is refused, whatever
+    // it points at. A tracked `pic.png -> .env` would otherwise pass the
+    // tracked check by name while copyFileSync published the target.
+    const link = symlinkComponent(root, repoPath);
+    if (link) return { action: 'unpublishable', reason: `goes through the symlink ${link}; symlinked assets are not published` };
     if (kind !== 'file') return { action: 'link' };
     const set = trackedSet();
     if (set !== null && !set.has(repoPath)) return { action: 'unpublishable', reason: 'is not tracked by git (untracked or ignored)' };

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { closeSync, copyFileSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
@@ -398,4 +398,48 @@ test('video poster is link-checked and copied', async (t) => {
   assert.equal(build.status, 0, build.output);
   assert.ok(existsSync(path.join(out, 'docs', 'assets', 'poster.svg')));
   assert.match(readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8'), /poster="assets\/poster\.svg"/);
+});
+
+test('assets: committed symlinks to an ignored .env, to .git/config, or through a symlinked directory are unpublishable', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(path.join(repo, '.gitignore'), '.env\n');
+  writeFileSync(path.join(repo, '.env'), 'API_TOKEN=secret\n');
+  symlinkSync('../../.env', path.join(repo, 'docs', 'assets', 'pic.png'));
+  symlinkSync('../../.git/config', path.join(repo, 'docs', 'assets', 'conf.png'));
+  symlinkSync('assets', path.join(repo, 'docs', 'media'));
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n![pic](assets/pic.png) <img src="assets/conf.png" alt="c"> ![via dir](media/diagram.svg)\n`,
+  );
+  commitAll(repo, 'tracked symlinks');
+  assert.match(git(repo, ['ls-files', '-s', 'docs/assets/pic.png', 'docs/assets/conf.png', 'docs/media']), /^120000 /m, 'the symlinks are committed');
+
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /\(assets\/pic\.png\) - unpublishable reference: docs\/assets\/pic\.png goes through the symlink docs\/assets\/pic\.png/);
+  assert.match(check.stderr, /src="assets\/conf\.png"> - unpublishable reference: docs\/assets\/conf\.png goes through the symlink docs\/assets\/conf\.png/);
+  assert.match(check.stderr, /\(media\/diagram\.svg\) - unpublishable reference: docs\/media\/diagram\.svg goes through the symlink docs\/media/);
+
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 1, build.output);
+  for (const file of ['docs/assets/pic.png', 'docs/assets/conf.png', 'docs/media/diagram.svg'])
+    assert.ok(!existsSync(path.join(out, file)), `${file} not copied`);
+});
+
+test('assets referenced only by tags the sanitizer strips are not copied', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  for (const name of ['framed.svg', 'embedded.pdf', 'sound.mp3', 'captions.vtt', 'style.css', 'code.js'])
+    writeFileSync(path.join(repo, 'docs', 'assets', name), 'x');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<iframe src="assets/framed.svg"></iframe> <embed src="assets/embedded.pdf"> <link href="assets/style.css"> <script src="assets/code.js"></script> <audio src="assets/sound.mp3"><track src="assets/captions.vtt"></audio>\n\n![kept](assets/diagram.svg)\n`,
+  );
+  commitAll(repo, 'stripped tags');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  for (const name of ['framed.svg', 'embedded.pdf', 'sound.mp3', 'captions.vtt', 'style.css', 'code.js'])
+    assert.ok(!existsSync(path.join(out, 'docs', 'assets', name)), `${name} must not be copied`);
+  assert.ok(existsSync(path.join(out, 'docs', 'assets', 'diagram.svg')), 'a surviving image is still copied');
 });
