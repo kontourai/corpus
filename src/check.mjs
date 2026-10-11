@@ -3,7 +3,7 @@ import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
-import { MANIFEST_FILE, globMatcher, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
+import { MANIFEST_FILE, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
@@ -99,8 +99,74 @@ export function checkTopics(manifest, read) {
   return failures;
 }
 
+/** Files every build writes besides pages and copied assets. */
+export const SITE_FILES = ['docs-kit.css', '.nojekyll', 'docs-bundle.json', '.docs-kit-build'];
+
 /**
- * Gate 5: every `covers` glob matches at least one tracked file (every file
+ * The comparison key for output paths: NFC-normalized and lowercased, so two
+ * spellings that one file on macOS or Windows would hold compare equal.
+ */
+export function foldPath(file) {
+  return file.normalize('NFC').toLowerCase();
+}
+
+/** `a/b/c.html` -> ['a', 'a/b']. */
+function ancestors(file) {
+  const parts = file.split('/');
+  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'));
+}
+
+/**
+ * Gate 5: every redirects key is written once and overwrites nothing docs-kit
+ * generates (compared after NFC normalization and case folding, because macOS
+ * and Windows checkouts
+ * would clobber), and every source target is published with a resolvable
+ * #anchor (the links-gate anchor rule). Copied assets are only known after
+ * rendering, so build checks those collisions itself.
+ */
+export function checkRedirects(root, manifest, read) {
+  const failures = [];
+  if (manifest.redirects.length === 0) return failures;
+  for (const key of duplicateRedirectKeys(readFileSync(toFsPath(root, MANIFEST_FILE), 'utf8')))
+    failures.push(`redirects["${key}"] appears more than once in ${MANIFEST_FILE}`);
+
+  const written = new Map(); // lowercased path -> description
+  for (const source of publishedSources(manifest)) written.set(foldPath(outputPathFor(manifest, source)), `the page generated for ${source}`);
+  for (const file of SITE_FILES) written.set(foldPath(file), `the generated ${file}`);
+  const keys = new Map(manifest.redirects.map(({ from }) => [foldPath(from), from]));
+  const published = new Set(publishedSources(manifest));
+
+  for (const { from, source, anchor } of manifest.redirects) {
+    const at = `redirects["${from}"]`;
+    const lower = foldPath(from);
+    if (written.has(lower)) failures.push(`${at} would overwrite ${written.get(lower)}`);
+    else if (keys.get(lower) !== from) failures.push(`${at} differs only in case or Unicode normalization from redirects["${keys.get(lower)}"]`);
+    for (const dir of ancestors(lower)) {
+      if (written.has(dir)) failures.push(`${at} needs a directory where docs-kit writes ${written.get(dir)}`);
+      else if (keys.has(dir)) failures.push(`${at} needs a directory where redirects["${keys.get(dir)}"] writes a page`);
+    }
+    for (const [file, what] of written)
+      if (ancestors(file).includes(lower)) failures.push(`${at} would occupy a directory that holds ${what}`);
+
+    if (source === undefined) continue;
+    if (!statInRepo(root, source)) {
+      failures.push(`${at}: target "${source}" does not exist`);
+      continue;
+    }
+    if (!published.has(source)) {
+      failures.push(
+        `${at}: target "${source}" is not published; a redirect must point at the landing page, a listed document, or an https:// URL`,
+      );
+      continue;
+    }
+    if (anchor !== null && !read(source).analysis.anchors.has(anchor))
+      failures.push(`${at}: target "${source}#${anchor}" - missing anchor #${anchor} in ${source}`);
+  }
+  return failures;
+}
+
+/**
+ * Gate 6: every `covers` glob matches at least one tracked file (every file
  * outside git). A glob that matches nothing can never mark its document stale.
  */
 export function checkCovers(root, manifest) {
@@ -119,7 +185,7 @@ export function checkCovers(root, manifest) {
 }
 
 /**
- * Gate 6: a document whose `covers` globs match a changed file must itself be
+ * Gate 7: a document whose `covers` globs match a changed file must itself be
  * in the change set. Git errors throw UsageError; they never pass silently.
  */
 export function checkFreshness(root, manifest, base) {
@@ -152,7 +218,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);
-    for (const name of ['links', 'reachability', 'topics', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
+    for (const name of ['links', 'reachability', 'topics', 'redirects', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
       gates.push({ name, skipped: `${MANIFEST_FILE} is invalid` });
     return { exitCode, gates, manifest: null };
   }
@@ -162,6 +228,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     ['links', () => checkLinks(root, manifest, read)],
     ['reachability', () => checkReachability(root, manifest)],
     ['topics', () => checkTopics(manifest, read)],
+    ['redirects', () => checkRedirects(root, manifest, read)],
     // covers only feeds freshness, so build (freshness: false) is not blocked by it.
     ...(freshness ? [['covers', () => checkCovers(root, manifest)]] : []),
   ]) {

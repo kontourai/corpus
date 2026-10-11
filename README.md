@@ -2,7 +2,7 @@
 
 `@kontourai/docs-kit` gives every Kontour product the same three things from one manifest:
 
-- **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, and (on pull requests) freshness.
+- **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, redirects, and (on pull requests) freshness.
 - **A GitHub Pages site.** `docs-kit build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `docs-kit mcp` serves every product's bundle from one MCP server.
 
@@ -41,7 +41,11 @@ Each repository has a `docs-kit.json` at its root:
   "topics": [
     { "id": "workflows", "title": "Workflows", "source": "docs/concepts.md#workflows" }
   ],
-  "exclude": ["docs/plans/**"]
+  "exclude": ["docs/plans/**"],
+  "redirects": {
+    "gates-and-route-back.html": "docs/gates.md#route-back",
+    "releasing.html": "https://example.com/releasing"
+  }
 }
 ```
 
@@ -56,6 +60,7 @@ Each repository has a `docs-kit.json` at its root:
 | `documents` | yes | Published pages, in navigation order. Each entry has `source` (a `.md` path), `section` (the navigation group) and, optionally, `title` and `covers`. |
 | `topics` | no | Curated entry points for agents. Each has `id` (a lowercase slug), `title`, and `source`, which is either `path` or `path#anchor`. |
 | `exclude` | no | Globs for `docs/**/*.md` files that are deliberately unpublished. |
+| `redirects` | no | Old page URLs that moved, mapped to their new place. Each key is a site-relative `.html` path; each value is a published source (`path` or `path#anchor`) or an absolute `https://` URL. See [Redirects](#redirects). |
 
 The validation rules:
 
@@ -68,6 +73,18 @@ The validation rules:
 - `covers` holds globs of the code a document describes; the [freshness gate](#check) uses them. A bare directory name such as `src/cli` means `src/cli/**`. A glob that matches no tracked file (`git ls-files`; every file outside git) fails the `covers` gate of `check`, because it could never mark its document stale. It does not block `build` or the MCP server.
 
 Section names group the navigation in the order they first appear in `documents`.
+
+### Redirects
+
+GitHub Pages cannot send HTTP redirects, so when a page URL changes (for example `/flow/gates-and-route-back.html` became `/flow/docs/gates-and-route-back.html` when a product moved to docs-kit), list the old path under `redirects` and `build` writes a stub page there. The stub refreshes to the target at once (`<meta http-equiv="refresh" content="0; url=...">`), names it with `<link rel="canonical">`, asks search engines not to index it (`<meta name="robots" content="noindex">`), shows a plain link to it, and has no script.
+
+- A key is the old page's path relative to the site root, such as `gates-and-route-back.html` or `adr/0001-x.html`. It must end in `.html` and must not start with `/` or contain `..`, `#`, or `?`.
+- GitHub Pages serves `x.html` for a request to `/x`, so a key `x.html` also redirects the extensionless URL `/x`.
+- A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which the stub uses in its parsed, normalized form (`new URL(value).href`). A source must be the landing page or a listed document, and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
+- A source target becomes a relative URL from the stub's own directory, so `adr/0001-x.html` pointing at `docs/gates.md` refreshes to `../docs/gates.html`. Its canonical URL is absolute, under `--base-url`.
+- A key must not be a page docs-kit generates (`index.html` or a document's `.html`), compared after Unicode NFC normalization and case folding, and must not need a directory where docs-kit writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
+- Malformed keys or values are manifest errors (exit `2`). A target that is missing, unpublished, or has an unresolved anchor, and a colliding or repeated key, fail the `redirects` gate (exit `1`).
+- Redirects are not part of `docs-bundle.json`.
 
 ## CLI reference
 
@@ -89,8 +106,9 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (or is the landing page) or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
-5. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
-6. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
+5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file docs-kit generates.
+6. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
+7. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
 ### build
 
@@ -105,9 +123,10 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 - Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/` or through a symlink, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link. Assets are collected after sanitization, so a file referenced only by a stripped tag (`iframe`, `embed`, `script`, ...) is never copied.
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
 - Mermaid diagrams. A fenced ` ```mermaid ` block becomes `<pre class="mermaid">` holding the escaped diagram source. Only pages with such a block load Mermaid, from jsDelivr, pinned to one version with an SRI `integrity` hash, with `securityLevel: 'strict'` and `htmlLabels: false` (labels are plain SVG text, so diagram HTML never bypasses the sanitizer), and a theme that follows `prefers-color-scheme`. That script is part of the page template; a `script` in the Markdown is still stripped. See [the generated site](docs/site-output.md#mermaid-diagrams).
+- A redirect stub for each `redirects` key. See [Redirects](#redirects).
 - `.nojekyll`, a `.docs-kit-build` marker, and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
 
-`build` then checks every internal `href` and `src` in the generated site, including `#fragments`, and exits `1` if any of them is broken. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory unless every file in it is listed in the `.docs-kit-build` manifest that a previous build wrote. This applies inside or outside git, whether or not the directory is ignored. A file added by hand blocks the rebuild, and the error names it. A new or empty directory is fine. A forged marker is trusted: docs-kit deletes whatever a marker lists.
+`build` then checks every internal `href` and `src` in the generated site, and the URL of each redirect stub's meta refresh, including `#fragments`, and exits `1` if any of them is broken. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory unless every file in it is listed in the `.docs-kit-build` manifest that a previous build wrote. This applies inside or outside git, whether or not the directory is ignored. A file added by hand blocks the rebuild, and the error names it. A new or empty directory is fine. A forged marker is trusted: docs-kit deletes whatever a marker lists.
 
 ### mcp
 

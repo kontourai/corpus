@@ -26,7 +26,7 @@ Two JSON files connect product sites to the hub and to the MCP server. `docs-kit
 ```
 
 - `documents[0]` is the landing page, with `landing: true` and `section: null`. The listed documents follow in manifest order, with `landing: false`. A document's `title` is the `title` set on its `documents` entry in `docs-kit.json`, if any. Otherwise it is its first Markdown H1 outside blockquotes and lists, then the text of the first raw-HTML `<h1>` that has text, then a simple front-matter `title:`, then the file name without `.md`. `markdown` is the source file as written, minus a leading YAML front-matter block.
-- Each document's `url` is the page `build` generates: `index.html` for the landing page, otherwise the source path with `.md` replaced by `.html`, under `siteUrl`.
+- Each document's `url` is the page `build` generates: `index.html` for the landing page, otherwise the source path with `.md` replaced by `.html`, under `siteUrl`. Redirect stubs from the manifest's `redirects` are not listed; the bundle has no field for them.
 - A topic's `markdown` is a heading section: it runs from the anchor heading up to the next top-level heading of the same or a higher level. Deeper headings stay in the section. A topic without an anchor gets the whole document.
 - `tagline` is `""` when the manifest omits it.
 - `digest` is the SHA-256 (hex) of `JSON.stringify({documents, topics})`. Documents are reduced to `{source, section, title, landing, markdown}` and topics to `{id, title, source, markdown}`, in manifest order. URLs, `sha`, and `builtAt` are left out, so the digest identifies the content alone.

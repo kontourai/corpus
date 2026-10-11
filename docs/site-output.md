@@ -10,6 +10,7 @@
 | `<source>.html` | each listed document, at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
 | `docs-kit.css` | the shared stylesheet, with light and dark themes that follow `prefers-color-scheme` |
 | images and media | every local image, and every file embedded with `src`, `srcset`, or `poster`, that a published page references, copied to its repository path; only git-tracked files up to 25 MB, never `.git/` |
+| `<key>` from `redirects` | a stub that refreshes to the new page or URL, with `rel="canonical"`, `noindex`, a visible link, and no script; see [Redirects](../README.md#redirects) |
 | `.nojekyll` | turns off Jekyll processing on GitHub Pages |
 | `.docs-kit-build` | JSON list of every file the build wrote; the next `build` replaces the directory only if it holds exactly those files (a forged marker is trusted) |
 | `docs-bundle.json` | the agent bundle; see [the bundle format](bundle-format.md#docs-bundlejson) |
@@ -39,4 +40,4 @@ A fenced code block whose info string starts with `mermaid` renders as `<pre cla
 
 ## Generated-site check
 
-After rendering, `build` scans every generated `href`, `src`, and `srcset` with the same extractor and fails if an internal target or `#fragment` is missing. `check` already validates the sources, so this catches what rendering changes. For example, a `name` anchor on a non-`<a>` element passes `check`, but the sanitizer removes it, so links to it break on the site.
+After rendering, `build` scans every generated `href`, `src`, and `srcset` with the same extractor, plus the meta-refresh URL of each redirect stub, and fails if an internal target or `#fragment` is missing. `check` already validates the sources, so this catches what rendering changes. For example, a `name` anchor on a non-`<a>` element passes `check`, but the sanitizer removes it, so links to it break on the site.

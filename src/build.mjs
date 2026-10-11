@@ -4,12 +4,12 @@ import { Marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 import { createAssetPolicy } from './assets.mjs';
 import { assembleBundle, defaultSiteUrl, normalizeBaseUrl } from './bundle.mjs';
-import { formatCheckReport, publishedSources, runChecks } from './check.mjs';
+import { foldPath, formatCheckReport, publishedSources, runChecks } from './check.mjs';
 import { EXIT_OK, GateFailure, UsageError } from './errors.mjs';
 import { gitEnv, headSha, repoPrefix, trackedFiles } from './git.mjs';
 import { execFileSync } from 'node:child_process';
 import { outputPathFor } from './manifest.mjs';
-import { analyzeMarkdown, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
+import { analyzeMarkdown, decodeEntities, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
 import { encodePath, relativeUrl, statInRepo, toFsPath } from './paths.mjs';
 import { SITE_CSS, escapeHtml, sitePage } from './site-template.mjs';
 
@@ -246,7 +246,56 @@ function filesUnder(dir) {
   return found.sort();
 }
 
-/** Every internal href/src in the generated site must resolve, including #fragments. */
+/**
+ * A redirect stub for a page that moved. GitHub Pages cannot send HTTP
+ * redirects, so the stub refreshes immediately, names the canonical URL, asks
+ * not to be indexed, and shows a plain link. It carries no script.
+ */
+function redirectStub({ href, canonical }) {
+  const url = escapeHtml(href);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Redirecting…</title>
+<meta http-equiv="refresh" content="0; url=${url}">
+<link rel="canonical" href="${escapeHtml(canonical)}">
+<meta name="robots" content="noindex">
+<meta name="generator" content="@kontourai/docs-kit">
+</head>
+<body>
+<p>This page has moved to <a href="${url}">${url}</a>.</p>
+</body>
+</html>
+`;
+}
+
+/** Write one stub per redirects key; returns the count. Refuses to overwrite a copied asset. */
+function writeRedirects({ manifest, out, siteUrl, assets }) {
+  const lowerAssets = new Map([...assets].map((asset) => [foldPath(asset), asset]));
+  for (const { from, source, anchor, url } of manifest.redirects) {
+    const clash = lowerAssets.get(foldPath(from)) ?? [...lowerAssets].find(([folded]) => folded.startsWith(`${foldPath(from)}/`))?.[1];
+    if (clash) throw new GateFailure(`docs-kit build: redirects["${from}"] would overwrite the copied asset ${clash}`);
+    let href = url;
+    let canonical = url;
+    if (source !== undefined) {
+      const output = outputPathFor(manifest, source);
+      href = `${relativeUrl(from, output)}${anchor ? `#${encodeURIComponent(anchor)}` : ''}`;
+      canonical = new URL(encodePath(output), siteUrl).href;
+    }
+    const target = toFsPath(out, from);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, redirectStub({ href, canonical }));
+  }
+  return manifest.redirects.length;
+}
+
+const REFRESH_URL = /<meta http-equiv="refresh" content="0; url=([^"]*)">/g;
+
+/**
+ * Every internal href/src in the generated site must resolve, including
+ * #fragments, and so must the URL of a redirect stub's meta refresh.
+ */
 export function checkGeneratedSite(out) {
   const files = [];
   const visit = (directory) => {
@@ -266,7 +315,9 @@ export function checkGeneratedSite(out) {
   for (const file of files.sort()) {
     const html = readFileSync(file, 'utf8');
     const page = path.relative(out, file).split(path.sep).join('/');
-    for (const { attr, url } of extractHtmlReferences(html)) {
+    const references = extractHtmlReferences(html);
+    for (const [, url] of html.matchAll(REFRESH_URL)) references.push({ attr: 'refresh', url: decodeEntities(url) });
+    for (const { attr, url } of references) {
       const value = url.trim();
       const label = `${attr}="${value}"`;
       if (/^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//')) continue;
@@ -378,6 +429,7 @@ export function runBuild({ root, out, baseUrl }) {
     mkdirSync(path.dirname(target), { recursive: true });
     copyFileSync(toFsPath(root, asset), target);
   }
+  const redirects = writeRedirects({ manifest, out, siteUrl, assets });
   writeFileSync(path.join(out, 'docs-kit.css'), SITE_CSS);
   writeFileSync(path.join(out, '.nojekyll'), '');
 
@@ -399,7 +451,7 @@ export function runBuild({ root, out, baseUrl }) {
   return {
     exitCode: EXIT_OK,
     report:
-      `docs-kit build: ${published.size} pages, ${assets.size} images, ${bundle.topics.length} topics -> ${out}\n` +
+      `docs-kit build: ${published.size} pages, ${assets.size} images, ${bundle.topics.length} topics${redirects ? `, ${redirects} redirects` : ''} -> ${out}\n` +
       `  verified ${generated.files} generated pages; bundle ${bundle.sha.slice(0, 7)} digest ${bundle.digest.slice(0, 12)} for ${siteUrl}`,
   };
 }
