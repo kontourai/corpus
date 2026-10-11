@@ -50,40 +50,87 @@ function lineIndex(text) {
   };
 }
 
-/** Offsets that are code content (rendered literally): fenced and indented code lines, and code spans. */
+const LIST_MARKER = /^(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)/;
+
+/**
+ * Offsets that are code content (rendered literally): fenced and indented
+ * code lines, and code spans. Fences are found by a line scanner, so ones
+ * nested in lists and blockquotes count too. An opener may follow `>` and
+ * list markers; it may be indented four or more columns only inside a list
+ * (elsewhere that is an indented code line, not a fence). A fence opened in
+ * a blockquote ends with the blockquote.
+ */
 function codeRanges(markdown, index) {
   const literal = new Uint8Array(markdown.length);
   const lineSpan = (first, last) => {
+    if (last < first) return;
     const from = index.starts[first - 1];
     const to = last < index.starts.length ? index.starts[last] : markdown.length;
     literal.fill(1, from, to);
   };
-  // Fences at any depth (in lists and blockquotes too): the lines between the fences, 1-based.
   const lines = markdown.split(/\r\n|\r|\n/);
   let open = null;
+  let inList = false;
   lines.forEach((line, i) => {
-    const fence = /^[ \t>]*(`{3,}|~{3,})/.exec(line);
-    if (open === null) {
-      // A backtick fence's info string cannot contain a backtick.
-      if (fence && !(fence[1][0] === '`' && line.slice(fence[0].length).includes('`'))) open = { first: i + 2, char: fence[1][0], length: fence[1].length };
-    } else if (fence && fence[1][0] === open.char && fence[1].length >= open.length && /^[ \t>]*[`~]+[ \t]*$/.test(line)) {
-      if (i >= open.first) lineSpan(open.first, i);
-      open = null;
+    const quoted = /^[ \t]*>/.test(line);
+    let rest = line.replace(/^(?:[ \t]*>)+/, '');
+    const indent = /^[ \t]*/.exec(rest)[0].replace(/\t/g, '    ').length;
+    rest = rest.trimStart();
+    let marker = false;
+    for (let m = LIST_MARKER.exec(rest); m; m = LIST_MARKER.exec(rest)) {
+      marker = true;
+      rest = rest.slice(m[0].length).trimStart();
     }
+    if (marker) inList = true;
+    else if (rest !== '' && indent === 0 && !quoted && open === null) inList = false;
+    const fence = /^(`{3,}|~{3,})(.*)$/.exec(rest);
+    if (open !== null) {
+      if (open.quoted && !quoted) {
+        lineSpan(open.first, i); // the blockquote ended, and the fence with it
+        open = null;
+      } else {
+        if (fence && fence[1][0] === open.char && fence[1].length >= open.length && fence[2].trim() === '') {
+          lineSpan(open.first, i);
+          open = null;
+        }
+        return;
+      }
+    }
+    if (!fence || (indent >= 4 && !marker && !inList)) return;
+    // A backtick fence's info string cannot contain a backtick.
+    if (fence[1][0] === '`' && fence[2].includes('`')) return;
+    open = { first: i + 2, char: fence[1][0], length: fence[1].length, quoted };
   });
-  if (open !== null && open.first <= lines.length) lineSpan(open.first, lines.length);
+  if (open !== null) lineSpan(open.first, lines.length);
   // Indented code blocks are top-level code tokens without a fence.
   for (const { token, start, end } of blockLines(Lexer.lex(markdown, { gfm: true })))
     if (token.type === 'code' && !/^[ \t]*(?:`{3,}|~{3,})/.test(token.raw)) lineSpan(start, end);
-  // Code spans: a backtick run, content, the same run, within one paragraph.
-  // Scanning paragraph by paragraph keeps an unmatched backtick from making
-  // the lazy match scan to the end of the document from every start.
-  for (const paragraph of markdown.matchAll(/[^\n]+(?:\n(?![ \t]*\r?$)[^\n]*)*/gm))
-    for (const match of paragraph[0].matchAll(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g)) {
-      const at = paragraph.index + match.index;
-      if (literal[at]) continue;
-      literal.fill(1, at + match[1].length, at + match[1].length + match[2].length);
+  // Code spans, per paragraph: a backtick run closes at the next run of the
+  // same length; an unmatched run is literal. Runs are found once, so time
+  // stays linear in the paragraph, whatever its backticks.
+  for (const paragraph of markdown.matchAll(/[^\n]+(?:\n(?![ \t]*\r?$)[^\n]*)*/gm)) {
+    const runs = [...paragraph[0].matchAll(/`+/g)].map((run) => ({ at: paragraph.index + run.index, length: run[0].length }));
+    const next = new Map(); // length -> indexes of runs with that length, in order
+    runs.forEach((run, k) => {
+      if (!next.has(run.length)) next.set(run.length, []);
+      next.get(run.length).push(k);
+    });
+    const cursor = new Map();
+    for (let k = 0; k < runs.length; ) {
+      const { at, length } = runs[k];
+      const same = next.get(length);
+      let c = cursor.get(length) ?? 0;
+      while (c < same.length && same[c] <= k) c++;
+      cursor.set(length, c);
+      if (c >= same.length || literal[at]) {
+        k++;
+        continue;
+      }
+      const close = same[c];
+      literal.fill(1, at + length, runs[close].at);
+      k = close + 1;
     }
+  }
   return literal;
 }
 
@@ -240,7 +287,8 @@ export function locateInBundle(bundle, quote, { source } = {}) {
     const { markdown } = document;
     return spansIn(normalized).map(({ from, to, exact }) => {
       const start = offsets[from];
-      const end = offsets[to - 1] + 1;
+      const last = offsets[to - 1];
+      const end = last + (markdown.codePointAt(last) > 0xffff ? 2 : 1);
       const verbatim =
         exact &&
         collapse(markdown.slice(start, end)) === core &&

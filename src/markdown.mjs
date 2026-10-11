@@ -20,7 +20,9 @@ export function decodeEntities(value) {
   return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (match, body) => {
     if (body[0] === '#') {
       const code = body[1].toLowerCase() === 'x' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      if (!Number.isFinite(code)) return match;
+      // As HTML (and marked) render them: NUL and out-of-range code points become U+FFFD.
+      return code === 0 || code > 0x10ffff ? '\uFFFD' : String.fromCodePoint(code);
     }
     return ENTITIES[body.toLowerCase()] ?? match;
   });

@@ -265,6 +265,42 @@ test('mcp locate finds text inside code as the page shows it, and caps the alter
   assert.equal(many.data.confidence, 0.06);
 });
 
+test('an out-of-range numeric entity renders as U+FFFD instead of crashing build or locate; fences in lists and blockquotes end where they should', async (t) => {
+  const repo = fixtureRepo(t, 'selection', { as: 'sample' });
+  writeFileSync(
+    path.join(repo, 'docs', 'twins.md'),
+    [
+      '# Twins &#1114112;', // 1
+      '', // 2
+      '- ```js', // 3: a fence opened on a list line
+      '  let a = 1;', // 4
+      '  ```', // 5
+      '', // 6
+      'After the list <b>bold</b> words here.', // 7
+      '', // 8
+      '> ```', // 9: a fence closed by the end of the blockquote
+      '> code', // 10
+      '', // 11
+      'After the quote <b>bold</b> words here.', // 12
+      '',
+    ].join('\n'),
+  );
+  commitAll(repo, 'edge cases');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  assert.match(readFileSync(path.join(out, 'docs', 'twins.html'), 'utf8'), /<h1 id="twins-" data-src-line="1-1">Twins \uFFFD/);
+  const client = await connect(t, ['--repo', repo]);
+  for (const [quote, line] of [
+    ['After the list bold words here.', 7],
+    ['After the quote bold words here.', 12],
+  ]) {
+    const { isError, data } = await locate(client, { product: 'sample', quote });
+    assert.equal(isError, false, `${quote}: ${JSON.stringify(data)}`);
+    assert.deepEqual([data.source, data.startLine], ['docs/twins.md', line], quote);
+  }
+});
+
 test('mcp locate returns an error for no match, a too-short quote, and an unknown source', async (t) => {
   const repo = fixtureRepo(t, 'selection', { as: 'sample' });
   const sha = git(repo, ['rev-parse', 'HEAD']);

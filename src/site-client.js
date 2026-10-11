@@ -179,7 +179,7 @@
       var lines = [challengeText(context), '', fenced(text), '', '- Source: `' + sourceRef(context) + '`'];
       if (!minimal) lines.push('- Section: ' + (context.heading || '(top of page)'), '- Page: ' + context.url);
       return (
-        'https://github.com/' + context.repo + '/issues/new?title=' + encodeURIComponent(minimal ? title.slice(0, 200) : title) +
+        'https://github.com/' + context.repo + '/issues/new?title=' + encodeURIComponent(minimal ? title.slice(0, 200).replace(/[\uD800-\uDBFF]$/, '') : title) +
         '&body=' + encodeURIComponent(lines.join('\n')) + '&labels=docs-challenge'
       );
     };
