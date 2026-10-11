@@ -3,6 +3,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writ
 import path from 'node:path';
 import { test } from 'node:test';
 import { fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { checkGeneratedSite, redirectStub, scriptString } from '../src/build.mjs';
 
 function setRedirects(repo, redirects) {
   const file = path.join(repo, 'docs-kit.json');
@@ -22,6 +23,20 @@ async function build(t, repo) {
 const refreshOf = (html) => html.match(/<meta http-equiv="refresh" content="0; url=([^"]*)">/)?.[1];
 const canonicalOf = (html) => html.match(/<link rel="canonical" href="([^"]*)">/)?.[1];
 const linkOf = (html) => html.match(/<a href="([^"]*)">/)?.[1];
+const scriptsOf = (html) => [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+
+/**
+ * Run a stub's inline script against a fake location and return the URL it
+ * replaces to. The script is evaluated as written, so a broken literal throws.
+ */
+function runStubScript(html, hash) {
+  const [script] = scriptsOf(html);
+  assert.ok(script, 'the stub has an inline script');
+  const calls = [];
+  new Function('location', script)({ hash, replace: (url) => calls.push(url) });
+  assert.equal(calls.length, 1, 'the script calls location.replace once');
+  return calls[0];
+}
 
 test('redirects: build writes stubs with relative URLs from each stub depth', async (t) => {
   const repo = fixtureRepo(t, 'valid');
@@ -43,7 +58,8 @@ test('redirects: build writes stubs with relative URLs from each stub depth', as
   assert.equal(linkOf(top), 'docs/concepts.html#workflows');
   assert.equal(canonicalOf(top), 'https://kontourai.github.io/sample/docs/concepts.html');
   assert.match(top, /<meta name="robots" content="noindex">/);
-  assert.doesNotMatch(top, /<script/i);
+  assert.equal(scriptsOf(top).length, 1, 'one inline script, before the meta refresh');
+  assert.ok(top.indexOf('<script>') < top.indexOf('http-equiv="refresh"'));
 
   const nested = read('adr/0001-old.html');
   assert.equal(refreshOf(nested), '../docs/reference/cli.html');
@@ -223,4 +239,96 @@ test('redirects: keys that differ only in Unicode normalization collide (exit 1)
   assert.equal(result.status, 1, result.output);
   assert.match(result.stderr, /differs only in case or Unicode normalization/);
   assert.match(result.stderr, /would overwrite the page generated for docs\/r\u00e9sum\u00e9\.md/);
+});
+
+test('redirects: the stub script carries the incoming #fragment only when the target has no anchor', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  setRedirects(repo, {
+    'plain.html': 'docs/concepts.md',
+    'anchored.html': 'docs/concepts.md#workflows',
+    'adr/abs.html': 'https://example.com/new/page.html',
+    'adr/abs-anchored.html': 'https://example.com/new/page.html#kept',
+  });
+  const { result, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+
+  const plain = read('plain.html');
+  assert.match(plain, /var t="docs\/concepts\.html";/);
+  assert.equal(runStubScript(plain, '#foo'), 'docs/concepts.html#foo');
+  assert.equal(runStubScript(plain, ''), 'docs/concepts.html');
+  assert.equal(refreshOf(plain), 'docs/concepts.html', 'the no-JS fallback is unchanged');
+
+  const anchored = read('anchored.html');
+  assert.equal(runStubScript(anchored, '#foo'), 'docs/concepts.html#workflows', "the target's own anchor wins");
+  assert.equal(runStubScript(anchored, ''), 'docs/concepts.html#workflows');
+
+  assert.equal(runStubScript(read('adr/abs.html'), '#foo'), 'https://example.com/new/page.html#foo');
+  assert.equal(runStubScript(read('adr/abs-anchored.html'), '#foo'), 'https://example.com/new/page.html#kept');
+  for (const stub of ['plain.html', 'anchored.html', 'adr/abs.html', 'adr/abs-anchored.html']) {
+    const html = read(stub);
+    assert.ok(canonicalOf(html), stub);
+    assert.match(html, /<meta name="robots" content="noindex">/, stub);
+    assert.ok(linkOf(html), stub);
+  }
+});
+
+test('redirects: a hostile https target cannot break out of the stub script', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  // The fragment keeps a backslash and a quote-like apostrophe through URL parsing.
+  setRedirects(repo, {
+    'x.html': 'https://x.com/"</script><script>alert(1)//',
+    'y.html': "https://x.com/p#a\\'b\\",
+  });
+  const { result, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+  const x = read('x.html');
+  assert.equal(scriptsOf(x).length, 1, 'still exactly one script element');
+  assert.doesNotMatch(x, /"<\/script>|<script>alert/);
+  assert.equal(runStubScript(x, '#foo'), 'https://x.com/%22%3C/script%3E%3Cscript%3Ealert(1)//#foo');
+  const y = read('y.html');
+  assert.equal(runStubScript(y, '#foo'), "https://x.com/p#a\\'b\\", 'a backslash in the target stays inside the literal');
+});
+
+test('redirects: the stub script escapes a raw target for a JS string inside HTML', () => {
+  // Manifest targets reach the stub URL-encoded, so this calls the template
+  // directly with characters only a raw string can carry.
+  const href = 'https://x.com/"</script><script>alert(1)//<!--\u2028\\';
+  const html = redirectStub({ href, canonical: 'https://x.com/' });
+  assert.equal(scriptsOf(html).length, 1, 'the target cannot close the script element');
+  assert.doesNotMatch(html.slice(html.indexOf('<script>'), html.indexOf('</script>')), /<\/|<!--/);
+  assert.equal(runStubScript(html, '#foo'), `${href}#foo`, 'the literal decodes to the exact target');
+});
+
+test('redirects: the stub script escapes U+2028 and U+2029', () => {
+  const literal = scriptString('a\u2028b\u2029c');
+  assert.equal(literal, '"a\\u2028b\\u2029c"');
+  assert.doesNotMatch(literal, /[\u2028\u2029]/);
+  assert.equal(JSON.parse(literal), 'a\u2028b\u2029c');
+});
+
+test('redirects: the generated-site check fails a stub whose script target differs from its refresh', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  setRedirects(repo, { 'old.html': 'docs/concepts.md#workflows', 'other.html': 'docs/concepts.md' });
+  const { result, out, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+  assert.deepEqual(checkGeneratedSite(out).failures, [], 'the untouched site passes');
+
+  // Tamper with only the script target: an existing page, so only the equality check can catch it.
+  const stub = read('old.html');
+  const tampered = stub.replace('var t="docs/concepts.html#workflows"', 'var t="docs/getting-started.html"');
+  assert.notEqual(tampered, stub);
+  assert.equal(refreshOf(tampered), 'docs/concepts.html#workflows', 'the meta refresh is untouched');
+  writeFileSync(path.join(out, 'old.html'), tampered);
+  const { failures } = checkGeneratedSite(out);
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0], /^old\.html: script="docs\/getting-started\.html" - does not match refresh="docs\/concepts\.html#workflows"$/);
+
+  // A script target that does not exist also fails, besides the mismatch.
+  writeFileSync(path.join(out, 'old.html'), stub.replace('var t="docs/concepts.html#workflows"', 'var t="docs/nope.html"'));
+  const missing = checkGeneratedSite(out).failures;
+  assert.ok(missing.some((f) => /old\.html: script="docs\/nope\.html" - missing generated target/.test(f)), missing.join('\n'));
+
+  // A stub with its script removed fails.
+  writeFileSync(path.join(out, 'old.html'), stub.replace(/<script>[\s\S]*?<\/script>\n/, ''));
+  assert.match(checkGeneratedSite(out).failures.join('\n'), /old\.html: redirect stub needs exactly one redirect script, found 0/);
 });

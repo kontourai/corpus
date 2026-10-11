@@ -10,7 +10,7 @@
 | `<source>.html` | each listed document except bundle-only ones (`"publish": false`), at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
 | `docs-kit.css` | the shared stylesheet, with light and dark themes that follow `prefers-color-scheme` |
 | images and media | every local image, and every file embedded with `src`, `srcset`, or `poster`, that a published page references, copied to its repository path; only git-tracked files up to 25 MB, never `.git/` |
-| `<key>` from `redirects` | a stub that refreshes to the new page or URL, with `rel="canonical"`, `noindex`, a visible link, and no script; see [Redirects](../README.md#redirects) |
+| `<key>` from `redirects` | a stub that redirects to the new page or URL, keeping an incoming `#fragment` unless the target has its own anchor (an inline script, with a meta refresh as the no-JS fallback), with `rel="canonical"`, `noindex`, and a visible link; see [Redirects](../README.md#redirects) |
 | `.nojekyll` | turns off Jekyll processing on GitHub Pages |
 | `.docs-kit-build` | JSON list of every file the build wrote; the next `build` replaces the directory only if it holds exactly those files (a forged marker is trusted) |
 | `docs-bundle.json` | the agent bundle; see [the bundle format](bundle-format.md#docs-bundlejson) |

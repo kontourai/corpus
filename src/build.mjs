@@ -250,17 +250,38 @@ function filesUnder(dir) {
 }
 
 /**
- * A redirect stub for a page that moved. GitHub Pages cannot send HTTP
- * redirects, so the stub refreshes immediately, names the canonical URL, asks
- * not to be indexed, and shows a plain link. It carries no script.
+ * A string as a JavaScript literal safe inside an HTML <script> element.
+ * JSON.stringify quotes and escapes backslashes, quotes, and control characters;
+ * escaping every "<" as \u003c rules out "</script" and "<!--", the only ways
+ * text can leave or confuse a script element. U+2028 and U+2029 are escaped
+ * too: legal in string literals since ES2019, but line terminators to older
+ * parsers. The literal means the same string.
  */
-function redirectStub({ href, canonical }) {
+export function scriptString(value) {
+  return JSON.stringify(String(value)).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * A redirect stub for a page that moved. GitHub Pages cannot send HTTP
+ * redirects, so the stub redirects immediately, names the canonical URL, asks
+ * not to be indexed, and shows a plain link.
+ *
+ * A meta refresh drops the incoming #fragment, so an inline script runs first
+ * and carries it over with location.replace (which also keeps the stub out of
+ * history). A target that has its own #anchor keeps it: the manifest named
+ * that anchor on purpose, and an old page's fragment may not exist on the new
+ * page. The meta refresh stays as the no-JS fallback. The script is template
+ * output, not document content, so it does not pass through the sanitizer;
+ * the target is embedded with scriptString.
+ */
+export function redirectStub({ href, canonical }) {
   const url = escapeHtml(href);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Redirecting…</title>
+<script>(function(){var t=${scriptString(href)};location.replace(t.indexOf("#")<0?t+location.hash:t);})();</script>
 <meta http-equiv="refresh" content="0; url=${url}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <meta name="robots" content="noindex">
@@ -294,10 +315,13 @@ function writeRedirects({ manifest, out, siteUrl, assets }) {
 }
 
 const REFRESH_URL = /<meta http-equiv="refresh" content="0; url=([^"]*)">/g;
+const STUB_SCRIPT = /<script>\(function\(\)\{var t=("(?:[^"\\\n]|\\.)*");location\.replace\(/g;
 
 /**
  * Every internal href/src in the generated site must resolve, including
- * #fragments, and so must the URL of a redirect stub's meta refresh.
+ * #fragments, and so must the URL of a redirect stub's meta refresh. A stub's
+ * script target must be readable and equal its meta refresh URL, so the JS and
+ * no-JS paths cannot diverge.
  */
 export function checkGeneratedSite(out) {
   const files = [];
@@ -319,7 +343,22 @@ export function checkGeneratedSite(out) {
     const html = readFileSync(file, 'utf8');
     const page = path.relative(out, file).split(path.sep).join('/');
     const references = extractHtmlReferences(html);
-    for (const [, url] of html.matchAll(REFRESH_URL)) references.push({ attr: 'refresh', url: decodeEntities(url) });
+    const refreshes = [...html.matchAll(REFRESH_URL)].map(([, url]) => decodeEntities(url));
+    for (const url of refreshes) references.push({ attr: 'refresh', url });
+    const scripts = [];
+    for (const [, literal] of html.matchAll(STUB_SCRIPT)) {
+      try {
+        scripts.push(JSON.parse(literal));
+      } catch {
+        failures.push(`${page}: redirect script target ${literal} - not a readable string literal`);
+      }
+    }
+    for (const url of scripts) references.push({ attr: 'script', url });
+    if (refreshes.length > 0) {
+      const scriptCount = (html.match(/<script\b/gi) ?? []).length;
+      if (scriptCount !== 1 || scripts.length !== 1) failures.push(`${page}: redirect stub needs exactly one redirect script, found ${scriptCount}`);
+      else if (scripts[0] !== refreshes[0]) failures.push(`${page}: script="${scripts[0]}" - does not match refresh="${refreshes[0]}"`);
+    }
     for (const { attr, url } of references) {
       const value = url.trim();
       const label = `${attr}="${value}"`;
