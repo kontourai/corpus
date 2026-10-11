@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "product": "sample",
+  "title": "Sample",
+  "tagline": "A fixture product for docs-kit tests",
+  "repo": "kontourai/sample",
+  "landing": "README.md",
+  "documents": [
+    { "source": "docs/getting-started.md", "section": "Start Here", "covers": ["src/cli/**"] },
+    { "source": "docs/concepts.md", "section": "Understand Sample" },
+    { "source": "docs/reference/cli.md", "section": "Reference", "covers": ["src/cli/main.js"] }
+  ],
+  "topics": [
+    { "id": "workflows", "title": "Workflows", "source": "docs/concepts.md#workflows" },
+    { "id": "evidence-gates", "title": "Evidence gates", "source": "docs/concepts.md#evidence-gates" },
+    { "id": "install", "title": "Install", "source": "README.md#install" },
+    { "id": "getting-started", "title": "Getting started", "source": "docs/getting-started.md" }
+  ],
+  "exclude": ["docs/plans/**"]
+}

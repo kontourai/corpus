@@ -1,0 +1,45 @@
+{
+  "name": "@kontourai/docs-kit",
+  "version": "0.1.0",
+  "description": "Shared docs gate, GitHub Pages site builder, and aggregate docs MCP server for Kontour products.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kontourai/docs-kit.git"
+  },
+  "homepage": "https://kontourai.github.io/docs-kit/",
+  "bugs": "https://github.com/kontourai/docs-kit/issues",
+  "bin": {
+    "docs-kit": "bin/docs-kit.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=4 \"test/**/*.test.mjs\"",
+    "check": "node bin/docs-kit.mjs check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "github-slugger": "^2.0.0",
+    "htmlparser2": "12.0.0",
+    "marked": "^18.1.0",
+    "picomatch": "^4.0.7",
+    "sanitize-html": "^2.18.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1"
+  }
+}

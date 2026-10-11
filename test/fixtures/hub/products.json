@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "products": [
+    { "product": "sample", "repo": "kontourai/sample" },
+    { "product": "second", "repo": "kontourai/second" },
+    { "product": "ghost", "repo": "kontourai/ghost" }
+  ]
+}
