@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 2,
+  "product": "schema-v2",
+  "title": "schema-v2",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/schema-v2",
+  "documents": [{ "source": "docs/a.md", "section": "Guide" }]
+}

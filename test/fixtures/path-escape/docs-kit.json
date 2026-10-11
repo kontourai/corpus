@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "product": "path-escape",
+  "title": "path-escape",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/path-escape",
+  "documents": [
+    { "source": "docs/a.md", "section": "Guide" },
+    { "source": "../outside.md", "section": "Guide" }
+  ],
+  "topics": [{ "id": "abs", "title": "Absolute", "source": "/etc/hosts.md" }]
+}

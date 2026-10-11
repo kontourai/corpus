@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "product": "broken-link",
+  "title": "broken-link",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/broken-link",
+  "documents": [{ "source": "docs/a.md", "section": "Guide" }]
+}

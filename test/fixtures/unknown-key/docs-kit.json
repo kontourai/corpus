@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "product": "unknown-key",
+  "title": "unknown-key",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/unknown-key",
+  "documents": [{ "source": "docs/a.md", "section": "Guide", "order": 1 }],
+  "sections": ["Guide"]
+}

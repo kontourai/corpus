@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "product": "bad-topic-anchor",
+  "title": "bad-topic-anchor",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/bad-topic-anchor",
+  "documents": [{ "source": "docs/a.md", "section": "Guide" }],
+  "topics": [{ "id": "setup", "title": "Setup", "source": "docs/a.md#installation" }]
+}

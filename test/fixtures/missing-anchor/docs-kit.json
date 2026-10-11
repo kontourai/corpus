@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "product": "missing-anchor",
+  "title": "missing-anchor",
+  "tagline": "Rejection fixture",
+  "repo": "kontourai/missing-anchor",
+  "documents": [{ "source": "docs/a.md", "section": "Guide" }, { "source": "docs/b.md", "section": "Guide" }]
+}
