@@ -48,14 +48,17 @@ export function bundleDigest(documents, topics) {
  * GitHub blob at `sha` (`HEAD` outside git), and its `markdown`, and topics
  * taken from it, have relative links made absolute (published targets to
  * their page, anything else to GitHub) so the text stands alone for MCP
- * readers. The digest is computed over the Markdown as written, so it still
+ * readers; images and other embedded files (`src`, `srcset`, `poster`) go to
+ * raw.githubusercontent.com so they resolve to the file itself. The digest is computed over the Markdown as written, so it still
  * identifies the content and not the commit or base URL.
  */
 export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = '', builtAt = new Date().toISOString() }) {
   const published = new Set(publishedSources(manifest));
   const githubUrl = (kind, repoPath) => `https://github.com/${manifest.repo}/${kind}/${sha ?? 'HEAD'}/${encodePath(`${prefix}${repoPath}`)}`;
   const pageUrl = (source) => (published.has(source) ? `${siteUrl}${encodePath(outputPathFor(manifest, source))}` : githubUrl('blob', source));
-  const absolute = (href, fromSource) => {
+  // An embedded image needs the file's bytes, not GitHub's HTML page for it.
+  const rawUrl = (repoPath) => `https://raw.githubusercontent.com/${manifest.repo}/${sha ?? 'HEAD'}/${encodePath(`${prefix}${repoPath}`)}`;
+  const absolute = (href, fromSource, { image = false } = {}) => {
     const target = resolveLink(href, fromSource);
     if (target.kind === 'fragment') return target.rawFragment ? `${pageUrl(fromSource)}#${target.rawFragment}` : href;
     if (target.kind !== 'local') return href;
@@ -64,13 +67,14 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
     // A missing target fails the links gate; leave it as written.
     const stat = statInRepo(root, target.path);
     if (!stat) return href;
-    return `${githubUrl(stat.kind === 'dir' ? 'tree' : 'blob', target.path).replace(/\/$/, '')}${hash}`;
+    if (stat.kind === 'dir') return `${githubUrl('tree', target.path).replace(/\/$/, '')}${hash}`;
+    return `${image ? rawUrl(target.path) : githubUrl('blob', target.path)}${hash}`;
   };
   const bundleOnly = new Map(); // source -> { markdown, analysis } with links made absolute
   const readForBundle = (source) => {
     if (published.has(source)) return read(source);
     if (!bundleOnly.has(source)) {
-      const markdown = rewriteMarkdownLinks(read(source).markdown, (href) => absolute(href, source));
+      const markdown = rewriteMarkdownLinks(read(source).markdown, (href, options) => absolute(href, source, options));
       bundleOnly.set(source, { markdown, analysis: analyzeMarkdown(markdown) });
     }
     return bundleOnly.get(source);

@@ -151,3 +151,15 @@ test('publish must be a boolean (exit 2)', async (t) => {
   assert.equal(result.status, 2, result.output);
   assert.match(result.stderr, /documents\[1\]\.publish must be a boolean \(got "no"\)/);
 });
+
+test('publish: false: images and src/srcset go to raw.githubusercontent.com; plain links to an image stay on the blob page', async (t) => {
+  const repo = fixtureRepo(t, 'bundle-only');
+  const sha = git(repo, ['rev-parse', 'HEAD']);
+  const raw = `https://raw.githubusercontent.com/kontourai/sample/${sha}/docs/img/flow.svg`;
+  const { result, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+  const md = JSON.parse(read('docs-bundle.json')).documents.find((document) => document.source === 'docs/manual.md').markdown;
+  assert.ok(md.includes(`![Flow](${raw})`), md);
+  assert.ok(md.includes(`<img src="${raw}" srcset="${raw} 2x" alt="flow">`), md);
+  assert.ok(md.includes(`[the SVG](https://github.com/kontourai/sample/blob/${sha}/docs/img/flow.svg)`), md);
+});

@@ -17,3 +17,7 @@ cat [fenced](guide.md)
 External [links](https://example.com/x) stay as written.
 
 [ref]: guide.md#usage "Usage"
+
+## Diagrams
+
+![Flow](img/flow.svg) and <img src="img/flow.svg" srcset="img/flow.svg 2x" alt="flow">, or open [the SVG](img/flow.svg).

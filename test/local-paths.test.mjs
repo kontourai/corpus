@@ -117,3 +117,17 @@ test('allowLocalPaths is strict: no globs, only documents, no repeats, an array 
   assert.equal(notArray.status, 2, notArray.output);
   assert.match(notArray.stderr, /allowLocalPaths must be an array of document paths/);
 });
+
+test('paths gate: /Users/Shared/ and /home/runner/ are not personal and pass', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  appendFileSync(
+    path.join(repo, 'docs/concepts.md'),
+    'Shared files live in /Users/Shared/sample/ and CI checks out to /home/runner/work/sample/.\nBut /home/runnerx/ and /Users/SharedX/ are people.\n',
+  );
+  const result = await runCli(['check', '--root', repo]);
+  assert.equal(result.status, 1, result.output);
+  assert.doesNotMatch(result.stderr, /"\/Users\/Shared\/"|"\/home\/runner\/"/);
+  assert.ok(result.stderr.includes('docs/concepts.md:25: local path "/home/runnerx/"'), result.stderr);
+  assert.ok(result.stderr.includes('docs/concepts.md:25: local path "/Users/SharedX/"'), result.stderr);
+  assert.match(result.stderr, /docs-kit check failed: 2 failures/);
+});

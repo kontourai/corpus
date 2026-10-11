@@ -181,9 +181,10 @@ export function checkRedirects(root, manifest, read) {
  * in escaped JSON). The lookbehind keeps `https://host/home/x/` and
  * `/srv/home/x/` out; `file:///Users/x/` still matches. A name made of
  * placeholder characters (`<name>`, `$USER`, `%USERNAME%`, `{user}`) is not a
- * real path and does not match.
+ * real path and does not match. `/Users/Shared/` (macOS shared folder) and
+ * `/home/runner/` (GitHub Actions runner) are not personal and are exempt.
  */
-const LOCAL_PATH = /(?<![\w.~-])(?:\/(?:Users|home)\/[^\s/\\<>"'`$%{}()[\]*]+\/|[A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/)[^\s/\\<>"'`$%{}()[\]*]+(?:\\|\/))/g;
+const LOCAL_PATH = /(?<![\w.~-])(?:\/(?:Users\/(?!Shared\/)|home\/(?!runner\/))[^\s/\\<>"'`$%{}()[\]*]+\/|[A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/)[^\s/\\<>"'`$%{}()[\]*]+(?:\\|\/))/g;
 
 /**
  * Gate 6: no published or bundled document, nor the landing page, contains an
