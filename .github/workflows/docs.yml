@@ -21,3 +21,7 @@ jobs:
       pages: write
       id-token: write
     uses: kontourai/.github/.github/workflows/docs-pages.yml@main
+    # Pilot: this site runs docs-kit v0.6.0 (selection toolbar, WebMCP) ahead
+    # of the org-wide pin. Remove once kontourai/.github pins v0.6.0.
+    with:
+      docs-kit-ref: bc158849c27e55d25417c443ad6bbd0643dfdbc4
