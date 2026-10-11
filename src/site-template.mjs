@@ -97,11 +97,13 @@ export const MERMAID_INTEGRITY = 'sha384-EbBpjO7rlR6eqZEcG7GaPpyk9H9WrMyPWX4d3Kv
 
 /**
  * The template's own scripts, outside the sanitized document content.
- * securityLevel 'strict' keeps diagram labels from carrying HTML or click
- * handlers; the theme is chosen once from prefers-color-scheme at load.
+ * securityLevel 'strict' disables click handlers. Strict mode still renders
+ * HTML inside labels (through Mermaid's own DOMPurify), which would bypass
+ * this site's sanitizer and link checks, so htmlLabels is off and labels are
+ * SVG text. The theme is chosen once from prefers-color-scheme at load.
  */
 const MERMAID_SCRIPTS = `<script src="${MERMAID_SRC}" integrity="${MERMAID_INTEGRITY}" crossorigin="anonymous"></script>
-<script>mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });</script>
+<script>mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', htmlLabels: false, flowchart: { htmlLabels: false }, theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });</script>
 `;
 
 /** One page of a product site. `toRoot` is the relative prefix back to the site root. */

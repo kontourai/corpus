@@ -29,7 +29,7 @@ test('a page with a mermaid fence renders <pre class="mermaid"> and loads the pi
   assert.ok(html.includes('<pre class="mermaid">graph TD\n  A[&lt;b&gt;Start&lt;/b&gt;] --&gt; B &amp; C</pre>'), 'diagram source is escaped text, not a code block');
   assert.doesNotMatch(html, /language-mermaid/);
   assert.equal(html.split(MERMAID_TAG).length - 1, 1, 'exactly one pinned Mermaid script with integrity and crossorigin');
-  assert.match(html, /<script>mermaid\.initialize\(\{ startOnLoad: true, securityLevel: 'strict', theme: window\.matchMedia\('\(prefers-color-scheme: dark\)'\)\.matches \? 'dark' : 'default' \}\);<\/script>/);
+  assert.match(html, /<script>mermaid\.initialize\(\{ startOnLoad: true, securityLevel: 'strict', htmlLabels: false, flowchart: \{ htmlLabels: false \}, theme: window\.matchMedia\('\(prefers-color-scheme: dark\)'\)\.matches \? 'dark' : 'default' \}\);<\/script>/);
 
   // The bundle keeps the Markdown as written.
   const bundle = JSON.parse(read('docs-bundle.json'));
