@@ -4,7 +4,7 @@ import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
 import { MANIFEST_FILE, globMatcher, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
-import { analyzeMarkdown, resolveLink } from './markdown.mjs';
+import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
 /** Lazily lexes repo Markdown so each file is read and analyzed once per run. */
@@ -12,8 +12,10 @@ export function createDocumentReader(root) {
   const cache = new Map();
   return (repoPath) => {
     if (!cache.has(repoPath)) {
-      const markdown = readFileSync(toFsPath(root, repoPath), 'utf8');
-      cache.set(repoPath, { markdown, analysis: analyzeMarkdown(markdown) });
+      // Front matter is stripped once here, so links, anchors, topics, the
+      // rendered page, and the bundle markdown all see the same body.
+      const { body, lineOffset, title } = splitFrontMatter(readFileSync(toFsPath(root, repoPath), 'utf8'));
+      cache.set(repoPath, { markdown: body, analysis: analyzeMarkdown(body, { lineOffset, frontMatterTitle: title }) });
     }
     return cache.get(repoPath);
   };
