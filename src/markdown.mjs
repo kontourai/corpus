@@ -1,5 +1,6 @@
 import path from 'node:path';
 import GithubSlugger, { slug } from 'github-slugger';
+import { Tokenizer } from 'htmlparser2';
 import { Lexer, marked } from 'marked';
 
 /** GitHub heading slug for one heading, via github-slugger (what GitHub uses). */
@@ -38,35 +39,49 @@ export function plainText(tokens = []) {
   return text;
 }
 
-const HTML_TAG = /<[A-Za-z][^\s/>]*((?:"[^"]*"|'[^']*'|[^'">])*)>/dg;
-const HTML_ATTRIBUTE = /(\s+)([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/dg;
-const URL_ATTRIBUTES = new Set(['href', 'src', 'srcset']);
+const URL_ATTRIBUTES = new Set(['href', 'src', 'srcset', 'poster']);
 const ANCHOR_ATTRIBUTES = new Set(['id', 'name']);
 
 /**
- * Every attribute of every start tag in an HTML fragment, in any quoting
- * (double, single, unquoted). `start`/`end` cover the attribute including its
- * leading whitespace, so callers can rewrite it in place. Values are
- * entity-decoded. This one scanner backs raw-HTML link checking, rewriting,
- * anchor collection, and the generated-site check.
+ * Every attribute of every start tag in an HTML fragment, from htmlparser2's
+ * tokenizer, so comments, quoting (double, single, unquoted), and `<!--` or
+ * `>` inside attribute values follow the HTML tokenizer rather than a regex.
+ * `start`/`end` cover the attribute (name through value) so callers can
+ * rewrite it in place. Values are entity-decoded.
  */
 export function scanHtmlAttributes(html) {
   const attributes = [];
-  // Comments are blanked to equal-length spaces so commented-out markup is
-  // neither checked nor rewritten, and offsets into `html` stay valid.
-  const visible = html.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => ' '.repeat(comment.length));
-  for (const tag of visible.matchAll(HTML_TAG)) {
-    const [areaStart] = tag.indices[1];
-    for (const attribute of tag[1].matchAll(HTML_ATTRIBUTE)) {
-      const raw = attribute[3] ?? attribute[4] ?? attribute[5];
-      attributes.push({
-        name: attribute[2].toLowerCase(),
-        value: raw === undefined ? '' : decodeEntities(raw),
-        start: areaStart + attribute.index,
-        end: areaStart + attribute.index + attribute[0].length,
-      });
-    }
-  }
+  let current = null;
+  const tokenizer = new Tokenizer(
+    { decodeEntities: false },
+    {
+      onattribname(start, endIndex) {
+        current = { name: html.slice(start, endIndex).toLowerCase(), raw: '', start };
+      },
+      onattribdata(start, endIndex) {
+        if (current) current.raw += html.slice(start, endIndex);
+      },
+      onattribend(_quote, endIndex) {
+        if (!current) return;
+        attributes.push({ name: current.name, value: decodeEntities(current.raw), start: current.start, end: endIndex });
+        current = null;
+      },
+      onattribentity() {},
+      oncdata() {},
+      onclosetag() {},
+      oncomment() {},
+      ondeclaration() {},
+      onend() {},
+      onopentagend() {},
+      onopentagname() {},
+      onprocessinginstruction() {},
+      onselfclosingtag() {},
+      ontext() {},
+      ontextentity() {},
+    },
+  );
+  tokenizer.write(html);
+  tokenizer.end();
   return attributes;
 }
 
@@ -102,7 +117,7 @@ export function parseSrcset(value) {
   return candidates;
 }
 
-/** Raw-HTML references: { attr, url } for href, src, and each srcset candidate. */
+/** Raw-HTML references: { attr, url } for href, src, poster, and each srcset candidate. */
 export function extractHtmlReferences(html) {
   const references = [];
   for (const { name, value } of scanHtmlAttributes(html)) {
@@ -118,12 +133,11 @@ function escapeAttributeValue(value) {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-/** Rewrite every href/src/srcset URL with `rewrite(url, attr)`; output is double-quoted. */
+/** Rewrite every href/src/srcset/poster URL with `rewrite(url, attr)`; output is double-quoted. */
 export function rewriteHtmlReferences(html, rewrite) {
   const targets = scanHtmlAttributes(html).filter((attribute) => URL_ATTRIBUTES.has(attribute.name));
   let output = html;
   for (const attribute of targets.reverse()) {
-    const leading = html.slice(attribute.start).match(/^\s+/)[0];
     const value =
       attribute.name === 'srcset'
         ? parseSrcset(attribute.value)
@@ -132,7 +146,7 @@ export function rewriteHtmlReferences(html, rewrite) {
         : attribute.value.trim() === ''
           ? attribute.value
           : rewrite(attribute.value, attribute.name);
-    output = `${output.slice(0, attribute.start)}${leading}${attribute.name}="${escapeAttributeValue(value)}"${output.slice(attribute.end)}`;
+    output = `${output.slice(0, attribute.start)}${attribute.name}="${escapeAttributeValue(value)}"${output.slice(attribute.end)}`;
   }
   return output;
 }

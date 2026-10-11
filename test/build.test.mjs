@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
@@ -153,7 +153,7 @@ test('build --out only replaces directories it created (marker), and never track
   const repo = fixtureRepo(t, 'valid');
   mkdirSync(path.join(repo, 'site'));
   writeFileSync(path.join(repo, 'site', 'keep.txt'), 'tracked\n');
-  writeFileSync(path.join(repo, 'site', '.docs-kit-build'), 'even a marker does not license deleting tracked files\n');
+  writeFileSync(path.join(repo, 'site', '.docs-kit-build'), JSON.stringify({ generator: '@kontourai/docs-kit', files: ['keep.txt'] }));
   commitAll(repo, 'tracked file in site/');
 
   const tracked = await runCli(['build', '--root', repo, '--out', path.join(repo, 'site')]);
@@ -171,7 +171,7 @@ test('build --out only replaces directories it created (marker), and never track
   writeFileSync(path.join(outside, 'precious.txt'), 'not docs-kit output\n');
   const foreign = await runCli(['build', '--root', repo, '--out', outside]);
   assert.equal(foreign.status, 2, foreign.output);
-  assert.match(foreign.stderr, /non-empty directory that docs-kit did not create \(no \.docs-kit-build marker\)/);
+  assert.match(foreign.stderr, /non-empty directory without a valid \.docs-kit-build manifest/);
   assert.ok(existsSync(path.join(outside, 'precious.txt')));
 
   // The same rule holds for a git-ignored directory.
@@ -180,7 +180,7 @@ test('build --out only replaces directories it created (marker), and never track
   writeFileSync(path.join(repo, 'dist-pages', 'notes.txt'), 'ignored but not ours\n');
   const ignored = await runCli(['build', '--root', repo, '--out', path.join(repo, 'dist-pages')]);
   assert.equal(ignored.status, 2, ignored.output);
-  assert.match(ignored.stderr, /no \.docs-kit-build marker/);
+  assert.match(ignored.stderr, /without a valid \.docs-kit-build manifest/);
   assert.ok(existsSync(path.join(repo, 'dist-pages', 'notes.txt')));
 
   // A new directory is fine, and a docs-kit output is replaced on the next build.
@@ -188,8 +188,19 @@ test('build --out only replaces directories it created (marker), and never track
   for (let i = 0; i < 2; i++) {
     const result = await runCli(['build', '--root', repo, '--out', fresh]);
     assert.equal(result.status, 0, `build ${i + 1}: ${result.output}`);
-    assert.ok(existsSync(path.join(fresh, '.docs-kit-build')));
   }
+  const marker = JSON.parse(readFileSync(path.join(fresh, '.docs-kit-build'), 'utf8'));
+  assert.equal(marker.generator, '@kontourai/docs-kit');
+  assert.ok(marker.files.includes('index.html') && marker.files.includes('docs/assets/diagram.svg') && marker.files.includes('.nojekyll'));
+  assert.ok(!marker.files.includes('.docs-kit-build'));
+
+  // A file added by hand to a docs-kit output is not in the manifest: refuse and name it.
+  mkdirSync(path.join(fresh, 'notes'));
+  writeFileSync(path.join(fresh, 'notes', 'handwritten.md'), 'mine\n');
+  const handAdded = await runCli(['build', '--root', repo, '--out', fresh]);
+  assert.equal(handAdded.status, 2, handAdded.output);
+  assert.match(handAdded.stderr, /contains notes\/handwritten\.md, which the previous docs-kit build did not write; refusing to delete it/);
+  assert.ok(existsSync(path.join(fresh, 'notes', 'handwritten.md')));
 });
 
 test('commented-out HTML is neither checked nor treated as an anchor', async (t) => {
@@ -325,4 +336,66 @@ test('git calls ignore GIT_DIR and friends exported by a git hook, reading --roo
   const bundle = JSON.parse(readFileSync(path.join(out, 'docs-bundle.json'), 'utf8'));
   assert.equal(bundle.sha, rootHead);
   assert.equal(git(other, ['rev-parse', 'HEAD']), otherHead);
+});
+
+test('assets: untracked, ignored, and .git files are unpublishable; tracked files over 25 MB stay links', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(path.join(repo, '.gitignore'), '.env\n');
+  writeFileSync(path.join(repo, '.env'), 'API_TOKEN=secret\n');
+  commitAll(repo, 'ignore .env');
+  const concepts = readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8');
+  writeFileSync(path.join(repo, 'docs', 'scratch.txt'), 'untracked notes\n');
+  writeFileSync(path.join(repo, 'docs', 'concepts.md'), `${concepts}\n<img src="../.env" alt="env"> ![config](../.git/config) [notes](scratch.txt)\n`);
+
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /src="\.\.\/\.env"> - unpublishable reference: \.env is not tracked by git \(untracked or ignored\)/);
+  assert.match(check.stderr, /\(\.\.\/\.git\/config\) - unpublishable reference: \.git\/config is inside \.git/);
+  assert.match(check.stderr, /\(scratch\.txt\) - unpublishable reference: docs\/scratch\.txt is not tracked by git/);
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 1, build.output);
+  assert.ok(!existsSync(path.join(out, '.env')) && !existsSync(path.join(out, '.git')), 'nothing secret was copied');
+
+  // A tracked file above the cap keeps the GitHub link instead of being copied.
+  writeFileSync(path.join(repo, 'docs', 'concepts.md'), `${concepts}\n![huge](assets/huge.png)\n`);
+  rmSync(path.join(repo, 'docs', 'scratch.txt'));
+  const huge = openSync(path.join(repo, 'docs', 'assets', 'huge.png'), 'w');
+  ftruncateSync(huge, 25 * 1024 * 1024 + 1);
+  closeSync(huge);
+  const sha = commitAll(repo, 'huge tracked image');
+  const big = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(big.status, 0, big.output);
+  assert.ok(!existsSync(path.join(out, 'docs', 'assets', 'huge.png')));
+  assert.ok(readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8').includes(`src="https://github.com/kontourai/sample/blob/${sha}/docs/assets/huge.png"`));
+});
+
+test('raw-HTML extraction uses a real tokenizer: <!-- inside an attribute value is not a comment', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<a title="see <!-- note" href="gone.md">trap</a> <a title='-->' href="also-gone.md">x</a>\n`,
+  );
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /href="gone\.md"> - missing target docs\/gone\.md/);
+  assert.match(check.stderr, /href="also-gone\.md"> - missing target docs\/also-gone\.md/);
+});
+
+test('video poster is link-checked and copied', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  const concepts = readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8');
+  writeFileSync(path.join(repo, 'docs', 'concepts.md'), `${concepts}\n<video controls poster="assets/missing-poster.png"></video>\n`);
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /poster="assets\/missing-poster\.png"> - missing target docs\/assets\/missing-poster\.png/);
+
+  copyFileSync(path.join(repo, 'docs', 'assets', 'diagram.svg'), path.join(repo, 'docs', 'assets', 'poster.svg'));
+  writeFileSync(path.join(repo, 'docs', 'concepts.md'), `${concepts}\n<video controls poster="assets/poster.svg"></video>\n`);
+  commitAll(repo, 'poster');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  assert.ok(existsSync(path.join(out, 'docs', 'assets', 'poster.svg')));
+  assert.match(readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8'), /poster="assets\/poster\.svg"/);
 });

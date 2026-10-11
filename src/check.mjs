@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
+import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
 import { MANIFEST_FILE, globMatcher, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink } from './markdown.mjs';
@@ -26,10 +27,13 @@ export function publishedSources(manifest) {
 /**
  * Gate 2: Markdown links and images, plus raw-HTML href/src/srcset, in
  * published sources. External URLs are not fetched. A leading `/` resolves
- * from --root.
+ * from --root. References to files under .git or (inside git) untracked or
+ * ignored files are unpublishable and fail.
  */
 export function checkLinks(root, manifest, read) {
   const failures = [];
+  const published = new Set(publishedSources(manifest));
+  const assetPolicy = createAssetPolicy(root);
   for (const source of publishedSources(manifest)) {
     const { analysis } = read(source);
     for (const link of analysis.links) {
@@ -51,6 +55,10 @@ export function checkLinks(root, manifest, read) {
       if (!stat) {
         failures.push(`${at} - missing target ${target.path || '/'}`);
         continue;
+      }
+      if (!published.has(target.path)) {
+        const policy = assetPolicy(target.path, stat.kind);
+        if (policy.action === 'unpublishable') failures.push(`${at} - unpublishable reference: ${target.path} ${policy.reason}`);
       }
       if (target.fragment && stat.kind === 'file' && target.path.endsWith('.md')) {
         const { analysis: targetAnalysis } = read(target.path);

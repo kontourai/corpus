@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
-import { MANIFEST_FILE, validateProducts } from './manifest.mjs';
+import { MANIFEST_FILE, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
@@ -61,7 +61,7 @@ export function pageCount(bundle) {
  * size of each published source (porcelain alone does not change when an
  * already-modified file is edited again).
  */
-function createCheckoutCache() {
+export function createCheckoutCache(build = bundleFromCheckout) {
   const cache = new Map(); // root -> { key, bundle, sources }
   const statKey = (file) => {
     try {
@@ -85,9 +85,14 @@ function createCheckoutCache() {
   return (root) => {
     const hit = cache.get(root);
     if (hit && keyFor(root, hit.sources) === hit.key) return hit.bundle;
-    const bundle = bundleFromCheckout(root);
-    const sources = bundle.documents.map((document) => document.source);
-    cache.set(root, { key: keyFor(root, sources), bundle, sources });
+    // Key first, then build: an edit that lands while the bundle is being
+    // built changes the key, so the next call rebuilds instead of serving
+    // pre-edit content under a post-edit key.
+    const manifest = loadManifest(root);
+    const sources = [manifest.landing, ...manifest.documents.map((document) => document.source)];
+    const key = keyFor(root, sources);
+    const bundle = build(root);
+    cache.set(root, { key, bundle, sources });
     return bundle;
   };
 }

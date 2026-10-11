@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { BIN, REPO_ROOT, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
-import { hubSource } from '../src/mcp.mjs';
+import { createCheckoutCache, hubSource } from '../src/mcp.mjs';
+import { bundleFromCheckout } from '../src/bundle.mjs';
 
 const VERSION = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version;
 
@@ -297,4 +298,25 @@ test('mcp --workspace rebuilds a product only when its checkout changes', async 
   appendFileSync(path.join(sample, 'docs', 'concepts.md'), '\nSecond edit: the narwhal.\n');
   const search = await call(client, 'search', { query: 'narwhal' });
   assert.equal(search.data.results[0]?.source, 'docs/concepts.md');
+});
+
+// Library seam: the race (an edit landing while a bundle builds) cannot be
+// timed deterministically through the CLI, so the builder simulates it.
+test('checkout cache keys before building, so an edit during a build is picked up next call', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  const concepts = path.join(repo, 'docs', 'concepts.md');
+  let editDuringBuild = true;
+  const cache = createCheckoutCache((root) => {
+    const bundle = bundleFromCheckout(root);
+    if (editDuringBuild) {
+      editDuringBuild = false;
+      appendFileSync(concepts, '\nEdited mid-build: the okapi.\n');
+    }
+    return bundle;
+  });
+  const first = cache(repo);
+  assert.ok(!first.documents.some((document) => document.markdown.includes('okapi')));
+  const second = cache(repo);
+  assert.ok(second.documents.some((document) => document.markdown.includes('okapi')), 'the mid-build edit is not hidden by a post-edit cache key');
+  assert.equal(cache(repo), second, 'and the rebuilt bundle is then cached');
 });

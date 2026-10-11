@@ -9,9 +9,9 @@
 | `index.html` | the `landing` Markdown, followed by cards for every document, grouped by section |
 | `<source>.html` | each listed document, at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
 | `docs-kit.css` | the shared stylesheet, with light and dark themes that follow `prefers-color-scheme` |
-| images and media | every local image, and every file embedded with `src` or `srcset` (such as a video), that a published page references, copied to its repository path |
+| images and media | every local image, and every file embedded with `src`, `srcset`, or `poster`, that a published page references, copied to its repository path; only git-tracked files up to 25 MB, never `.git/` |
 | `.nojekyll` | turns off Jekyll processing on GitHub Pages |
-| `.docs-kit-build` | marks the directory as docs-kit output; `build` replaces only marked (or new or empty) directories |
+| `.docs-kit-build` | JSON list of every file the build wrote; the next `build` replaces the directory only if it holds exactly those files (a forged marker is trusted) |
 | `docs-bundle.json` | the agent bundle; see [the bundle format](bundle-format.md#docs-bundlejson) |
 
 Every page has the product title and tagline, navigation grouped by `section` in manifest order, a link to the hub, a link to the repository, and the source file at the built commit. Headings get GitHub-compatible `id`s, so anchors that work on GitHub also work on the site.
@@ -27,7 +27,7 @@ Every page has the product title and tagline, navigation grouped by `section` in
 | `http(s):` and `mailto:` | unchanged |
 | other schemes, such as `javascript:` | `#` |
 
-The same rewriting applies to `href`, `src`, and `srcset` attributes in raw HTML, in any quoting style. HTML comments are skipped, and `srcset` is parsed per the HTML spec. `check` and `build` use one shared extractor for them.
+The same rewriting applies to `href`, `src`, `srcset`, and `poster` attributes in raw HTML, in any quoting style. Raw HTML is tokenized with htmlparser2, so comments and quoting follow the HTML tokenizer, and `srcset` is parsed per the HTML spec. References to untracked, ignored, or `.git/` files fail `check` and `build`. `check` and `build` use one shared extractor for them.
 
 ## Sanitization
 
