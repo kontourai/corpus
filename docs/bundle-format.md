@@ -25,7 +25,7 @@ Two JSON files connect product sites to the hub and to the MCP server. `docs-kit
 }
 ```
 
-- `documents[0]` is the landing page, with `landing: true` and `section: null`. The listed documents follow in manifest order, with `landing: false`. A document's `title` is its first top-level H1. If it has none, the title is the file name without `.md`. `markdown` is the source file, unmodified.
+- `documents[0]` is the landing page, with `landing: true` and `section: null`. The listed documents follow in manifest order, with `landing: false`. A document's `title` is the `title` set on its `documents` entry in `docs-kit.json`, if any. Otherwise it is its first Markdown H1 outside blockquotes and lists, then the text of the first raw-HTML `<h1>` that has text, then the file name without `.md`. `markdown` is the source file, unmodified.
 - Each document's `url` is the page `build` generates: `index.html` for the landing page, otherwise the source path with `.md` replaced by `.html`, under `siteUrl`.
 - A topic's `markdown` is a heading section: it runs from the anchor heading up to the next top-level heading of the same or a higher level. Deeper headings stay in the section. A topic without an anchor gets the whole document.
 - `tagline` is `""` when the manifest omits it.

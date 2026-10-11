@@ -1,6 +1,6 @@
 import path from 'node:path';
 import GithubSlugger, { slug } from 'github-slugger';
-import { Tokenizer } from 'htmlparser2';
+import { Parser, Tokenizer } from 'htmlparser2';
 import { Lexer, marked } from 'marked';
 
 /** GitHub heading slug for one heading, via github-slugger (what GitHub uses). */
@@ -168,7 +168,8 @@ function lineAt(source, index) {
  * Lex a Markdown document once and report what the gates and the builder
  * need: headings with GitHub slugs, every anchor (heading slugs plus raw-HTML
  * id/name), every Markdown link and image plus raw-HTML href/src/srcset, and
- * the title (first top-level H1).
+ * the title (first top-level Markdown H1, else the first top-level raw-HTML
+ * `<h1>` with text).
  */
 export function analyzeMarkdown(source) {
   const tokens = Lexer.lex(source, { gfm: true });
@@ -210,12 +211,50 @@ export function analyzeMarkdown(source) {
   });
 
   const h1 = headings.find((heading) => heading.depth === 1 && heading.topLevel);
-  return { tokens, headings, anchors, links, title: h1?.text || null };
+  return { tokens, headings, anchors, links, title: h1?.text || htmlH1Text(tokens) };
 }
 
-/** Document title: first H1, else the file name without its extension. */
-export function documentTitle(analysis, source) {
-  return analysis.title || path.posix.basename(source).replace(/\.md$/i, '');
+/**
+ * Text of the first raw-HTML `<h1>` with text in a top-level HTML block, as a
+ * browser would show it (tags dropped, entities decoded, whitespace
+ * collapsed). An `<h1>` holding only an image has no text and is skipped.
+ */
+function htmlH1Text(tokens) {
+  for (const token of tokens) {
+    if (token.type !== 'html' || !token.text) continue;
+    const found = [];
+    let depth = 0;
+    let text = '';
+    const parser = new Parser(
+      {
+        onopentag(name) {
+          if (name === 'h1' && depth++ === 0) text = '';
+        },
+        ontext(chunk) {
+          if (depth > 0) text += chunk;
+        },
+        onclosetag(name) {
+          if (name === 'h1' && depth > 0 && --depth === 0) found.push(text);
+        },
+      },
+      { decodeEntities: true },
+    );
+    parser.write(token.text);
+    parser.end();
+    // An <h1> left open at the end of the block (closed in a later block) still counts.
+    if (depth > 0) found.push(text);
+    const title = found.map((value) => value.replace(/\s+/g, ' ').trim()).find(Boolean);
+    if (title) return title;
+  }
+  return null;
+}
+
+/**
+ * Document title: the manifest `title` override, else the first Markdown H1,
+ * else the first raw-HTML `<h1>`, else the file name without its extension.
+ */
+export function documentTitle(analysis, source, override = null) {
+  return override || analysis.title || path.posix.basename(source).replace(/\.md$/i, '');
 }
 
 /**
