@@ -253,10 +253,12 @@ function filesUnder(dir) {
  * A string as a JavaScript literal safe inside an HTML <script> element.
  * JSON.stringify quotes and escapes backslashes, quotes, and control characters;
  * escaping every "<" as \u003c rules out "</script" and "<!--", the only ways
- * text can leave or confuse a script element. The literal means the same string.
+ * text can leave or confuse a script element. U+2028 and U+2029 are escaped
+ * too: legal in string literals since ES2019, but line terminators to older
+ * parsers. The literal means the same string.
  */
 export function scriptString(value) {
-  return JSON.stringify(String(value)).replace(/</g, '\\u003c');
+  return JSON.stringify(String(value)).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
 /**
@@ -313,10 +315,13 @@ function writeRedirects({ manifest, out, siteUrl, assets }) {
 }
 
 const REFRESH_URL = /<meta http-equiv="refresh" content="0; url=([^"]*)">/g;
+const STUB_SCRIPT = /<script>\(function\(\)\{var t=("(?:[^"\\\n]|\\.)*");location\.replace\(/g;
 
 /**
  * Every internal href/src in the generated site must resolve, including
- * #fragments, and so must the URL of a redirect stub's meta refresh.
+ * #fragments, and so must the URL of a redirect stub's meta refresh. A stub's
+ * script target must be readable and equal its meta refresh URL, so the JS and
+ * no-JS paths cannot diverge.
  */
 export function checkGeneratedSite(out) {
   const files = [];
@@ -338,7 +343,22 @@ export function checkGeneratedSite(out) {
     const html = readFileSync(file, 'utf8');
     const page = path.relative(out, file).split(path.sep).join('/');
     const references = extractHtmlReferences(html);
-    for (const [, url] of html.matchAll(REFRESH_URL)) references.push({ attr: 'refresh', url: decodeEntities(url) });
+    const refreshes = [...html.matchAll(REFRESH_URL)].map(([, url]) => decodeEntities(url));
+    for (const url of refreshes) references.push({ attr: 'refresh', url });
+    const scripts = [];
+    for (const [, literal] of html.matchAll(STUB_SCRIPT)) {
+      try {
+        scripts.push(JSON.parse(literal));
+      } catch {
+        failures.push(`${page}: redirect script target ${literal} - not a readable string literal`);
+      }
+    }
+    for (const url of scripts) references.push({ attr: 'script', url });
+    if (refreshes.length > 0) {
+      const scriptCount = (html.match(/<script\b/gi) ?? []).length;
+      if (scriptCount !== 1 || scripts.length !== 1) failures.push(`${page}: redirect stub needs exactly one redirect script, found ${scriptCount}`);
+      else if (scripts[0] !== refreshes[0]) failures.push(`${page}: script="${scripts[0]}" - does not match refresh="${refreshes[0]}"`);
+    }
     for (const { attr, url } of references) {
       const value = url.trim();
       const label = `${attr}="${value}"`;

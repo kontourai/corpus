@@ -3,7 +3,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writ
 import path from 'node:path';
 import { test } from 'node:test';
 import { fixtureRepo, git, runCli, scratch } from './helpers.mjs';
-import { redirectStub } from '../src/build.mjs';
+import { checkGeneratedSite, redirectStub, scriptString } from '../src/build.mjs';
 
 function setRedirects(repo, redirects) {
   const file = path.join(repo, 'docs-kit.json');
@@ -297,4 +297,38 @@ test('redirects: the stub script escapes a raw target for a JS string inside HTM
   assert.equal(scriptsOf(html).length, 1, 'the target cannot close the script element');
   assert.doesNotMatch(html.slice(html.indexOf('<script>'), html.indexOf('</script>')), /<\/|<!--/);
   assert.equal(runStubScript(html, '#foo'), `${href}#foo`, 'the literal decodes to the exact target');
+});
+
+test('redirects: the stub script escapes U+2028 and U+2029', () => {
+  const literal = scriptString('a\u2028b\u2029c');
+  assert.equal(literal, '"a\\u2028b\\u2029c"');
+  assert.doesNotMatch(literal, /[\u2028\u2029]/);
+  assert.equal(JSON.parse(literal), 'a\u2028b\u2029c');
+});
+
+test('redirects: the generated-site check fails a stub whose script target differs from its refresh', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  setRedirects(repo, { 'old.html': 'docs/concepts.md#workflows', 'other.html': 'docs/concepts.md' });
+  const { result, out, read } = await build(t, repo);
+  assert.equal(result.status, 0, result.output);
+  assert.deepEqual(checkGeneratedSite(out).failures, [], 'the untouched site passes');
+
+  // Tamper with only the script target: an existing page, so only the equality check can catch it.
+  const stub = read('old.html');
+  const tampered = stub.replace('var t="docs/concepts.html#workflows"', 'var t="docs/getting-started.html"');
+  assert.notEqual(tampered, stub);
+  assert.equal(refreshOf(tampered), 'docs/concepts.html#workflows', 'the meta refresh is untouched');
+  writeFileSync(path.join(out, 'old.html'), tampered);
+  const { failures } = checkGeneratedSite(out);
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0], /^old\.html: script="docs\/getting-started\.html" - does not match refresh="docs\/concepts\.html#workflows"$/);
+
+  // A script target that does not exist also fails, besides the mismatch.
+  writeFileSync(path.join(out, 'old.html'), stub.replace('var t="docs/concepts.html#workflows"', 'var t="docs/nope.html"'));
+  const missing = checkGeneratedSite(out).failures;
+  assert.ok(missing.some((f) => /old\.html: script="docs\/nope\.html" - missing generated target/.test(f)), missing.join('\n'));
+
+  // A stub with its script removed fails.
+  writeFileSync(path.join(out, 'old.html'), stub.replace(/<script>[\s\S]*?<\/script>\n/, ''));
+  assert.match(checkGeneratedSite(out).failures.join('\n'), /old\.html: redirect stub needs exactly one redirect script, found 0/);
 });

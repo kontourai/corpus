@@ -4,7 +4,8 @@
 
 Additive: v0.4.0 manifests stay valid, and the bundle and `products.json` formats are unchanged.
 
-- **Redirect stubs keep the URL fragment.** A meta refresh drops `#fragment`, so `old.html#section` used to land at the top of the new page. Each stub now has a small inline script, before the meta refresh, that calls `location.replace` with the target plus the incoming fragment. A target that has its own `#anchor` keeps it, and the incoming fragment is ignored. The meta refresh, `rel="canonical"`, `noindex`, and the visible link stay, so a browser without JavaScript still redirects (without the fragment). The target is embedded with `JSON.stringify` and every `<` escaped as `\u003c`, so no target can close the script element. Stubs are no longer script-free; a site with a Content Security Policy that forbids inline script falls back to the meta refresh.
+- **Redirect stubs keep the URL fragment.** A meta refresh drops `#fragment`, so `old.html#section` used to land at the top of the new page. Each stub now has a small inline script, before the meta refresh, that calls `location.replace` with the target plus the incoming fragment. A target that has its own `#anchor` keeps it, and the incoming fragment is ignored. The meta refresh, `rel="canonical"`, `noindex`, and the visible link stay, so a browser without JavaScript still redirects (without the fragment). The target is embedded with `JSON.stringify`, with every `<` escaped as `\u003c` and U+2028 and U+2029 as `\u2028` and `\u2029`, so no target can close the script element. Stubs are no longer script-free; a site with a Content Security Policy that forbids inline script falls back to the meta refresh.
+- **Generated-site check covers the stub script.** `build` fails (exit 1) when a redirect stub lacks exactly one redirect script, or when the script's target is missing or differs from the meta refresh URL.
 
 ## 0.4.0
 
