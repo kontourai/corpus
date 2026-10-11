@@ -7,7 +7,7 @@
 | Output | From |
 | --- | --- |
 | `index.html` | the `landing` Markdown, followed by cards for every document, grouped by section |
-| `<source>.html` | each listed document, at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
+| `<source>.html` | each listed document except bundle-only ones (`"publish": false`), at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
 | `docs-kit.css` | the shared stylesheet, with light and dark themes that follow `prefers-color-scheme` |
 | images and media | every local image, and every file embedded with `src`, `srcset`, or `poster`, that a published page references, copied to its repository path; only git-tracked files up to 25 MB, never `.git/` |
 | `<key>` from `redirects` | a stub that refreshes to the new page or URL, with `rel="canonical"`, `noindex`, a visible link, and no script; see [Redirects](../README.md#redirects) |
@@ -24,7 +24,7 @@ The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentati
 | a published document (`concepts.md#workflows`) | the generated page (`concepts.html#workflows`) |
 | the landing page (`../README.md`) | `index.html` |
 | a local image | the copied image |
-| any other repository file or directory | `https://github.com/<repo>/blob/<sha>/<path>`, or `tree` for directories |
+| a bundle-only document (`"publish": false`), or any other repository file or directory | `https://github.com/<repo>/blob/<sha>/<path>`, or `tree` for directories |
 | `http(s):` and `mailto:` | unchanged |
 | other schemes, such as `javascript:` | `#` |
 

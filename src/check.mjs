@@ -15,20 +15,28 @@ export function createDocumentReader(root) {
       // Front matter is stripped once here, so links, anchors, topics, the
       // rendered page, and the bundle markdown all see the same body.
       const { body, lineOffset, title } = splitFrontMatter(readFileSync(toFsPath(root, repoPath), 'utf8'));
-      cache.set(repoPath, { markdown: body, analysis: analyzeMarkdown(body, { lineOffset, frontMatterTitle: title }) });
+      cache.set(repoPath, { markdown: body, lineOffset, analysis: analyzeMarkdown(body, { lineOffset, frontMatterTitle: title }) });
     }
     return cache.get(repoPath);
   };
 }
 
-/** Published sources in site order: landing first, then documents in manifest order. */
+/**
+ * Sources that get a page, in site order: landing first, then documents in
+ * manifest order, without bundle-only (`publish: false`) documents.
+ */
 export function publishedSources(manifest) {
+  return [manifest.landing, ...manifest.documents.filter((document) => document.publish).map((document) => document.source)];
+}
+
+/** Every source in docs-bundle.json: the published pages plus bundle-only documents. */
+export function bundledSources(manifest) {
   return [manifest.landing, ...manifest.documents.map((document) => document.source)];
 }
 
 /**
  * Gate 2: Markdown links and images, plus raw-HTML href/src/srcset, in
- * published sources. External URLs are not fetched. A leading `/` resolves
+ * published and bundle-only sources. External URLs are not fetched. A leading `/` resolves
  * from --root. References to files under .git or (inside git) untracked or
  * ignored files are unpublishable and fail.
  */
@@ -36,7 +44,7 @@ export function checkLinks(root, manifest, read) {
   const failures = [];
   const published = new Set(publishedSources(manifest));
   const assetPolicy = createAssetPolicy(root);
-  for (const source of publishedSources(manifest)) {
+  for (const source of bundledSources(manifest)) {
     const { analysis } = read(source);
     for (const link of analysis.links) {
       const where = `${source}${link.line ? `:${link.line}` : ''}`;
@@ -72,9 +80,9 @@ export function checkLinks(root, manifest, read) {
   return failures;
 }
 
-/** Gate 3: every docs/**\/*.md is listed or excluded. */
+/** Gate 3: every docs/**\/*.md is listed (bundle-only documents count) or excluded. */
 export function checkReachability(root, manifest) {
-  const listed = new Set(publishedSources(manifest));
+  const listed = new Set(bundledSources(manifest));
   const isExcluded = globMatcher(manifest.exclude);
   return listMarkdownFiles(root, 'docs')
     .filter((file) => !listed.has(file) && !isExcluded(file))
@@ -154,7 +162,9 @@ export function checkRedirects(root, manifest, read) {
       continue;
     }
     if (!published.has(source)) {
-      failures.push(
+      if (manifest.documents.some((document) => document.source === source))
+        failures.push(`${at}: target "${source}" is bundle-only (publish: false) and has no page; a redirect needs a page or an https:// URL`);
+      else failures.push(
         `${at}: target "${source}" is not published; a redirect must point at the landing page, a listed document, or an https:// URL`,
       );
       continue;
@@ -166,7 +176,38 @@ export function checkRedirects(root, manifest, read) {
 }
 
 /**
- * Gate 6: every `covers` glob matches at least one tracked file (every file
+ * Absolute home-directory paths: `/Users/<name>/`, `/home/<name>/`, and
+ * `C:\Users\<name>\` (any drive letter, either slash, doubled backslashes as
+ * in escaped JSON). The lookbehind keeps `https://host/home/x/` and
+ * `/srv/home/x/` out; `file:///Users/x/` still matches. A name made of
+ * placeholder characters (`<name>`, `$USER`, `%USERNAME%`, `{user}`) is not a
+ * real path and does not match. `/Users/Shared/` (macOS shared folder) and
+ * `/home/runner/` (GitHub Actions runner) are not personal and are exempt.
+ */
+const LOCAL_PATH = /(?<![\w.~-])(?:\/(?:Users\/(?!Shared\/)|home\/(?!runner\/))[^\s/\\<>"'`$%{}()[\]*]+\/|[A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/)[^\s/\\<>"'`$%{}()[\]*]+(?:\\|\/))/g;
+
+/**
+ * Gate 6: no published or bundled document, nor the landing page, contains an
+ * absolute home-directory path, in prose, code, links, or raw HTML. The whole
+ * body is scanned as text (front matter is never published). Documents listed
+ * in `allowLocalPaths` are skipped.
+ */
+export function checkLocalPaths(manifest, read) {
+  const failures = [];
+  const allowed = new Set(manifest.allowLocalPaths);
+  for (const source of bundledSources(manifest)) {
+    if (allowed.has(source)) continue;
+    const { markdown, lineOffset } = read(source);
+    markdown.split('\n').forEach((line, index) => {
+      for (const [hit] of line.matchAll(LOCAL_PATH))
+        failures.push(`${source}:${index + 1 + lineOffset}: local path "${hit}" (list the file in allowLocalPaths if it is a deliberate example)`);
+    });
+  }
+  return failures;
+}
+
+/**
+ * Gate 7: every `covers` glob matches at least one tracked file (every file
  * outside git). A glob that matches nothing can never mark its document stale.
  */
 export function checkCovers(root, manifest) {
@@ -185,7 +226,7 @@ export function checkCovers(root, manifest) {
 }
 
 /**
- * Gate 7: a document whose `covers` globs match a changed file must itself be
+ * Gate 8: a document whose `covers` globs match a changed file must itself be
  * in the change set. Git errors throw UsageError; they never pass silently.
  */
 export function checkFreshness(root, manifest, base) {
@@ -218,7 +259,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);
-    for (const name of ['links', 'reachability', 'topics', 'redirects', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
+    for (const name of ['links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
       gates.push({ name, skipped: `${MANIFEST_FILE} is invalid` });
     return { exitCode, gates, manifest: null };
   }
@@ -229,6 +270,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     ['reachability', () => checkReachability(root, manifest)],
     ['topics', () => checkTopics(manifest, read)],
     ['redirects', () => checkRedirects(root, manifest, read)],
+    ['paths', () => checkLocalPaths(manifest, read)],
     // covers only feeds freshness, so build (freshness: false) is not blocked by it.
     ...(freshness ? [['covers', () => checkCovers(root, manifest)]] : []),
   ]) {

@@ -2,7 +2,7 @@
 
 `@kontourai/docs-kit` gives every Kontour product the same three things from one manifest:
 
-- **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, redirects, and (on pull requests) freshness.
+- **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, redirects, local paths, and (on pull requests) freshness.
 - **A GitHub Pages site.** `docs-kit build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `docs-kit mcp` serves every product's bundle from one MCP server.
 
@@ -45,7 +45,8 @@ Each repository has a `docs-kit.json` at its root:
   "redirects": {
     "gates-and-route-back.html": "docs/gates.md#route-back",
     "releasing.html": "https://example.com/releasing"
-  }
+  },
+  "allowLocalPaths": ["docs/install-paths.md"]
 }
 ```
 
@@ -57,10 +58,11 @@ Each repository has a `docs-kit.json` at its root:
 | `tagline` | no | One line shown in the site header and on the hub. |
 | `repo` | yes | `owner/name` on GitHub. |
 | `landing` | no | Markdown rendered as the site's `index.html`. Default `README.md`. |
-| `documents` | yes | Published pages, in navigation order. Each entry has `source` (a `.md` path), `section` (the navigation group) and, optionally, `title` and `covers`. |
+| `documents` | yes | Documents, in navigation order. Each entry has `source` (a `.md` path), `section` (the navigation group) and, optionally, `title`, `covers`, and `publish`. See [Bundle-only documents](#bundle-only-documents). |
 | `topics` | no | Curated entry points for agents. Each has `id` (a lowercase slug), `title`, and `source`, which is either `path` or `path#anchor`. |
 | `exclude` | no | Globs for `docs/**/*.md` files that are deliberately unpublished. |
 | `redirects` | no | Old page URLs that moved, mapped to their new place. Each key is a site-relative `.html` path; each value is a published source (`path` or `path#anchor`) or an absolute `https://` URL. See [Redirects](#redirects). |
+| `allowLocalPaths` | no | Exact paths of documents (the landing page or `documents` sources) that may contain absolute home-directory paths, such as deliberate examples. The [paths gate](#check) skips them. No globs. |
 
 The validation rules:
 
@@ -70,9 +72,22 @@ The validation rules:
 - A document's title is its first Markdown H1 outside blockquotes and lists, else the text of the first raw-HTML `<h1>` that has text, else a front-matter `title`, else the file name without `.md`. A `title` on the `documents` entry overrides all of them in the navigation, the page `<title>`, and `docs-bundle.json`; it must be a non-empty string without leading or trailing whitespace.
 - A topic `source` must point at the landing page or at a listed document, so it is published. Its `#anchor` must be a heading outside blockquotes and lists (any level, `#` through `######`), slugged by [github-slugger](https://github.com/Flet/github-slugger): lowercase, punctuation dropped, spaces become `-`, and repeated headings get `-1`, `-2`, and so on.
 - A leading YAML front-matter block is stripped before checking, rendering, and bundling, and check failures still report the source file's line numbers. A block is front matter when line 1 is `---` (after a UTF-8 BOM, which is always dropped), a `---` or `...` line closes it within the first 2000 lines, and it holds at least one top-level key line (`key:` at column 0). Otherwise, such as a thematic break followed by prose and another `---`, the document is left as written. Only a simple `title: value` (optionally quoted) is read from it; there is no YAML parser.
+- `publish`, when present, must be a boolean. It defaults to `true`.
+- Each `allowLocalPaths` entry must be a normalized repository path that is exactly the landing page or a `documents` source, listed once. A glob, or any other path, is a manifest error.
 - `covers` holds globs of the code a document describes; the [freshness gate](#check) uses them. A bare directory name such as `src/cli` means `src/cli/**`. A glob that matches no tracked file (`git ls-files`; every file outside git) fails the `covers` gate of `check`, because it could never mark its document stale. It does not block `build` or the MCP server.
 
 Section names group the navigation in the order they first appear in `documents`.
+
+### Bundle-only documents
+
+A `documents` entry with `"publish": false` is an agent-facing document that is not published as a web page, such as an internal manual. It is still a document in every other way:
+
+- `build` renders no page for it, and it is left out of the navigation and the landing cards. It is still in `docs-bundle.json`, so the MCP server serves it, and topics may point at it.
+- Its bundle `url` is `https://github.com/<repo>/blob/<sha>/<path>` at the built commit.
+- Its bundle `markdown` has every relative link made absolute, so the text stands alone for an MCP reader: a link to a published document becomes the page URL under `--base-url`, a link to anything else becomes its GitHub `blob` URL (`tree` for directories), an image or other embedded file (Markdown image, raw-HTML `src`, `srcset`, or `poster`) becomes `https://raw.githubusercontent.com/<repo>/<sha>/<path>` so it resolves to the file itself, and a `#fragment` alone gets the document's own blob URL. This covers Markdown links, images, reference definitions, and raw-HTML `href`, `src`, `srcset`, and `poster`. Code blocks and code spans are left as written. Topics taken from the document get the same rewritten Markdown, and their `url` is the blob URL plus `#anchor`.
+- `check` runs every gate on it: links, anchors, topics, covers, freshness, and paths. Reachability counts it as listed.
+- A published page that links to it gets its GitHub blob URL, as for any other repository file.
+- A redirect cannot target it, because it has no page; that fails the `redirects` gate.
 
 ### Redirects
 
@@ -80,7 +95,7 @@ GitHub Pages cannot send HTTP redirects, so when a page URL changes (for example
 
 - A key is the old page's path relative to the site root, such as `gates-and-route-back.html` or `adr/0001-x.html`. It must end in `.html` and must not start with `/` or contain `..`, `#`, or `?`.
 - GitHub Pages serves `x.html` for a request to `/x`, so a key `x.html` also redirects the extensionless URL `/x`.
-- A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which the stub uses in its parsed, normalized form (`new URL(value).href`). A source must be the landing page or a listed document, and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
+- A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which the stub uses in its parsed, normalized form (`new URL(value).href`). A source must be the landing page or a listed document that is published (not `"publish": false`), and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
 - A source target becomes a relative URL from the stub's own directory, so `adr/0001-x.html` pointing at `docs/gates.md` refreshes to `../docs/gates.html`. Its canonical URL is absolute, under `--base-url`.
 - A key must not be a page docs-kit generates (`index.html` or a document's `.html`), compared after Unicode NFC normalization and case folding, and must not need a directory where docs-kit writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
 - Malformed keys or values are manifest errors (exit `2`). A target that is missing, unpublished, or has an unresolved anchor, and a colliding or repeated key, fail the `redirects` gate (exit `1`).
@@ -103,12 +118,13 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 `check` runs the gates below and reports every failure, not only the first.
 
 1. **manifest:** `docs-kit.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
-2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
-3. **reachability:** every `docs/**/*.md` is listed in `documents` (or is the landing page) or is matched by `exclude`.
+2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents (bundle-only ones included) resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
+3. **reachability:** every `docs/**/*.md` is listed in `documents` (with or without `"publish": false`), is the landing page, or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
 5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file docs-kit generates.
-6. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
-7. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
+6. **paths:** no absolute home-directory path appears in the landing page or any listed document, bundle-only ones included: `/Users/<name>/`, `/home/<name>/`, or `C:\Users\<name>\` (any drive letter, either slash). The whole Markdown body is scanned as text, so prose, code, links, and raw HTML all count; front matter is not, because it is never published. Each hit is reported as `file:line`. A path inside a URL such as `https://host/home/x/` does not match, and neither does a placeholder name such as `<name>`, `$USER`, or `{user}`. Two non-personal directories are exempt: `/Users/Shared/` (the macOS shared folder) and `/home/runner/` (the GitHub Actions runner home). List a document in `allowLocalPaths` when it needs real example paths.
+7. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
+8. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
 ### build
 
@@ -118,7 +134,7 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 
 `build` runs `check` without the covers and freshness gates and refuses to build if it fails. It then replaces `--out` with:
 
-- `index.html` (the landing page), one page per document, and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository. The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` when there is no tagline.
+- `index.html` (the landing page), one page per published document (not [bundle-only](#bundle-only-documents) ones), and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository. The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` when there is no tagline.
 - Links between published documents, rewritten to the generated pages, in Markdown and in raw HTML (`href`, `src`, `srcset`). Links to other repository files go to `https://github.com/<repo>/blob/<sha>/<path>`, or to `tree` for directories.
 - Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/` or through a symlink, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link. Assets are collected after sanitization, so a file referenced only by a stripped tag (`iframe`, `embed`, `script`, ...) is never copied.
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
@@ -247,6 +263,8 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 - Any asset reference that goes through a symlink, as a file or as a directory in its path, is refused as unpublishable, whatever the link points at. Commit the real file instead.
 - "Tracked" means present in the git index. A local `build` publishes tracked assets with their unstaged working-tree edits. CI builds from a clean checkout, so its output matches the commit.
 - Empty directories that someone adds by hand inside the output directory are removed on rebuild. Only files are checked against the `.docs-kit-build` manifest.
+- In a bundle-only document, a link destination written with backslash escapes (such as `[x](a\(b\).md)`) cannot be located in the source text, so it is left relative in the bundle. A topic's Markdown does not carry reference definitions from outside its section, so `[text][ref]` links in a topic stay unresolved.
+- The paths gate matches home directories by shape. It does not catch a path relative to `~`, a percent-encoded path, or a home directory outside `/Users`, `/home`, and `C:\Users`.
 - The hub's install snippet shows `<sha>` as a placeholder. It cannot know which docs-kit commit to recommend.
 
 ## License

@@ -11,9 +11,9 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude', 'redirects'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents'];
-const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers'];
+const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers', 'publish'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
 const TOPIC_KEYS = ['id', 'title', 'source'];
 const TOPIC_REQUIRED = ['id', 'title', 'source'];
@@ -184,6 +184,8 @@ export function validateManifest(raw, root) {
         if (!checkKeys(document, at, DOCUMENT_KEYS, DOCUMENT_REQUIRED, errors)) return;
         if (Object.hasOwn(document, 'section')) checkString(document.section, `${at}.section`, errors);
         if (Object.hasOwn(document, 'title')) checkString(document.title, `${at}.title`, errors);
+        if (Object.hasOwn(document, 'publish') && typeof document.publish !== 'boolean')
+          errors.push(`${at}.publish must be a boolean (got ${JSON.stringify(document.publish)})`);
         let covers = [];
         if (Object.hasOwn(document, 'covers')) {
           const before = errors.length;
@@ -201,10 +203,20 @@ export function validateManifest(raw, root) {
           return errors.push(`${at}.source "${source}" is the landing page; it is already published as index.html`);
         if (isExcluded(source)) errors.push(`${at}.source "${source}" is listed but also matched by exclude`);
         if (!isRepoFile(root, source)) errors.push(`${at}.source "${source}" does not exist (or is outside the repository)`);
-        const output = source.replace(/\.md$/, '.html');
-        if (outputs.has(output)) errors.push(`${at}.source "${source}" would overwrite the page generated for "${outputs.get(output)}"`);
-        outputs.set(output, source);
-        documents.push({ source, section: document.section, title: document.title ?? null, covers, coversAsWritten: document.covers ?? [] });
+        // A bundle-only document (publish: false) has no page, so it cannot collide with one.
+        if (document.publish !== false) {
+          const output = source.replace(/\.md$/, '.html');
+          if (outputs.has(output)) errors.push(`${at}.source "${source}" would overwrite the page generated for "${outputs.get(output)}"`);
+          outputs.set(output, source);
+        }
+        documents.push({
+          source,
+          section: document.section,
+          title: document.title ?? null,
+          covers,
+          coversAsWritten: document.covers ?? [],
+          publish: document.publish !== false,
+        });
       });
   }
 
@@ -229,7 +241,7 @@ export function validateManifest(raw, root) {
         if (anchor !== null && anchor === '') return errors.push(`${at}.source has an empty #anchor`);
         if (!isRepoFile(root, topicPath)) return errors.push(`${at}.source "${topicPath}" does not exist (or is outside the repository)`);
         if (topicPath !== landing && !sources.has(topicPath))
-          errors.push(`${at}.source "${topicPath}" is not published; a topic must point at the landing page or a listed document`);
+          errors.push(`${at}.source "${topicPath}" is not listed; a topic must point at the landing page or a listed document`);
         topics.push({ id: topic.id, title: topic.title, source: topic.source });
       });
     }
@@ -249,6 +261,23 @@ export function validateManifest(raw, root) {
       }
   }
 
+  const allowLocalPaths = [];
+  if (Object.hasOwn(raw, 'allowLocalPaths')) {
+    if (!Array.isArray(raw.allowLocalPaths)) errors.push(`${where}: allowLocalPaths must be an array of document paths`);
+    else
+      raw.allowLocalPaths.forEach((entry, index) => {
+        const at = `${where}: allowLocalPaths[${index}]`;
+        const problem = repoPathError(entry);
+        if (problem) return errors.push(`${at} ${problem}`);
+        // Exact paths only: a glob would silently exempt documents added later.
+        if (GLOB_CHARS.test(entry)) return errors.push(`${at} "${entry}" must be an exact document path; globs are not allowed`);
+        if (entry !== landing && !sources.has(entry))
+          return errors.push(`${at} "${entry}" is not a document; list the landing page or a documents[] source`);
+        if (allowLocalPaths.includes(entry)) return errors.push(`${at} "${entry}" is listed more than once`);
+        allowLocalPaths.push(entry);
+      });
+  }
+
   return {
     manifest: {
       schemaVersion: 1,
@@ -261,6 +290,7 @@ export function validateManifest(raw, root) {
       topics,
       exclude: Array.isArray(exclude) ? exclude : [],
       redirects,
+      allowLocalPaths,
     },
     errors,
   };

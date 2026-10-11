@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "product": "sample",
+  "title": "Sample",
+  "tagline": "A fixture product with a bundle-only manual",
+  "repo": "kontourai/sample",
+  "landing": "README.md",
+  "documents": [
+    { "source": "docs/guide.md", "section": "Guides" },
+    { "source": "docs/manual.md", "section": "Agents", "publish": false, "covers": ["scripts/**"] }
+  ],
+  "topics": [
+    { "id": "usage", "title": "Usage", "source": "docs/guide.md#usage" },
+    { "id": "manual-setup", "title": "Manual setup", "source": "docs/manual.md#setup" }
+  ]
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+Additive for manifests: v0.3.0 manifests stay valid. A new gate can fail a repository that passed before, and the bundle gains documents that have no page.
+
+- **Bundle-only documents.** A `documents[]` entry accepts `"publish": false` (a boolean). The document gets no page, navigation entry, or landing card, but stays in `docs-bundle.json`, so the MCP server serves it and topics may point at it. Its bundle `url` is the GitHub blob URL at the built sha, and its `markdown`, and topic Markdown taken from it, has relative links made absolute: published targets go to their page URL, images and other embedded files (`src`, `srcset`, `poster`) to `raw.githubusercontent.com`, anything else to its GitHub blob page. Published pages that link to it get the blob URL. Every `check` gate still applies to it, and reachability counts it as listed. A redirect to it fails the `redirects` gate. The bundle `digest` is computed over the Markdown as written, so it still ignores the sha and base URL.
+- **`paths` gate.** `check` (and therefore `build`) fails with exit 1 on absolute home-directory paths (`/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\`) anywhere in the landing page or a listed document, bundle-only ones included, and reports each as `file:line`. `/Users/Shared/` and `/home/runner/` are not personal and are exempt. The optional top-level `allowLocalPaths` lists exact document paths to skip; a glob, a path that is not a document, or a repeat is a manifest error (exit 2).
+- **Topic error wording.** A topic whose source is not listed now says "is not listed" rather than "is not published", since a bundle-only document is a valid topic source.
+
 ## 0.3.0
 
 Additive: v0.2.0 manifests stay valid, and the bundle and `products.json` formats are unchanged.

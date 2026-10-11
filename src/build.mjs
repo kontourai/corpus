@@ -137,17 +137,24 @@ function renderMarkdown(markdown, fromSource, rewrite, assets) {
   };
 }
 
+/** Section -> page sources, in manifest order. Bundle-only documents have no page, so no entry. */
+function pageSections(manifest) {
+  const sections = new Map();
+  for (const document of manifest.documents) {
+    if (!document.publish) continue;
+    if (!sections.has(document.section)) sections.set(document.section, []);
+    sections.get(document.section).push(document.source);
+  }
+  return sections;
+}
+
 function navigation(manifest, titles, activeSource) {
   const fromOutput = outputPathFor(manifest, activeSource);
   const link = (source, label) => {
     const current = source === activeSource ? ' aria-current="page"' : '';
     return `<li><a href="${relativeUrl(fromOutput, outputPathFor(manifest, source))}"${current}>${escapeHtml(label)}</a></li>`;
   };
-  const sections = new Map();
-  for (const document of manifest.documents) {
-    if (!sections.has(document.section)) sections.set(document.section, []);
-    sections.get(document.section).push(document.source);
-  }
+  const sections = pageSections(manifest);
   const groups = [`<h2>Overview</h2>\n<ul>\n${link(manifest.landing, 'Home')}\n</ul>`];
   for (const [section, sources] of sections)
     groups.push(`<h2>${escapeHtml(section)}</h2>\n<ul>\n${sources.map((source) => link(source, titles.get(source))).join('\n')}\n</ul>`);
@@ -155,11 +162,7 @@ function navigation(manifest, titles, activeSource) {
 }
 
 function sectionCards(manifest, titles, descriptions) {
-  const sections = new Map();
-  for (const document of manifest.documents) {
-    if (!sections.has(document.section)) sections.set(document.section, []);
-    sections.get(document.section).push(document.source);
-  }
+  const sections = pageSections(manifest);
   if (sections.size === 0) return '';
   const blocks = [...sections].map(([section, sources]) => {
     const cards = sources
@@ -433,7 +436,7 @@ export function runBuild({ root, out, baseUrl }) {
   writeFileSync(path.join(out, 'docs-kit.css'), SITE_CSS);
   writeFileSync(path.join(out, '.nojekyll'), '');
 
-  const bundle = assembleBundle({ manifest, read, sha, siteUrl });
+  const bundle = assembleBundle({ manifest, read, sha, siteUrl, root, prefix });
   writeFileSync(path.join(out, 'docs-bundle.json'), `${JSON.stringify(bundle, null, 2)}\n`);
 
   // The marker lists every file this build wrote; the next build replaces
