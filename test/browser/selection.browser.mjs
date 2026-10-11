@@ -187,7 +187,7 @@ test('Challenge copies a verification prompt, and its issue action opens a prefi
   assert.equal(url.searchParams.get('labels'), 'docs-challenge');
   assert.equal(url.searchParams.get('title'), 'Docs challenge: docs/guide.md:14-15');
   const body = url.searchParams.get('body');
-  assert.ok(body.includes('> sample init in your repository\n'), body);
+  assert.ok(body.includes('\n```text\nsample init in your repository\n```\n'), body);
   assert.ok(body.includes(`- Source: \`docs/guide.md:14-15@${sha}\``));
   assert.ok(body.startsWith('Is this accurate?'));
 
@@ -201,8 +201,17 @@ test('Challenge copies a verification prompt, and its issue action opens a prefi
   assert.ok(capped.length <= ISSUE_URL_MAX, `issue URL is ${capped.length} characters`);
   assert.ok(capped.length > ISSUE_URL_MAX - 200, 'and keeps as much of the quote as fits');
   const cappedBody = new URL(capped).searchParams.get('body');
-  assert.match(cappedBody, /\n> Long start: evidence [^\n]*…\n/);
+  assert.match(cappedBody, /\n```text\nLong start: evidence [^\n]*…\n```\n/);
   assert.ok(cappedBody.includes(`- Source: \`docs/guide.md:44-44@${sha}\``), 'the provenance survives truncation');
+});
+
+test('the issue body fences the quote, so selected @names and #numbers stay inert, even with backticks in the text', async (t) => {
+  const page = await openPage(t, { url: '/sample/docs/twins.html' });
+  await select(page, 'p[data-src-line="11-11"]', 'Ping @octocat about ```fences``` in #123');
+  await page.locator('.dk-toolbar button[data-action="challenge-issue"]').click();
+  const body = new URL((await opened(page))[0]).searchParams.get('body');
+  assert.ok(body.includes('\n````text\nPing @octocat about ```fences``` in #123\n````\n'), body);
+  assert.ok(!body.includes('> Ping'), 'not a blockquote');
 });
 
 test('Edit opens the source on GitHub at the manifest branch and the first line', async (t) => {

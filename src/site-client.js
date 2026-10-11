@@ -159,34 +159,43 @@
     return ['I want to challenge this passage in the ' + context.title + ' docs.', '', provenance(context), '', quote(context.text), '', challengeText(context), '', locateHint(context)].join('\n');
   }
 
+  /**
+   * The quote as a fenced code block: an issue body is live Markdown, and a
+   * blockquote would turn @names into mentions and #123 into references.
+   * The fence is longer than any backtick run in the text.
+   */
+  function fenced(text) {
+    var longest = 2;
+    (text.match(/`+/g) || []).forEach(function (run) {
+      longest = Math.max(longest, run.length);
+    });
+    var fence = new Array(longest + 2).join('`');
+    return fence + 'text\n' + text + '\n' + fence;
+  }
+
   function issueUrl(context) {
     var title = 'Docs challenge: ' + context.path + (context.startLine === null ? '' : ':' + context.startLine + '-' + context.endLine);
-    var build = function (text) {
-      var body = [
-        challengeText(context),
-        '',
-        quote(text),
-        '',
-        '- Source: `' + sourceRef(context) + '`',
-        '- Section: ' + (context.heading || '(top of page)'),
-        '- Page: ' + context.url,
-      ].join('\n');
+    var build = function (text, minimal) {
+      var lines = [challengeText(context), '', fenced(text), '', '- Source: `' + sourceRef(context) + '`'];
+      if (!minimal) lines.push('- Section: ' + (context.heading || '(top of page)'), '- Page: ' + context.url);
       return (
-        'https://github.com/' + context.repo + '/issues/new?title=' + encodeURIComponent(title) +
-        '&body=' + encodeURIComponent(body) + '&labels=docs-challenge'
+        'https://github.com/' + context.repo + '/issues/new?title=' + encodeURIComponent(minimal ? title.slice(0, 200) : title) +
+        '&body=' + encodeURIComponent(lines.join('\n')) + '&labels=docs-challenge'
       );
     };
     var text = context.text;
-    var url = build(text);
+    var url = build(text, false);
     var keep = text.length;
-    // Shrink the quote until the URL fits. One character encodes to at most
-    // nine (a newline becomes %0A%3E%20), so cutting overflow/9 never overshoots.
+    // Shrink the quote until the URL fits. One UTF-16 unit encodes to at most
+    // nine characters (%E2%80%A6), so cutting overflow/9 never overshoots.
     while (url.length > ISSUE_URL_MAX && keep > 0) {
       keep = Math.max(0, keep - Math.max(1, Math.ceil((url.length - ISSUE_URL_MAX) / 9)));
       // Never leave half a surrogate pair: encodeURIComponent throws on one.
       text = context.text.slice(0, keep).replace(/[\uD800-\uDBFF]$/, '').replace(/\s+$/, '') + '\u2026';
-      url = build(text);
+      url = build(text, false);
     }
+    // Still too long without any quote (an enormous heading or page URL): drop them.
+    if (url.length > ISSUE_URL_MAX) url = build('\u2026', true);
     return url;
   }
 

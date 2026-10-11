@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
-import { locateInBundle, rankMatches } from './locate.mjs';
+import { locateInBundle } from './locate.mjs';
 import { MANIFEST_FILE, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
@@ -489,16 +489,15 @@ export function createDocsServer(source) {
       const { bundle } = picked;
       const found = locateInBundle(bundle, quote, { source: only });
       if (found.error) return toolError(found.error, { ...(found.availableDocuments ? { availableDocuments: found.availableDocuments } : {}), ...stamp(bundle) });
-      if (found.matches.length === 0)
+      if (found.best === null)
         return toolError(`no match for the quote in ${product}${only === undefined ? '' : ` (${only})`}`, { documentsSearched: found.documentsSearched, ...stamp(bundle) });
-      const { best, alternatives, confidence } = rankMatches(found.matches);
-      const shape = ({ exact, verbatim, ...match }) => ({ ...match, match: verbatim ? 'verbatim' : exact ? 'normalized' : 'head-and-tail' });
       return json({
         product,
         ...stamp(bundle),
-        confidence,
-        ...shape(best),
-        ...(alternatives.length > 0 ? { ambiguous: true, alternatives: alternatives.map(shape) } : {}),
+        confidence: found.confidence,
+        ...found.best,
+        // Only the first MAX_ALTERNATIVES others are listed; matchCount is the total.
+        ...(found.matchCount > 1 ? { ambiguous: true, matchCount: found.matchCount, alternatives: found.alternatives } : {}),
       });
     },
   );

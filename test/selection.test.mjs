@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
@@ -238,12 +238,31 @@ test('mcp locate reports an ambiguous quote with lower confidence and the altern
   assert.equal(data.ambiguous, true);
   assert.equal(data.confidence, 0.5);
   assert.deepEqual([data.source, data.startLine, data.heading, data.anchor], ['docs/twins.md', 5, 'First', 'first']);
+  assert.equal(data.matchCount, 2);
   assert.equal(data.alternatives.length, 1);
   const [other] = data.alternatives;
   assert.deepEqual([other.source, other.startLine, other.endLine, other.heading, other.anchor], ['docs/twins.md', 9, 9, 'Second', 'second']);
   assert.equal(other.blobUrl, `https://github.com/kontourai/sample/blob/${sha}/docs/twins.md#L9-L9`);
   const scoped = await locate(client, { product: 'sample', quote: 'gate holds', source: 'README.md' });
   assert.equal(scoped.isError, true, 'source limits the search');
+});
+
+test('mcp locate finds text inside code as the page shows it, and caps the alternatives it lists', async (t) => {
+  const repo = fixtureRepo(t, 'selection', { as: 'sample' });
+  // Fifteen more copies make 17 candidates for one quote.
+  appendFileSync(path.join(repo, 'docs', 'twins.md'), '\nThe same sentence appears twice in this document.\n'.repeat(15));
+  commitAll(repo, 'many copies');
+  const client = await connect(t, ['--repo', repo]);
+  // `<dir>` sits in a code span, so the page shows it; it is not an HTML tag there.
+  const code = await locate(client, { product: 'sample', quote: 'then run docs-kit build --root <dir>.' });
+  assert.equal(code.isError, false, JSON.stringify(code.data));
+  assert.deepEqual([code.data.source, code.data.startLine, code.data.endLine], ['docs/twins.md', 11, 11]);
+  const fence = await locate(client, { product: 'sample', quote: 'sample run --fast\nsample report' });
+  assert.deepEqual([fence.data.startLine, fence.data.endLine, fence.data.match, fence.data.confidence], [27, 28, 'verbatim', 1]);
+  const many = await locate(client, { product: 'sample', quote: 'The same sentence appears twice in this document.' });
+  assert.equal(many.data.matchCount, 17);
+  assert.equal(many.data.alternatives.length, 10, 'at most ten alternatives are listed');
+  assert.equal(many.data.confidence, 0.06);
 });
 
 test('mcp locate returns an error for no match, a too-short quote, and an unknown source', async (t) => {
