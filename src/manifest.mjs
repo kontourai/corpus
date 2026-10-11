@@ -11,7 +11,7 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude', 'redirects'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents'];
 const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
@@ -86,6 +86,49 @@ export function splitTopicSource(source) {
   return index === -1
     ? { path: source, anchor: null }
     : { path: source.slice(0, index), anchor: source.slice(index + 1) };
+}
+
+/**
+ * A redirects key is the site-relative path of an old page URL. Returns an
+ * error string, or null when the key is acceptable.
+ */
+function redirectKeyError(key) {
+  if (key === '') return 'must be a non-empty path';
+  if (key.startsWith('/')) return 'must be site-relative, without a leading "/"';
+  if (key.includes('..')) return 'must not contain ".."';
+  if (/[#?]/.test(key)) return 'must not contain "#" or "?"';
+  if (!key.endsWith('.html')) return 'must end in ".html"';
+  const problem = repoPathError(key);
+  if (problem) return problem;
+  if (path.posix.basename(key) === '.html') return 'must name a file before ".html"';
+  return null;
+}
+
+/**
+ * A redirects value is a published source (`path` or `path#anchor`) or an
+ * absolute https:// URL. Only the shape is checked here; whether the source is
+ * published and the anchor resolves is the `redirects` gate in check.mjs.
+ */
+function parseRedirectTarget(value) {
+  if (typeof value !== 'string' || value.trim() === '') return { error: 'must be a non-empty string' };
+  if (value !== value.trim() || /\s/.test(value)) return { error: 'must not contain whitespace' };
+  if (/^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith('//')) {
+    let url;
+    try {
+      url = new URL(value);
+    } catch {
+      return { error: `"${value}" is not a valid URL` };
+    }
+    if (url.protocol !== 'https:' || !value.toLowerCase().startsWith('https://') || url.hostname === '')
+      return { error: `must be a published source path or an absolute https:// URL, got "${value}"` };
+    return { url: value };
+  }
+  const { path: source, anchor } = splitTopicSource(value);
+  const problem = repoPathError(source);
+  if (problem) return { error: `path ${problem}` };
+  if (!source.endsWith('.md')) return { error: `must be a published .md source or an https:// URL, got "${value}"` };
+  if (anchor !== null && anchor === '') return { error: 'has an empty #anchor' };
+  return { source, anchor };
 }
 
 export function globMatcher(globs = []) {
@@ -191,6 +234,20 @@ export function validateManifest(raw, root) {
     }
   }
 
+  const redirects = [];
+  if (Object.hasOwn(raw, 'redirects')) {
+    if (!isPlainObject(raw.redirects)) errors.push(`${where}: redirects must be an object mapping old paths to targets`);
+    else
+      for (const [from, to] of Object.entries(raw.redirects)) {
+        const at = `${where}: redirects["${from}"]`;
+        const keyProblem = redirectKeyError(from);
+        if (keyProblem) errors.push(`${at}: key ${keyProblem}`);
+        const target = parseRedirectTarget(to);
+        if (target.error) errors.push(`${at}: target ${target.error}`);
+        if (!keyProblem && !target.error) redirects.push({ from, ...target });
+      }
+  }
+
   return {
     manifest: {
       schemaVersion: 1,
@@ -202,9 +259,75 @@ export function validateManifest(raw, root) {
       documents,
       topics,
       exclude: Array.isArray(exclude) ? exclude : [],
+      redirects,
     },
     errors,
   };
+}
+
+/**
+ * JSON.parse keeps only the last of two equal keys, so a repeated redirects
+ * key would vanish silently. Scan the manifest text (already known to be valid
+ * JSON) and return every key that appears more than once in the top-level
+ * `redirects` object.
+ */
+export function duplicateRedirectKeys(text) {
+  const STRING = /"(?:[^"\\]|\\.)*"/y;
+  const WS = /\s*/y;
+  let i = 0;
+  const skip = () => {
+    WS.lastIndex = i;
+    WS.exec(text);
+    i = WS.lastIndex;
+  };
+  const string = () => {
+    STRING.lastIndex = i;
+    const match = STRING.exec(text);
+    i = STRING.lastIndex;
+    return JSON.parse(match[0]);
+  };
+  const duplicates = [];
+  const value = (keyPath) => {
+    skip();
+    if (text[i] === '{') {
+      i += 1;
+      const seen = new Set();
+      skip();
+      while (text[i] !== '}') {
+        skip();
+        const key = string();
+        if (keyPath.length === 1 && keyPath[0] === 'redirects') {
+          if (seen.has(key) && !duplicates.includes(key)) duplicates.push(key);
+          seen.add(key);
+        }
+        skip();
+        i += 1; // ':'
+        value([...keyPath, key]);
+        skip();
+        if (text[i] === ',') i += 1;
+        skip();
+      }
+      i += 1;
+    } else if (text[i] === '[') {
+      i += 1;
+      skip();
+      while (text[i] !== ']') {
+        value([...keyPath, null]);
+        skip();
+        if (text[i] === ',') i += 1;
+        skip();
+      }
+      i += 1;
+    } else if (text[i] === '"') string();
+    else {
+      const scalar = /-?[0-9][0-9.eE+-]*|true|false|null/y;
+      scalar.lastIndex = i;
+      scalar.exec(text);
+      i = scalar.lastIndex;
+    }
+  };
+  value([]);
+  return duplicates;
 }
 
 /** Read and parse docs-kit.json. A missing or unparseable file is a usage error. */

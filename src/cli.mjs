@@ -10,7 +10,8 @@ export const HELP = `docs-kit ${VERSION}: docs gate, GitHub Pages site, and docs
 Usage: docs-kit <command> [options]
 
 Commands:
-  check   Run the docs gates: manifest, links, reachability, topics, and freshness with --base
+  check   Run the docs gates: manifest, links, reachability, topics, redirects,
+          covers, and freshness with --base
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
