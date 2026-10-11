@@ -65,6 +65,7 @@ main.content { padding: 1.5rem; min-width: 0; }
 .doc .anchor { margin-left: .4rem; color: var(--muted); text-decoration: none; opacity: 0; font-weight: 400; }
 .doc :is(h1, h2, h3, h4, h5, h6):hover .anchor, .doc .anchor:focus { opacity: 1; }
 .doc img { max-width: 100%; height: auto; }
+.doc pre.mermaid { background: transparent; text-align: center; }
 .doc blockquote { margin: 1rem 0; padding: .25rem 1rem; border-left: 4px solid var(--border); color: var(--muted); }
 .doc table { border-collapse: collapse; width: 100%; }
 .doc th, .doc td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
@@ -83,8 +84,30 @@ main.content { padding: 1.5rem; min-width: 0; }
 .card span { color: var(--muted); font-size: .9rem; }
 `;
 
+/**
+ * Mermaid for pages with a ```mermaid fence, pinned to one exact file by SRI.
+ * The integrity hash is sha384 of
+ * https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/mermaid.min.js, which is
+ * byte-identical to dist/mermaid.min.js in the npm tarball. Changing the
+ * version means recomputing the hash from the fetched file.
+ */
+export const MERMAID_VERSION = '12.1.0';
+export const MERMAID_SRC = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.min.js`;
+export const MERMAID_INTEGRITY = 'sha384-EbBpjO7rlR6eqZEcG7GaPpyk9H9WrMyPWX4d3KvPYltgt8Z8l0z6R56B1qP40pR4';
+
+/**
+ * The template's own scripts, outside the sanitized document content.
+ * securityLevel 'strict' disables click handlers. Strict mode still renders
+ * HTML inside labels (through Mermaid's own DOMPurify), which would bypass
+ * this site's sanitizer and link checks, so htmlLabels is off and labels are
+ * SVG text. The theme is chosen once from prefers-color-scheme at load.
+ */
+const MERMAID_SCRIPTS = `<script src="${MERMAID_SRC}" integrity="${MERMAID_INTEGRITY}" crossorigin="anonymous"></script>
+<script>mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', htmlLabels: false, flowchart: { htmlLabels: false }, theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' });</script>
+`;
+
 /** One page of a product site. `toRoot` is the relative prefix back to the site root. */
-export function sitePage({ manifest, title, description, navHtml, content, toRoot, sha }) {
+export function sitePage({ manifest, title, description, navHtml, content, toRoot, sha, mermaid = false }) {
   const repoUrl = `https://github.com/${manifest.repo}`;
   return `<!doctype html>
 <html lang="en">
@@ -117,7 +140,7 @@ ${content}
   <a href="${escapeHtml(repoUrl)}">${escapeHtml(manifest.repo)}</a> with docs-kit.
   Part of the <a href="${HUB_URL}">Kontour documentation hub</a>.
 </footer>
-</body>
+${mermaid ? MERMAID_SCRIPTS : ''}</body>
 </html>
 `;
 }

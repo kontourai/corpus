@@ -14,7 +14,7 @@
 | `.docs-kit-build` | JSON list of every file the build wrote; the next `build` replaces the directory only if it holds exactly those files (a forged marker is trusted) |
 | `docs-bundle.json` | the agent bundle; see [the bundle format](bundle-format.md#docs-bundlejson) |
 
-Every page has the product title and tagline, navigation grouped by `section` in manifest order, a link to the hub, a link to the repository, and the source file at the built commit. Headings get GitHub-compatible `id`s, so anchors that work on GitHub also work on the site.
+The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` without a tagline. Each document page's `<title>` is `<document title> · <title>`. Every page has the product title and tagline, navigation grouped by `section` in manifest order, a link to the hub, a link to the repository, and the source file at the built commit. Headings get GitHub-compatible `id`s, so anchors that work on GitHub also work on the site.
 
 ## Link rewriting
 
@@ -32,6 +32,10 @@ The same rewriting applies to `href`, `src`, `srcset`, and `poster` attributes i
 ## Sanitization
 
 Every product site shares the `https://kontourai.github.io` origin, so a script in one product's docs could act on every other product's pages. The rendered Markdown is passed through `sanitize-html` with a GitHub-like allowlist. `script`, `style`, `iframe`, and `on*` attributes are removed, and URLs are limited to `http(s)`, `mailto`, and `data:` images. Heading `id`s, anchor links, images, tables, `details`/`summary` (including `open`), `video`/`source` with their media attributes, and task-list checkboxes are kept.
+
+## Mermaid diagrams
+
+A fenced code block whose info string starts with `mermaid` renders as `<pre class="mermaid">` holding the escaped diagram source, not as a code block. A page with at least one such block loads Mermaid from `https://cdn.jsdelivr.net/npm/mermaid@<version>/dist/mermaid.min.js`, pinned to an exact version with an SRI `integrity` hash and `crossorigin="anonymous"`, and calls `mermaid.initialize` with `startOnLoad: true`, `securityLevel: 'strict'`, and the `dark` or `default` theme, chosen from `prefers-color-scheme` when the page loads. Pages without a mermaid block load no script. The script is part of the page template, not of the document content, so a `script` written in Markdown is still removed. `docs-bundle.json` keeps the Markdown as written.
 
 ## Generated-site check
 

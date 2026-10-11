@@ -13,7 +13,7 @@ const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
 const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'documents', 'topics', 'exclude'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents'];
-const DOCUMENT_KEYS = ['source', 'section', 'covers'];
+const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
 const TOPIC_KEYS = ['id', 'title', 'source'];
 const TOPIC_REQUIRED = ['id', 'title', 'source'];
@@ -139,6 +139,7 @@ export function validateManifest(raw, root) {
         const at = `${where}: documents[${index}]`;
         if (!checkKeys(document, at, DOCUMENT_KEYS, DOCUMENT_REQUIRED, errors)) return;
         if (Object.hasOwn(document, 'section')) checkString(document.section, `${at}.section`, errors);
+        if (Object.hasOwn(document, 'title')) checkString(document.title, `${at}.title`, errors);
         let covers = [];
         if (Object.hasOwn(document, 'covers')) {
           const before = errors.length;
@@ -159,7 +160,7 @@ export function validateManifest(raw, root) {
         const output = source.replace(/\.md$/, '.html');
         if (outputs.has(output)) errors.push(`${at}.source "${source}" would overwrite the page generated for "${outputs.get(output)}"`);
         outputs.set(output, source);
-        documents.push({ source, section: document.section, covers, coversAsWritten: document.covers ?? [] });
+        documents.push({ source, section: document.section, title: document.title ?? null, covers, coversAsWritten: document.covers ?? [] });
       });
   }
 

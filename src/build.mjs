@@ -85,16 +85,30 @@ function createHrefRewriter({ root, manifest, sha, prefix, published }) {
   };
 }
 
+/** True for a fenced block whose info string's first word is `mermaid`, as on GitHub. */
+function isMermaidFence(token) {
+  return /^mermaid(?:\s|$)/.test(token.lang ?? '');
+}
+
 /**
  * Render one page. Assets are collected from the sanitized HTML, so a file
  * referenced only by a tag the sanitizer strips (iframe, embed, script, ...)
- * is never copied.
+ * is never copied. Returns { html, mermaid }, where `mermaid` says whether a
+ * mermaid fence was rendered, so the page template loads Mermaid only there.
  */
 function renderMarkdown(markdown, fromSource, rewrite, assets) {
   const pending = new Map();
+  let mermaid = false;
   const md = new Marked({ gfm: true });
   md.use({
     renderer: {
+      // Mermaid reads the diagram source from the element's text, so it is
+      // escaped like any code block and passes the sanitizer as plain text.
+      code(token) {
+        if (!isMermaidFence(token)) return false;
+        mermaid = true;
+        return `<pre class="mermaid">${escapeHtml(token.text)}</pre>\n`;
+      },
       heading(token) {
         const inner = this.parser.parseInline(token.tokens);
         const id = escapeHtml(token.slugId);
@@ -115,9 +129,12 @@ function renderMarkdown(markdown, fromSource, rewrite, assets) {
   });
   const html = sanitizeHtml(md.parser(tokens), SANITIZE_OPTIONS);
   for (const { url } of extractHtmlReferences(html)) if (pending.has(url)) assets.add(pending.get(url));
-  return html
-    .replaceAll('<table>', '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>')
-    .replaceAll('</table>', '</table></div>');
+  return {
+    html: html
+      .replaceAll('<table>', '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>')
+      .replaceAll('</table>', '</table></div>'),
+    mermaid,
+  };
 }
 
 function navigation(manifest, titles, activeSource) {
@@ -317,9 +334,10 @@ export function runBuild({ root, out, baseUrl }) {
   const rewrite = createHrefRewriter({ root, manifest, sha, prefix, published });
   const titles = new Map();
   const descriptions = new Map();
+  const overrides = new Map(manifest.documents.map((document) => [document.source, document.title]));
   for (const source of published) {
     const { analysis } = read(source);
-    titles.set(source, documentTitle(analysis, source));
+    titles.set(source, documentTitle(analysis, source, overrides.get(source)));
     descriptions.set(source, firstParagraph(analysis));
   }
 
@@ -329,7 +347,7 @@ export function runBuild({ root, out, baseUrl }) {
     const depth = output.split('/').length - 1;
     const toRoot = '../'.repeat(depth);
     const isLanding = source === manifest.landing;
-    const body = renderMarkdown(markdown, source, rewrite, assets);
+    const { html: body, mermaid } = renderMarkdown(markdown, source, rewrite, assets);
     const sourceUrl = `https://github.com/${manifest.repo}/blob/${sha}/${encodePath(`${prefix}${source}`)}`;
     const content = [
       `<article class="doc">\n${body}\n</article>`,
@@ -338,12 +356,17 @@ export function runBuild({ root, out, baseUrl }) {
     ].join('\n');
     const html = sitePage({
       manifest,
-      title: isLanding ? `${manifest.title} documentation` : `${titles.get(source)} · ${manifest.title}`,
+      title: isLanding
+        ? manifest.tagline
+          ? `${manifest.title} — ${manifest.tagline}`
+          : `${manifest.title} documentation`
+        : `${titles.get(source)} · ${manifest.title}`,
       description: isLanding ? manifest.tagline || descriptions.get(source) : descriptions.get(source),
       navHtml: navigation(manifest, titles, source),
       content,
       toRoot,
       sha,
+      mermaid,
     });
     const target = toFsPath(out, output);
     mkdirSync(path.dirname(target), { recursive: true });

@@ -53,7 +53,7 @@ Each repository has a `docs-kit.json` at its root:
 | `tagline` | no | One line shown in the site header and on the hub. |
 | `repo` | yes | `owner/name` on GitHub. |
 | `landing` | no | Markdown rendered as the site's `index.html`. Default `README.md`. |
-| `documents` | yes | Published pages, in navigation order. Each entry has `source` (a `.md` path), `section` (the navigation group) and, optionally, `covers`. |
+| `documents` | yes | Published pages, in navigation order. Each entry has `source` (a `.md` path), `section` (the navigation group) and, optionally, `title` and `covers`. |
 | `topics` | no | Curated entry points for agents. Each has `id` (a lowercase slug), `title`, and `source`, which is either `path` or `path#anchor`. |
 | `exclude` | no | Globs for `docs/**/*.md` files that are deliberately unpublished. |
 
@@ -62,7 +62,9 @@ The validation rules:
 - Validation is strict. An unknown key at any level is refused.
 - Every path is repository-relative, POSIX, and normalized. Absolute paths, `..` segments, and symlinks that resolve outside the repository are refused. Every source must exist.
 - Documents are listed once. They may not repeat the landing page, and they may not match `exclude`.
-- A topic `source` must point at the landing page or at a listed document, so it is published. Its `#anchor` must be a top-level heading, slugged by [github-slugger](https://github.com/Flet/github-slugger): lowercase, punctuation dropped, spaces become `-`, and repeated headings get `-1`, `-2`, and so on.
+- A document's title is its first Markdown H1 outside blockquotes and lists, else the text of the first raw-HTML `<h1>` that has text, else a front-matter `title`, else the file name without `.md`. A `title` on the `documents` entry overrides all of them in the navigation, the page `<title>`, and `docs-bundle.json`; it must be a non-empty string without leading or trailing whitespace.
+- A topic `source` must point at the landing page or at a listed document, so it is published. Its `#anchor` must be a heading outside blockquotes and lists (any level, `#` through `######`), slugged by [github-slugger](https://github.com/Flet/github-slugger): lowercase, punctuation dropped, spaces become `-`, and repeated headings get `-1`, `-2`, and so on.
+- A leading YAML front-matter block is stripped before checking, rendering, and bundling, and check failures still report the source file's line numbers. A block is front matter when line 1 is `---` (after a UTF-8 BOM, which is always dropped), a `---` or `...` line closes it within the first 2000 lines, and it holds at least one top-level key line (`key:` at column 0). Otherwise, such as a thematic break followed by prose and another `---`, the document is left as written. Only a simple `title: value` (optionally quoted) is read from it; there is no YAML parser.
 - `covers` holds globs of the code a document describes; the [freshness gate](#check) uses them. A bare directory name such as `src/cli` means `src/cli/**`. A glob that matches no tracked file (`git ls-files`; every file outside git) fails the `covers` gate of `check`, because it could never mark its document stale. It does not block `build` or the MCP server.
 
 Section names group the navigation in the order they first appear in `documents`.
@@ -86,7 +88,7 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 1. **manifest:** `docs-kit.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (or is the landing page) or is matched by `exclude`.
-4. **topics:** every topic anchor resolves to a top-level heading.
+4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
 5. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
 6. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
@@ -98,10 +100,11 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 
 `build` runs `check` without the covers and freshness gates and refuses to build if it fails. It then replaces `--out` with:
 
-- `index.html` (the landing page), one page per document, and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository.
+- `index.html` (the landing page), one page per document, and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository. The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` when there is no tagline.
 - Links between published documents, rewritten to the generated pages, in Markdown and in raw HTML (`href`, `src`, `srcset`). Links to other repository files go to `https://github.com/<repo>/blob/<sha>/<path>`, or to `tree` for directories.
 - Copies of the local images and embedded media (`src`, `srcset`, `poster`) that published documents reference. Inside git, only git-tracked files are copied, never anything under `.git/` or through a symlink, and each file is capped at 25 MB; a larger tracked file keeps its GitHub link. Assets are collected after sanitization, so a file referenced only by a stripped tag (`iframe`, `embed`, `script`, ...) is never copied.
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
+- Mermaid diagrams. A fenced ` ```mermaid ` block becomes `<pre class="mermaid">` holding the escaped diagram source. Only pages with such a block load Mermaid, from jsDelivr, pinned to one version with an SRI `integrity` hash, with `securityLevel: 'strict'` and `htmlLabels: false` (labels are plain SVG text, so diagram HTML never bypasses the sanitizer), and a theme that follows `prefers-color-scheme`. That script is part of the page template; a `script` in the Markdown is still stripped. See [the generated site](docs/site-output.md#mermaid-diagrams).
 - `.nojekyll`, a `.docs-kit-build` marker, and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
 
 `build` then checks every internal `href` and `src` in the generated site, including `#fragments`, and exits `1` if any of them is broken. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory unless every file in it is listed in the `.docs-kit-build` manifest that a previous build wrote. This applies inside or outside git, whether or not the directory is ignored. A file added by hand blocks the rebuild, and the error names it. A new or empty directory is fine. A forged marker is trusted: docs-kit deletes whatever a marker lists.
@@ -217,7 +220,8 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 - Headings that contain images or code spans can slug slightly differently from github.com in edge cases.
 - Links cannot point above `--root`, and a leading `/` resolves from `--root`, not from the git top level.
 - Freshness is file-level: any edit to a covering document in the range counts as an update.
-- Topic anchors must be top-level headings, not headings inside quotes or lists.
+- Topic anchors must be headings outside blockquotes and lists. A heading inside a quote or a list item does not qualify, at any heading level.
+- Mermaid diagrams need JavaScript and jsDelivr. Without them the page shows the diagram source as preformatted text.
 - Raw-HTML `name` attributes count as anchors in `check`, but the sanitizer keeps `name` only on `<a>`. A `name` on another element passes `check` and then fails the generated-site check in `build`. Element `id`s are not prefixed with `user-content-` as they are on GitHub.
 - MCP `search` is plain term matching with no stemming or synonyms.
 - The hub calls the GitHub API without authentication, which allows 60 requests per hour per IP. The 10-minute `localStorage` cache keeps normal use within that limit.

@@ -47,10 +47,13 @@ export function bundleDigest(documents, topics) {
 export function assembleBundle({ manifest, read, sha, siteUrl, builtAt = new Date().toISOString() }) {
   const pageUrl = (source) => `${siteUrl}${encodePath(outputPathFor(manifest, source))}`;
   // The landing page is documents[0] with `landing: true` and no section.
-  const documents = [{ source: manifest.landing, section: null, landing: true }, ...manifest.documents.map(({ source, section }) => ({ source, section, landing: false }))].map(
-    ({ source, section, landing }) => {
+  const documents = [
+    { source: manifest.landing, section: null, title: null, landing: true },
+    ...manifest.documents.map(({ source, section, title }) => ({ source, section, title, landing: false })),
+  ].map(
+    ({ source, section, title, landing }) => {
       const { markdown, analysis } = read(source);
-      return { source, section, title: documentTitle(analysis, source), landing, url: pageUrl(source), markdown };
+      return { source, section, title: documentTitle(analysis, source, title), landing, url: pageUrl(source), markdown };
     },
   );
   const topics = manifest.topics.map(({ id, title, source }) => {

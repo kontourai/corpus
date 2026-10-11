@@ -4,7 +4,7 @@ import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
 import { MANIFEST_FILE, globMatcher, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
-import { analyzeMarkdown, resolveLink } from './markdown.mjs';
+import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
 /** Lazily lexes repo Markdown so each file is read and analyzed once per run. */
@@ -12,8 +12,10 @@ export function createDocumentReader(root) {
   const cache = new Map();
   return (repoPath) => {
     if (!cache.has(repoPath)) {
-      const markdown = readFileSync(toFsPath(root, repoPath), 'utf8');
-      cache.set(repoPath, { markdown, analysis: analyzeMarkdown(markdown) });
+      // Front matter is stripped once here, so links, anchors, topics, the
+      // rendered page, and the bundle markdown all see the same body.
+      const { body, lineOffset, title } = splitFrontMatter(readFileSync(toFsPath(root, repoPath), 'utf8'));
+      cache.set(repoPath, { markdown: body, analysis: analyzeMarkdown(body, { lineOffset, frontMatterTitle: title }) });
     }
     return cache.get(repoPath);
   };
@@ -79,7 +81,7 @@ export function checkReachability(root, manifest) {
     .map((file) => `${file} is neither listed in documents nor matched by exclude`);
 }
 
-/** Gate 4: topic anchors resolve to top-level headings (GitHub slug rules). */
+/** Gate 4: topic anchors resolve to headings outside blockquotes and lists (GitHub slug rules). */
 export function checkTopics(manifest, read) {
   const failures = [];
   manifest.topics.forEach((topic) => {
@@ -91,7 +93,7 @@ export function checkTopics(manifest, read) {
       const known = analysis.headings.map((heading) => `#${heading.slug}`).slice(0, 12).join(', ');
       failures.push(`topic "${topic.id}": #${anchor} does not match a heading in ${path}${known ? ` (headings: ${known})` : ''}`);
     } else if (!matches.some((heading) => heading.topLevel)) {
-      failures.push(`topic "${topic.id}": #${anchor} in ${path} is a heading nested in a quote or list; topics need a top-level heading`);
+      failures.push(`topic "${topic.id}": #${anchor} in ${path} is a heading nested in a quote or list; topics need a heading outside blockquotes and lists`);
     }
   });
   return failures;

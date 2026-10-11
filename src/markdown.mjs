@@ -1,6 +1,6 @@
 import path from 'node:path';
 import GithubSlugger, { slug } from 'github-slugger';
-import { Tokenizer } from 'htmlparser2';
+import { Parser, Tokenizer } from 'htmlparser2';
 import { Lexer, marked } from 'marked';
 
 /** GitHub heading slug for one heading, via github-slugger (what GitHub uses). */
@@ -158,6 +158,58 @@ export function extractHtmlAnchors(html) {
     .map((attribute) => attribute.value);
 }
 
+export const FRONT_MATTER_MAX_LINES = 2000;
+const FRONT_MATTER_OPEN = /^---[ \t]*$/;
+const FRONT_MATTER_CLOSE = /^(?:---|\.\.\.)[ \t]*$/;
+const FRONT_MATTER_KEY = /^[A-Za-z_][\w.-]*\s*:(?:\s|$)/;
+
+/**
+ * Split a leading YAML front-matter block, Jekyll style: `---` on line 1 and
+ * a closing `---` or `...` line within the first FRONT_MATTER_MAX_LINES
+ * lines, after dropping a leading UTF-8 BOM. The block must hold at least one
+ * top-level `key:` line; without one, a leading `---` is a thematic break
+ * and the next `---` is content, so stripping would delete prose. An
+ * unclosed or keyless block is not front matter, so nothing is stripped.
+ * Returns { body, lineOffset, title }: `lineOffset` is the number of source
+ * lines removed, so body line N is source line N + lineOffset, and `title`
+ * is a simple top-level `title: value` (optionally quoted) or null. No YAML
+ * parser: any other form of title is ignored.
+ */
+export function splitFrontMatter(text) {
+  // A leading BOM is dropped in every case: it is invisible, and it would stop
+  // both `---` and a first-line `# heading` from being recognized.
+  const source = text.replace(/^\uFEFF/, '');
+  const none = { body: source, lineOffset: 0, title: null };
+  const lines = source.split('\n');
+  if (lines.length < 2 || !FRONT_MATTER_OPEN.test(lines[0].replace(/\r$/, ''))) return none;
+  const limit = Math.min(lines.length, FRONT_MATTER_MAX_LINES);
+  for (let close = 1; close < limit; close++) {
+    if (!FRONT_MATTER_CLOSE.test(lines[close].replace(/\r$/, ''))) continue;
+    const block = lines.slice(1, close).map((line) => line.replace(/\r$/, ''));
+    if (!block.some((line) => FRONT_MATTER_KEY.test(line))) return none;
+    return { body: lines.slice(close + 1).join('\n'), lineOffset: close + 1, title: frontMatterTitle(block) };
+  }
+  return none;
+}
+
+function frontMatterTitle(lines) {
+  for (const line of lines) {
+    const match = /^title:(?:[ \t]+(.*))?$/.exec(line);
+    if (!match) continue;
+    const value = (match[1] ?? '').trim();
+    let title;
+    const quoted = /^"((?:[^"\\]|\\.)*)"(?:[ \t]+#.*)?$/.exec(value) ?? /^'((?:[^']|'')*)'(?:[ \t]+#.*)?$/.exec(value);
+    if (quoted) title = value[0] === '"' ? quoted[1].replace(/\\(["\\])/g, '$1') : quoted[1].replaceAll("''", "'");
+    // Unquoted: a plain scalar up to a ` #` comment. Block scalars, flow
+    // collections, anchors, tags, and null are not the simple form.
+    else if (/^[|>[{&*!'"%@`]/.test(value)) return null;
+    else title = value.replace(/[ \t]+#.*$/, '');
+    title = title.trim();
+    return title === '' || (!quoted && /^(?:~|null)$/i.test(title)) ? null : title;
+  }
+  return null;
+}
+
 function lineAt(source, index) {
   let line = 1;
   for (let i = 0; i < index && i < source.length; i++) if (source.charCodeAt(i) === 10) line++;
@@ -168,9 +220,11 @@ function lineAt(source, index) {
  * Lex a Markdown document once and report what the gates and the builder
  * need: headings with GitHub slugs, every anchor (heading slugs plus raw-HTML
  * id/name), every Markdown link and image plus raw-HTML href/src/srcset, and
- * the title (first top-level H1).
+ * the title (first top-level Markdown H1, else the first top-level raw-HTML
+ * `<h1>` with text, else `frontMatterTitle`). `source` is the body after
+ * front matter; `lineOffset` maps its line numbers back to the file.
  */
-export function analyzeMarkdown(source) {
+export function analyzeMarkdown(source, { lineOffset = 0, frontMatterTitle = null } = {}) {
   const tokens = Lexer.lex(source, { gfm: true });
   const slug = createSlugger();
   const headings = [];
@@ -194,7 +248,7 @@ export function analyzeMarkdown(source) {
         if (index === -1) index = source.indexOf(token.raw);
         if (index !== -1) cursor = index + token.raw.length;
         for (const { attr, url } of references)
-          links.push({ kind: 'html', attr, href: url, text: attr, line: index === -1 ? null : lineAt(source, index) });
+          links.push({ kind: 'html', attr, href: url, text: attr, line: index === -1 ? null : lineAt(source, index) + lineOffset });
       }
     } else if ((token.type === 'link' || token.type === 'image') && typeof token.href === 'string') {
       let index = source.indexOf(token.raw, cursor);
@@ -204,18 +258,57 @@ export function analyzeMarkdown(source) {
         kind: token.type,
         href: token.href,
         text: token.type === 'image' ? token.text : plainText(token.tokens) || token.text,
-        line: index === -1 ? null : lineAt(source, index),
+        line: index === -1 ? null : lineAt(source, index) + lineOffset,
       });
     }
   });
 
   const h1 = headings.find((heading) => heading.depth === 1 && heading.topLevel);
-  return { tokens, headings, anchors, links, title: h1?.text || null };
+  return { tokens, headings, anchors, links, title: h1?.text || htmlH1Text(tokens) || frontMatterTitle };
 }
 
-/** Document title: first H1, else the file name without its extension. */
-export function documentTitle(analysis, source) {
-  return analysis.title || path.posix.basename(source).replace(/\.md$/i, '');
+/**
+ * Text of the first raw-HTML `<h1>` with text in a top-level HTML block, as a
+ * browser would show it (tags dropped, entities decoded, whitespace
+ * collapsed). An `<h1>` holding only an image has no text and is skipped.
+ */
+function htmlH1Text(tokens) {
+  for (const token of tokens) {
+    if (token.type !== 'html' || !token.text) continue;
+    const found = [];
+    let depth = 0;
+    let text = '';
+    const parser = new Parser(
+      {
+        onopentag(name) {
+          if (name === 'h1' && depth++ === 0) text = '';
+        },
+        ontext(chunk) {
+          if (depth > 0) text += chunk;
+        },
+        onclosetag(name) {
+          if (name === 'h1' && depth > 0 && --depth === 0) found.push(text);
+        },
+      },
+      { decodeEntities: true },
+    );
+    parser.write(token.text);
+    parser.end();
+    // An <h1> left open at the end of the block (closed in a later block) still counts.
+    if (depth > 0) found.push(text);
+    const title = found.map((value) => value.replace(/\s+/g, ' ').trim()).find(Boolean);
+    if (title) return title;
+  }
+  return null;
+}
+
+/**
+ * Document title: the manifest `title` override, else the first Markdown H1,
+ * else the first raw-HTML `<h1>`, else the front-matter `title`, else the
+ * file name without its extension.
+ */
+export function documentTitle(analysis, source, override = null) {
+  return override || analysis.title || path.posix.basename(source).replace(/\.md$/i, '');
 }
 
 /**
