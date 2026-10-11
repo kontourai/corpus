@@ -158,31 +158,36 @@ export function extractHtmlAnchors(html) {
     .map((attribute) => attribute.value);
 }
 
-export const FRONT_MATTER_MAX_LINES = 200;
+export const FRONT_MATTER_MAX_LINES = 2000;
 const FRONT_MATTER_OPEN = /^---[ \t]*$/;
 const FRONT_MATTER_CLOSE = /^(?:---|\.\.\.)[ \t]*$/;
+const FRONT_MATTER_KEY = /^[A-Za-z_][\w.-]*\s*:(?:\s|$)/;
 
 /**
  * Split a leading YAML front-matter block, Jekyll style: `---` on line 1 and
  * a closing `---` or `...` line within the first FRONT_MATTER_MAX_LINES
- * lines. An unclosed block is not front matter, so nothing is stripped.
+ * lines, after dropping a leading UTF-8 BOM. The block must hold at least one
+ * top-level `key:` line; without one, a leading `---` is a thematic break
+ * and the next `---` is content, so stripping would delete prose. An
+ * unclosed or keyless block is not front matter, so nothing is stripped.
  * Returns { body, lineOffset, title }: `lineOffset` is the number of source
  * lines removed, so body line N is source line N + lineOffset, and `title`
  * is a simple top-level `title: value` (optionally quoted) or null. No YAML
  * parser: any other form of title is ignored.
  */
 export function splitFrontMatter(text) {
-  const none = { body: text, lineOffset: 0, title: null };
-  const lines = text.split('\n');
+  // A leading BOM is dropped in every case: it is invisible, and it would stop
+  // both `---` and a first-line `# heading` from being recognized.
+  const source = text.replace(/^\uFEFF/, '');
+  const none = { body: source, lineOffset: 0, title: null };
+  const lines = source.split('\n');
   if (lines.length < 2 || !FRONT_MATTER_OPEN.test(lines[0].replace(/\r$/, ''))) return none;
   const limit = Math.min(lines.length, FRONT_MATTER_MAX_LINES);
   for (let close = 1; close < limit; close++) {
     if (!FRONT_MATTER_CLOSE.test(lines[close].replace(/\r$/, ''))) continue;
-    return {
-      body: lines.slice(close + 1).join('\n'),
-      lineOffset: close + 1,
-      title: frontMatterTitle(lines.slice(1, close).map((line) => line.replace(/\r$/, ''))),
-    };
+    const block = lines.slice(1, close).map((line) => line.replace(/\r$/, ''));
+    if (!block.some((line) => FRONT_MATTER_KEY.test(line))) return none;
+    return { body: lines.slice(close + 1).join('\n'), lineOffset: close + 1, title: frontMatterTitle(block) };
   }
   return none;
 }

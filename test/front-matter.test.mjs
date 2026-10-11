@@ -78,19 +78,46 @@ test('check failures report source-file line numbers after front matter is strip
 
 test('an unclosed or too-long front-matter block is not stripped', async (t) => {
   const unclosed = '---\ntitle: Nope\n\n# Real title\n';
-  const filler = Array.from({ length: 197 }, (_, index) => `key${index}: v`).join('\n');
-  // Closing line 200 is within the limit; closing line 201 is not.
-  const at200 = `---\ntitle: At 200\n${filler}\n---\nBody.\n`;
-  const at201 = `---\ntitle: At 201\n${filler}\nmore: v\n---\nBody.\n`;
-  assert.equal(at200.split('\n').indexOf('---', 1) + 1, 200);
-  assert.equal(at201.split('\n').indexOf('---', 1) + 1, 201);
+  const filler = Array.from({ length: 1997 }, (_, index) => `key${index}: v`).join('\n');
+  // Closing line 2000 is within the limit; closing line 2001 is not.
+  const at200 = `---\ntitle: At 2000\n${filler}\n---\nBody.\n`;
+  const at201 = `---\ntitle: At 2001\n${filler}\nmore: v\n---\nBody.\n`;
+  assert.equal(at200.split('\n').indexOf('---', 1) + 1, 2000);
+  assert.equal(at201.split('\n').indexOf('---', 1) + 1, 2001);
   const repo = repoWith(t, { 'unclosed.md': unclosed, 'at200.md': at200, 'at201.md': at201 });
   const { read, doc } = await build(t, repo);
   assert.equal(doc('docs/unclosed.md').markdown, unclosed);
   assert.equal(doc('docs/unclosed.md').title, 'Real title');
   assert.match(read('docs/unclosed.html'), /<hr\b/);
   assert.equal(doc('docs/at200.md').markdown, 'Body.\n');
-  assert.equal(doc('docs/at200.md').title, 'At 200');
+  assert.equal(doc('docs/at200.md').title, 'At 2000');
   assert.equal(doc('docs/at201.md').markdown, at201);
   assert.equal(doc('docs/at201.md').title, 'at201');
+});
+
+test('a leading thematic break and a later --- are content, not front matter, unless the block has a key line', async (t) => {
+  const breaks = '---\nIntro.\n\n---\n\nMore prose.\n';
+  // Indented `key:` lines and list items are not top-level keys.
+  const prose = '---\n- item: one\n  nested: two\nSome *prose*: here\n---\n\n# Kept\n';
+  const keyed = '---\n# a YAML comment\nlayout: page\n---\n\n# Stripped\n';
+  const repo = repoWith(t, { 'breaks.md': breaks, 'prose.md': prose, 'keyed.md': keyed });
+  const { read, doc } = await build(t, repo);
+  assert.equal(doc('docs/breaks.md').markdown, breaks, 'nothing is deleted');
+  assert.match(read('docs/breaks.html'), /<p>Intro\.<\/p>[\s\S]*<p>More prose\.<\/p>/);
+  assert.equal(doc('docs/prose.md').markdown, prose, 'no column-0 key line, so nothing is stripped');
+  assert.equal(doc('docs/keyed.md').markdown, '\n# Stripped\n');
+});
+
+test('a leading UTF-8 BOM does not block front-matter detection', async (t) => {
+  const repo = repoWith(t, { 'bom.md': '\uFEFF---\ntitle: BOM title\n---\n\nSee [gone](missing.md).\n', 'bom-plain.md': '\uFEFF# Plain\n' });
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /docs\/bom\.md:5: \[gone\]\(missing\.md\)/, 'line numbers still match the file');
+  writeFileSync(path.join(repo, 'docs', 'bom.md'), '\uFEFF---\ntitle: BOM title\n---\n\nBody.\n');
+  commitAll(repo, 'fix link');
+  const { read, doc } = await build(t, repo);
+  assert.equal(doc('docs/bom.md').markdown, '\nBody.\n');
+  assert.equal(doc('docs/bom.md').title, 'BOM title');
+  assert.doesNotMatch(read('docs/bom.html').match(/<article class="doc">[\s\S]*?<\/article>/)[0], /<hr|title:/);
+  assert.equal(doc('docs/bom-plain.md').title, 'Plain', 'a BOM is dropped without front matter too, so the first line is a heading');
 });
