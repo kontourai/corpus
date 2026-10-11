@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+Additive: v0.4.0 manifests stay valid, and the bundle and `products.json` formats are unchanged.
+
+- **Redirect stubs keep the URL fragment.** A meta refresh drops `#fragment`, so `old.html#section` used to land at the top of the new page. Each stub now has a small inline script, before the meta refresh, that calls `location.replace` with the target plus the incoming fragment. A target that has its own `#anchor` keeps it, and the incoming fragment is ignored. The meta refresh, `rel="canonical"`, `noindex`, and the visible link stay, so a browser without JavaScript still redirects (without the fragment). The target is embedded with `JSON.stringify` and every `<` escaped as `\u003c`, so no target can close the script element. Stubs are no longer script-free; a site with a Content Security Policy that forbids inline script falls back to the meta refresh.
+
 ## 0.4.0
 
 Additive for manifests: v0.3.0 manifests stay valid. A new gate can fail a repository that passed before, and the bundle gains documents that have no page.

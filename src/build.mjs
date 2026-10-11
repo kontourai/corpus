@@ -250,17 +250,36 @@ function filesUnder(dir) {
 }
 
 /**
- * A redirect stub for a page that moved. GitHub Pages cannot send HTTP
- * redirects, so the stub refreshes immediately, names the canonical URL, asks
- * not to be indexed, and shows a plain link. It carries no script.
+ * A string as a JavaScript literal safe inside an HTML <script> element.
+ * JSON.stringify quotes and escapes backslashes, quotes, and control characters;
+ * escaping every "<" as \u003c rules out "</script" and "<!--", the only ways
+ * text can leave or confuse a script element. The literal means the same string.
  */
-function redirectStub({ href, canonical }) {
+export function scriptString(value) {
+  return JSON.stringify(String(value)).replace(/</g, '\\u003c');
+}
+
+/**
+ * A redirect stub for a page that moved. GitHub Pages cannot send HTTP
+ * redirects, so the stub redirects immediately, names the canonical URL, asks
+ * not to be indexed, and shows a plain link.
+ *
+ * A meta refresh drops the incoming #fragment, so an inline script runs first
+ * and carries it over with location.replace (which also keeps the stub out of
+ * history). A target that has its own #anchor keeps it: the manifest named
+ * that anchor on purpose, and an old page's fragment may not exist on the new
+ * page. The meta refresh stays as the no-JS fallback. The script is template
+ * output, not document content, so it does not pass through the sanitizer;
+ * the target is embedded with scriptString.
+ */
+export function redirectStub({ href, canonical }) {
   const url = escapeHtml(href);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Redirecting…</title>
+<script>(function(){var t=${scriptString(href)};location.replace(t.indexOf("#")<0?t+location.hash:t);})();</script>
 <meta http-equiv="refresh" content="0; url=${url}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <meta name="robots" content="noindex">
