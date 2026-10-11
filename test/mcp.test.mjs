@@ -242,7 +242,7 @@ test('mcp --workspace marks every directory that declares the same product unava
 
 // Library seam with an injected clock: the 30-second retry window cannot be
 // exercised through the CLI without a 30-second test.
-test('hub cache retries failed fetches after the short negative TTL but keeps successes for 10 minutes', async () => {
+test('hub cache retries failed and malformed fetches after the short negative TTL but keeps successes for 10 minutes', async () => {
   let clock = 0;
   let ghostUp = false;
   const calls = [];
@@ -250,25 +250,51 @@ test('hub cache retries failed fetches after the short negative TTL but keeps su
   const fetchImpl = async (url) => {
     calls.push(new URL(url).pathname);
     const ok = (body) => ({ ok: true, status: 200, json: async () => body });
-    if (url.endsWith('/products.json')) return ok({ schemaVersion: 1, products: [{ product: 'sample', repo: 'kontourai/sample' }, { product: 'ghost', repo: 'kontourai/ghost' }] });
+    if (url.endsWith('/products.json'))
+      return ok({ schemaVersion: 1, products: [{ product: 'sample', repo: 'kontourai/sample' }, { product: 'ghost', repo: 'kontourai/ghost' }, { product: 'mangled', repo: 'kontourai/mangled' }] });
     if (url.endsWith('/sample/docs-bundle.json')) return ok(bundle('sample'));
     if (url.endsWith('/ghost/docs-bundle.json') && ghostUp) return ok(bundle('ghost'));
+    if (url.endsWith('/mangled/docs-bundle.json')) return ok(ghostUp ? bundle('mangled') : { ...bundle('mangled'), documents: [{ source: 1 }] });
     return { ok: false, status: 404, json: async () => ({}) };
   };
   const source = hubSource('http://hub.test/', { fetchImpl, now: () => clock });
 
   let loaded = await source.load();
   assert.deepEqual([...loaded.bundles.keys()], ['sample']);
-  assert.equal(loaded.unavailable[0].product, 'ghost');
+  assert.deepEqual(loaded.unavailable.map((entry) => entry.product), ['ghost', 'mangled']);
+  assert.match(loaded.unavailable[1].error, /documents\[0\]\.source must be a string/);
 
   ghostUp = true;
   clock = 10_000;
   loaded = await source.load();
-  assert.equal(loaded.unavailable.length, 1, 'inside the 30 s window the failure is still cached');
+  assert.equal(loaded.unavailable.length, 2, 'inside the 30 s window both failures are still cached');
 
   clock = 31_000;
   loaded = await source.load();
-  assert.deepEqual([...loaded.bundles.keys()].sort(), ['ghost', 'sample'], 'retried after 30 s');
+  assert.deepEqual([...loaded.bundles.keys()].sort(), ['ghost', 'mangled', 'sample'], 'a 404 and a malformed bundle are both retried after 30 s');
   assert.equal(calls.filter((call) => call === '/sample/docs-bundle.json').length, 1, 'successes stay cached');
   assert.equal(calls.filter((call) => call === '/products.json').length, 1);
+});
+
+test('mcp --workspace rebuilds a product only when its checkout changes', async (t) => {
+  const workspace = scratch(t);
+  const sample = fixtureRepo(t, 'valid', { into: workspace, as: 'sample' });
+  fixtureRepo(t, 'second', { into: workspace });
+  const client = await connect(t, ['--workspace', workspace]);
+  const builtAt = async () => Object.fromEntries((await call(client, 'list_products')).data.products.map((entry) => [entry.product, entry.builtAt]));
+
+  const first = await builtAt();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(await builtAt(), first, 'unchanged checkouts are served from the cache');
+
+  appendFileSync(path.join(sample, 'docs', 'concepts.md'), '\nFirst edit: the axolotl.\n');
+  const afterEdit = await builtAt();
+  assert.notEqual(afterEdit.sample, first.sample, 'an edit rebuilds the changed product');
+  assert.equal(afterEdit.second, first.second, 'other products stay cached');
+
+  // A second edit to an already-modified file leaves `git status --porcelain` unchanged.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  appendFileSync(path.join(sample, 'docs', 'concepts.md'), '\nSecond edit: the narwhal.\n');
+  const search = await call(client, 'search', { query: 'narwhal' });
+  assert.equal(search.data.results[0]?.source, 'docs/concepts.md');
 });

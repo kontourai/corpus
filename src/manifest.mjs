@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import picomatch from 'picomatch';
 import { UsageError } from './errors.mjs';
-import { trackedFiles } from './git.mjs';
-import { isRepoFile, listFiles, repoGlobError, repoPathError, statInRepo } from './paths.mjs';
+import { isRepoFile, repoGlobError, repoPathError, statInRepo } from './paths.mjs';
 
 export const MANIFEST_FILE = 'docs-kit.json';
 export const DEFAULT_LANDING = 'README.md';
@@ -64,25 +63,15 @@ function checkGlobs(value, where, errors) {
 
 const GLOB_CHARS = /[*?[\]{}()!+@]/;
 
-/** Tracked files (git ls-files), or every file outside git; computed once on demand. */
-function lazyRepoFiles(root) {
-  let files;
-  return () => (files ??= trackedFiles(root) ?? listFiles(root));
-}
-
 /**
- * Expand a bare directory name in `covers` to `dir/**`, then require every
- * glob to match at least one tracked file: a glob that matches nothing can
- * never mark its document stale, so it is a configuration error.
+ * Expand a bare directory name in `covers` to `dir/**`. Whether each glob
+ * matches a tracked file is the `covers` gate in check.mjs, not a manifest
+ * error, so a stale glob never blocks build or MCP.
  */
-function expandCovers(covers, root, where, errors, repoFiles) {
-  return covers.map((glob, index) => {
+function expandCovers(covers, root) {
+  return covers.map((glob) => {
     const bare = glob.replace(/\/+$/, '');
-    const expanded = !GLOB_CHARS.test(bare) && statInRepo(root, bare)?.kind === 'dir' ? `${bare}/**` : glob;
-    const matches = picomatch(expanded, { dot: true });
-    if (!repoFiles().some((file) => matches(file)))
-      errors.push(`${where}[${index}] "${glob}" matches no tracked file${expanded !== glob ? ` (expanded to "${expanded}")` : ''}`);
-    return expanded;
+    return !GLOB_CHARS.test(bare) && statInRepo(root, bare)?.kind === 'dir' ? `${bare}/**` : glob;
   });
 }
 
@@ -140,7 +129,6 @@ export function validateManifest(raw, root) {
   if (Object.hasOwn(raw, 'exclude')) checkGlobs(raw.exclude, `${where}: exclude`, errors);
   const isExcluded = Array.isArray(exclude) && exclude.every((glob) => !repoGlobError(glob)) ? globMatcher(exclude) : () => false;
 
-  const repoFiles = lazyRepoFiles(root);
   const sources = new Set();
   const outputs = new Map([['index.html', landing]]);
   const documents = [];
@@ -155,7 +143,7 @@ export function validateManifest(raw, root) {
         if (Object.hasOwn(document, 'covers')) {
           const before = errors.length;
           checkGlobs(document.covers, `${at}.covers`, errors);
-          if (errors.length === before) covers = expandCovers(document.covers, root, `${at}.covers`, errors, repoFiles);
+          if (errors.length === before) covers = expandCovers(document.covers, root);
         }
         if (!Object.hasOwn(document, 'source')) return;
         const source = document.source;
@@ -171,7 +159,7 @@ export function validateManifest(raw, root) {
         const output = source.replace(/\.md$/, '.html');
         if (outputs.has(output)) errors.push(`${at}.source "${source}" would overwrite the page generated for "${outputs.get(output)}"`);
         outputs.set(output, source);
-        documents.push({ source, section: document.section, covers });
+        documents.push({ source, section: document.section, covers, coversAsWritten: document.covers ?? [] });
       });
   }
 

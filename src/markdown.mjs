@@ -52,7 +52,10 @@ const ANCHOR_ATTRIBUTES = new Set(['id', 'name']);
  */
 export function scanHtmlAttributes(html) {
   const attributes = [];
-  for (const tag of html.matchAll(HTML_TAG)) {
+  // Comments are blanked to equal-length spaces so commented-out markup is
+  // neither checked nor rewritten, and offsets into `html` stay valid.
+  const visible = html.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => ' '.repeat(comment.length));
+  for (const tag of visible.matchAll(HTML_TAG)) {
     const [areaStart] = tag.indices[1];
     for (const attribute of tag[1].matchAll(HTML_ATTRIBUTE)) {
       const raw = attribute[3] ?? attribute[4] ?? attribute[5];
@@ -67,12 +70,36 @@ export function scanHtmlAttributes(html) {
   return attributes;
 }
 
-/** URLs in a srcset value: each comma-separated candidate's first token. */
-function srcsetUrls(value) {
-  return value
-    .split(',')
-    .map((candidate) => candidate.trim().split(/\s+/)[0])
-    .filter(Boolean);
+/**
+ * Parse a srcset value into { url, descriptor } candidates, following the
+ * HTML algorithm: a URL is a run of non-whitespace (so commas inside a data:
+ * URI stay in the URL), trailing commas end it, and descriptors run to the
+ * next comma outside parentheses.
+ */
+export function parseSrcset(value) {
+  const candidates = [];
+  let i = 0;
+  while (i < value.length) {
+    while (i < value.length && /[\s,]/.test(value[i])) i++;
+    if (i >= value.length) break;
+    let url = '';
+    while (i < value.length && !/\s/.test(value[i])) url += value[i++];
+    let descriptor = '';
+    if (/,+$/.test(url)) url = url.replace(/,+$/, '');
+    else {
+      let depth = 0;
+      while (i < value.length) {
+        const char = value[i];
+        if (char === '(') depth++;
+        else if (char === ')') depth = Math.max(0, depth - 1);
+        else if (char === ',' && depth === 0) break;
+        descriptor += char;
+        i++;
+      }
+    }
+    if (url) candidates.push({ url, descriptor: descriptor.trim() });
+  }
+  return candidates;
 }
 
 /** Raw-HTML references: { attr, url } for href, src, and each srcset candidate. */
@@ -80,8 +107,9 @@ export function extractHtmlReferences(html) {
   const references = [];
   for (const { name, value } of scanHtmlAttributes(html)) {
     if (!URL_ATTRIBUTES.has(name)) continue;
-    if (name === 'srcset') for (const url of srcsetUrls(value)) references.push({ attr: name, url });
-    else references.push({ attr: name, url: value });
+    // An empty href/src is a legal "same document" reference in raw HTML.
+    if (name === 'srcset') for (const { url } of parseSrcset(value)) references.push({ attr: name, url });
+    else if (value.trim() !== '') references.push({ attr: name, url: value });
   }
   return references;
 }
@@ -98,15 +126,12 @@ export function rewriteHtmlReferences(html, rewrite) {
     const leading = html.slice(attribute.start).match(/^\s+/)[0];
     const value =
       attribute.name === 'srcset'
-        ? attribute.value
-            .split(',')
-            .map((candidate) => {
-              const [url, ...descriptor] = candidate.trim().split(/\s+/);
-              return url ? [rewrite(url, 'srcset'), ...descriptor].join(' ') : '';
-            })
-            .filter(Boolean)
+        ? parseSrcset(attribute.value)
+            .map(({ url, descriptor }) => [rewrite(url, 'srcset'), descriptor].filter(Boolean).join(' '))
             .join(', ')
-        : rewrite(attribute.value, attribute.name);
+        : attribute.value.trim() === ''
+          ? attribute.value
+          : rewrite(attribute.value, attribute.name);
     output = `${output.slice(0, attribute.start)}${leading}${attribute.name}="${escapeAttributeValue(value)}"${output.slice(attribute.end)}`;
   }
   return output;

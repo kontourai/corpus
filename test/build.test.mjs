@@ -149,33 +149,105 @@ test('build neutralizes javascript: links', async (t) => {
   assert.doesNotMatch(html, /javascript:/);
 });
 
-test('build --out refuses tracked files, .git, and untracked unignored files; allows new or ignored dirs', async (t) => {
+test('build --out only replaces directories it created (marker), and never tracked files or .git', async (t) => {
   const repo = fixtureRepo(t, 'valid');
   mkdirSync(path.join(repo, 'site'));
   writeFileSync(path.join(repo, 'site', 'keep.txt'), 'tracked\n');
+  writeFileSync(path.join(repo, 'site', '.docs-kit-build'), 'even a marker does not license deleting tracked files\n');
   commitAll(repo, 'tracked file in site/');
 
   const tracked = await runCli(['build', '--root', repo, '--out', path.join(repo, 'site')]);
   assert.equal(tracked.status, 2, tracked.output);
-  assert.match(tracked.stderr, /contains 1 git-tracked file\(s\) \(e\.g\. keep\.txt\); refusing to delete it/);
+  assert.match(tracked.stderr, /contains 2 git-tracked file\(s\)/);
   assert.ok(existsSync(path.join(repo, 'site', 'keep.txt')));
 
   const insideGit = await runCli(['build', '--root', repo, '--out', path.join(repo, '.git', 'pages')]);
   assert.equal(insideGit.status, 2, insideGit.output);
   assert.match(insideGit.stderr, /inside a \.git directory/);
 
-  mkdirSync(path.join(repo, 'notes'));
-  writeFileSync(path.join(repo, 'notes', 'draft.md'), 'uncommitted work\n');
-  const untracked = await runCli(['build', '--root', repo, '--out', path.join(repo, 'notes')]);
-  assert.equal(untracked.status, 2, untracked.output);
-  assert.match(untracked.stderr, /untracked file\(s\) that are not git-ignored \(e\.g\. draft\.md\)/);
-  assert.ok(existsSync(path.join(repo, 'notes', 'draft.md')));
+  // Outside any git checkout: a non-empty directory without the marker survives.
+  const outside = path.join(scratch(t), 'mine');
+  mkdirSync(outside);
+  writeFileSync(path.join(outside, 'precious.txt'), 'not docs-kit output\n');
+  const foreign = await runCli(['build', '--root', repo, '--out', outside]);
+  assert.equal(foreign.status, 2, foreign.output);
+  assert.match(foreign.stderr, /non-empty directory that docs-kit did not create \(no \.docs-kit-build marker\)/);
+  assert.ok(existsSync(path.join(outside, 'precious.txt')));
 
+  // The same rule holds for a git-ignored directory.
   writeFileSync(path.join(repo, '.gitignore'), 'dist-pages/\n');
+  mkdirSync(path.join(repo, 'dist-pages'));
+  writeFileSync(path.join(repo, 'dist-pages', 'notes.txt'), 'ignored but not ours\n');
+  const ignored = await runCli(['build', '--root', repo, '--out', path.join(repo, 'dist-pages')]);
+  assert.equal(ignored.status, 2, ignored.output);
+  assert.match(ignored.stderr, /no \.docs-kit-build marker/);
+  assert.ok(existsSync(path.join(repo, 'dist-pages', 'notes.txt')));
+
+  // A new directory is fine, and a docs-kit output is replaced on the next build.
+  const fresh = path.join(scratch(t), 'fresh');
   for (let i = 0; i < 2; i++) {
-    const ignored = await runCli(['build', '--root', repo, '--out', path.join(repo, 'dist-pages')]);
-    assert.equal(ignored.status, 0, `build ${i + 1} into an ignored dir: ${ignored.output}`);
+    const result = await runCli(['build', '--root', repo, '--out', fresh]);
+    assert.equal(result.status, 0, `build ${i + 1}: ${result.output}`);
+    assert.ok(existsSync(path.join(fresh, '.docs-kit-build')));
   }
+});
+
+test('commented-out HTML is neither checked nor treated as an anchor', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<!-- <a href="docs/old.md">old</a> <img src="gone.png"> <a id="ghost"></a> -->\n\n<!--\n<a href='also-gone.md'>multi-line</a>\n-->\n`,
+  );
+  commitAll(repo, 'comments');
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 0, check.output);
+  const build = await runCli(['build', '--root', repo, '--out', path.join(scratch(t), 'site')]);
+  assert.equal(build.status, 0, build.output);
+
+  writeFileSync(path.join(repo, 'docs', 'concepts.md'), `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n[ghost](#ghost)\n`);
+  const anchor = await runCli(['check', '--root', repo]);
+  assert.equal(anchor.status, 1, 'an id inside a comment is not an anchor');
+  assert.match(anchor.stderr, /missing anchor #ghost/);
+});
+
+test('srcset with a data: URI parses as one candidate, and an empty raw href is allowed', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  const dataUri = 'data:image/png;base64,iVBORw0KGgo=,AAAA';
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<img srcset="${dataUri} 1x, assets/diagram.svg 2x" alt="mixed"> <a href="">top</a>\n`,
+  );
+  mkdirSync(path.join(repo, 'docs', 'assets'), { recursive: true });
+  writeFileSync(path.join(repo, 'docs', 'assets', 'diagram.svg'), readFileSync(path.join(import.meta.dirname, 'fixtures/valid/docs/assets/diagram.svg')));
+  commitAll(repo, 'srcset data uri');
+  const check = await runCli(['check', '--root', repo]);
+  assert.equal(check.status, 0, check.output);
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  const html = readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8');
+  assert.ok(html.includes(`srcset="${dataUri} 1x, assets/diagram.svg 2x"`), 'data URI kept whole, local candidate rewritten');
+});
+
+test('sanitizer keeps <details open> and <video>/<source> media attributes, and copies the video', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  writeFileSync(path.join(repo, 'docs', 'assets', 'demo.mp4'), 'not really a video');
+  writeFileSync(
+    path.join(repo, 'docs', 'concepts.md'),
+    `${readFileSync(path.join(repo, 'docs', 'concepts.md'), 'utf8')}\n<details open><summary>Open</summary>Body.</details>\n\n<video src="assets/demo.mp4" controls width="320" height="180" poster="https://example.com/p.png" muted loop autoplay playsinline onplay="x()"><source src="assets/demo.mp4" type="video/mp4"></video>\n`,
+  );
+  commitAll(repo, 'media');
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(build.status, 0, build.output);
+  const html = readFileSync(path.join(out, 'docs', 'concepts.html'), 'utf8');
+  assert.match(html, /<details open(="")?>/);
+  const video = html.match(/<video[^>]*>/)[0];
+  for (const attribute of ['src="assets/demo.mp4"', 'controls', 'width="320"', 'height="180"', 'poster="https://example.com/p.png"', 'muted', 'loop', 'autoplay', 'playsinline'])
+    assert.ok(video.includes(attribute), `${attribute} in ${video}`);
+  assert.doesNotMatch(video, /onplay/);
+  assert.match(html, /<source src="assets\/demo\.mp4" type="video\/mp4"/);
+  assert.ok(existsSync(path.join(out, 'docs', 'assets', 'demo.mp4')), 'embedded media is copied');
 });
 
 test('check and build handle raw HTML href/src/srcset in every quoting style', async (t) => {

@@ -88,6 +88,15 @@ export function trackedFiles(root) {
   }
 }
 
+/** `git status --porcelain` for root's subtree, or '' outside git. */
+export function gitStatusPorcelain(root) {
+  try {
+    return git(root, ['status', '--porcelain', '--untracked-files=normal', '--', '.']);
+  } catch {
+    return '';
+  }
+}
+
 /** True when the checkout has uncommitted changes (tracked or untracked). */
 export function isDirty(root) {
   try {

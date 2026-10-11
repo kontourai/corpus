@@ -9,8 +9,9 @@
 | `index.html` | the `landing` Markdown, followed by cards for every document, grouped by section |
 | `<source>.html` | each listed document, at its source path with `.md` replaced by `.html` (`docs/guide.md` becomes `docs/guide.html`) |
 | `docs-kit.css` | the shared stylesheet, with light and dark themes that follow `prefers-color-scheme` |
-| images | every local image that a published page references, copied to its repository path |
+| images and media | every local image, and every file embedded with `src` or `srcset` (such as a video), that a published page references, copied to its repository path |
 | `.nojekyll` | turns off Jekyll processing on GitHub Pages |
+| `.docs-kit-build` | marks the directory as docs-kit output; `build` replaces only marked (or new or empty) directories |
 | `docs-bundle.json` | the agent bundle; see [the bundle format](bundle-format.md#docs-bundlejson) |
 
 Every page has the product title and tagline, navigation grouped by `section` in manifest order, a link to the hub, a link to the repository, and the source file at the built commit. Headings get GitHub-compatible `id`s, so anchors that work on GitHub also work on the site.
@@ -26,11 +27,11 @@ Every page has the product title and tagline, navigation grouped by `section` in
 | `http(s):` and `mailto:` | unchanged |
 | other schemes, such as `javascript:` | `#` |
 
-The same rewriting applies to `href`, `src`, and `srcset` attributes in raw HTML, in any quoting style. `check` and `build` use one shared extractor for them.
+The same rewriting applies to `href`, `src`, and `srcset` attributes in raw HTML, in any quoting style. HTML comments are skipped, and `srcset` is parsed per the HTML spec. `check` and `build` use one shared extractor for them.
 
 ## Sanitization
 
-Every product site shares the `https://kontourai.github.io` origin, so a script in one product's docs could act on every other product's pages. The rendered Markdown is passed through `sanitize-html` with a GitHub-like allowlist. `script`, `style`, `iframe`, and `on*` attributes are removed, and URLs are limited to `http(s)`, `mailto`, and `data:` images. Heading `id`s, anchor links, images, tables, `details`/`summary`, and task-list checkboxes are kept.
+Every product site shares the `https://kontourai.github.io` origin, so a script in one product's docs could act on every other product's pages. The rendered Markdown is passed through `sanitize-html` with a GitHub-like allowlist. `script`, `style`, `iframe`, and `on*` attributes are removed, and URLs are limited to `http(s)`, `mailto`, and `data:` images. Heading `id`s, anchor links, images, tables, `details`/`summary` (including `open`), `video`/`source` with their media attributes, and task-list checkboxes are kept.
 
 ## Generated-site check
 

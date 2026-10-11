@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
-import { changedFiles } from './git.mjs';
+import picomatch from 'picomatch';
+import { changedFiles, trackedFiles } from './git.mjs';
 import { MANIFEST_FILE, globMatcher, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink } from './markdown.mjs';
-import { listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
+import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
 /** Lazily lexes repo Markdown so each file is read and analyzed once per run. */
 export function createDocumentReader(root) {
@@ -89,7 +90,26 @@ export function checkTopics(manifest, read) {
 }
 
 /**
- * Gate 5: a document whose `covers` globs match a changed file must itself be
+ * Gate 5: every `covers` glob matches at least one tracked file (every file
+ * outside git). A glob that matches nothing can never mark its document stale.
+ */
+export function checkCovers(root, manifest) {
+  const failures = [];
+  let files;
+  manifest.documents.forEach((document) => {
+    document.covers.forEach((glob, index) => {
+      files ??= trackedFiles(root) ?? listFiles(root);
+      const matches = picomatch(glob, { dot: true });
+      if (files.some((file) => matches(file))) return;
+      const written = document.coversAsWritten[index];
+      failures.push(`${document.source}: covers "${written}" matches no tracked file${written !== glob ? ` (expanded to "${glob}")` : ''}`);
+    });
+  });
+  return failures;
+}
+
+/**
+ * Gate 6: a document whose `covers` globs match a changed file must itself be
  * in the change set. Git errors throw UsageError; they never pass silently.
  */
 export function checkFreshness(root, manifest, base) {
@@ -122,7 +142,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);
-    for (const name of ['links', 'reachability', 'topics', ...(freshness && base ? ['freshness'] : [])])
+    for (const name of ['links', 'reachability', 'topics', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
       gates.push({ name, skipped: `${MANIFEST_FILE} is invalid` });
     return { exitCode, gates, manifest: null };
   }
@@ -132,6 +152,8 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     ['links', () => checkLinks(root, manifest, read)],
     ['reachability', () => checkReachability(root, manifest)],
     ['topics', () => checkTopics(manifest, read)],
+    // covers only feeds freshness, so build (freshness: false) is not blocked by it.
+    ...(freshness ? [['covers', () => checkCovers(root, manifest)]] : []),
   ]) {
     const failures = run();
     gates.push({ name, failures });

@@ -170,7 +170,7 @@ function editManifest(repo, edit) {
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-test('covers: a bare directory expands to dir/**; a glob matching no tracked file is exit 2', async (t) => {
+test('covers: a bare directory expands to dir/**; a glob matching nothing fails the covers gate but not build', async (t) => {
   const repo = fixtureRepo(t, 'valid');
   editManifest(repo, (manifest) => {
     manifest.documents[0].covers = ['src/cli'];
@@ -186,10 +186,23 @@ test('covers: a bare directory expands to dir/**; a glob matching no tracked fil
   editManifest(repo, (manifest) => {
     manifest.documents[1].covers = ['src/nope/**', 'src/cli/*.js'];
   });
-  const unmatched = await runCli(['check', '--root', repo]);
-  assert.equal(unmatched.status, 2, unmatched.output);
-  assert.match(unmatched.stderr, /documents\[1\]\.covers\[0\] "src\/nope\/\*\*" matches no tracked file/);
-  assert.doesNotMatch(unmatched.stderr, /covers\[1\]/);
+  commitAll(repo, 'a covers glob that matches nothing');
+  appendFileSync(path.join(repo, 'src', 'cli', 'main.js'), 'export const again = 2;\n');
+  commitAll(repo, 'touch covered code again');
+
+  // A dead glob is a covers gate failure (exit 1), not a manifest error, and
+  // freshness still runs for the other documents.
+  const unmatched = await runCli(['check', '--root', repo, '--base', 'HEAD~1']);
+  assert.equal(unmatched.status, 1, unmatched.output);
+  assert.match(unmatched.stderr, /PASS manifest/);
+  assert.match(unmatched.stderr, /FAIL covers\n    - docs\/concepts\.md: covers "src\/nope\/\*\*" matches no tracked file/);
+  assert.doesNotMatch(unmatched.stderr, /covers "src\/cli\/\*\.js"/);
+  assert.match(unmatched.stderr, /FAIL freshness/);
+  assert.match(unmatched.stderr, /docs\/getting-started\.md is stale/);
+
+  // build and MCP are not blocked by it.
+  const build = await runCli(['build', '--root', repo, '--out', path.join(scratch(t), 'site')]);
+  assert.equal(build.status, 0, build.output);
 });
 
 test('freshness counts the old path of a renamed file', async (t) => {

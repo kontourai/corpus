@@ -1,11 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
+import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
 import { MANIFEST_FILE, validateProducts } from './manifest.mjs';
+import { toFsPath } from './paths.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
 export const HUB_CACHE_MS = 10 * 60 * 1000;
@@ -53,18 +56,56 @@ export function pageCount(bundle) {
 }
 
 /**
- * One checkout, rebuilt on every tool call so a long session sees current
- * docs. An invalid checkout at startup is a usage error; a later failure
+ * Rebuild a checkout's bundle only when its content key changes: HEAD,
+ * a hash of `git status --porcelain`, the manifest's mtime, and the mtime and
+ * size of each published source (porcelain alone does not change when an
+ * already-modified file is edited again).
+ */
+function createCheckoutCache() {
+  const cache = new Map(); // root -> { key, bundle, sources }
+  const statKey = (file) => {
+    try {
+      const stat = statSync(file);
+      return `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return 'missing';
+    }
+  };
+  const keyFor = (root, sources) =>
+    createHash('sha256')
+      .update(
+        [
+          headShaOrNull(root) ?? 'no-git',
+          gitStatusPorcelain(root),
+          statKey(path.join(root, MANIFEST_FILE)),
+          ...sources.map((source) => `${source}=${statKey(toFsPath(root, source))}`),
+        ].join('\n'),
+      )
+      .digest('hex');
+  return (root) => {
+    const hit = cache.get(root);
+    if (hit && keyFor(root, hit.sources) === hit.key) return hit.bundle;
+    const bundle = bundleFromCheckout(root);
+    const sources = bundle.documents.map((document) => document.source);
+    cache.set(root, { key: keyFor(root, sources), bundle, sources });
+    return bundle;
+  };
+}
+
+/**
+ * One checkout, rebuilt when its content key changes so a long session sees
+ * current docs. An invalid checkout at startup is a usage error; a later failure
  * (mid-edit) is reported as unavailable.
  */
 export function repoSource(dir) {
   const root = path.resolve(dir);
-  const first = bundleFromCheckout(root);
+  const build = createCheckoutCache();
+  const first = build(root);
   return {
     describe: `repo ${root}`,
     load: async () => {
       try {
-        return snapshot([bundleFromCheckout(root)], []);
+        return snapshot([build(root)], []);
       } catch (error) {
         return snapshot([], [{ product: first.product, error: error.message }]);
       }
@@ -90,7 +131,7 @@ function scanWorkspace(root) {
 }
 
 /** Build every product in a workspace. Unavailable entries are keyed by the manifest's product. */
-export function loadWorkspace(root) {
+export function loadWorkspace(root, build = bundleFromCheckout) {
   const byProduct = new Map();
   for (const name of scanWorkspace(root)) {
     const dir = path.join(root, name);
@@ -108,7 +149,7 @@ export function loadWorkspace(root) {
       continue;
     }
     try {
-      bundles.push(bundleFromCheckout(dirs[0].dir));
+      bundles.push(build(dirs[0].dir));
     } catch (error) {
       unavailable.push({ product, directory: dirs[0].name, error: error.message });
     }
@@ -116,7 +157,7 @@ export function loadWorkspace(root) {
   return snapshot(bundles, unavailable);
 }
 
-/** Every immediate subdirectory with docs-kit.json, rescanned and rebuilt on every tool call. */
+/** Every immediate subdirectory with docs-kit.json, rescanned on every call; each product rebuilt only when its key changes. */
 export function workspaceSource(dir) {
   const root = path.resolve(dir);
   let candidates;
@@ -126,11 +167,12 @@ export function workspaceSource(dir) {
     throw new UsageError(`--workspace ${dir}: ${error.message}`);
   }
   if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${MANIFEST_FILE}`);
+  const build = createCheckoutCache();
   return {
     describe: `workspace ${root}`,
     load: async () => {
       try {
-        return loadWorkspace(root);
+        return loadWorkspace(root, build);
       } catch (error) {
         return snapshot([], [{ product: '*', error: `workspace ${root} unavailable: ${error.message}` }]);
       }
@@ -159,7 +201,9 @@ export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_
   const base = normalizeBaseUrl(hub, '--hub');
   const cache = new Map(); // url -> { at, ok, value | error }
   const inflight = new Map();
-  const cachedFetch = (url) => {
+  // `validate` returns an error string for a fetched-but-malformed body; that
+  // is a failure too and gets the short retry TTL, not the 10-minute one.
+  const cachedFetch = (url, validate) => {
     const hit = cache.get(url);
     if (hit && now() - hit.at < (hit.ok ? ttlMs : retryMs)) return Promise.resolve(hit);
     if (!inflight.has(url))
@@ -167,7 +211,10 @@ export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_
         url,
         fetchJson(url, fetchImpl)
           .then(
-            (value) => ({ ok: true, value }),
+            (value) => {
+              const problem = validate(value);
+              return problem ? { ok: false, error: problem } : { ok: true, value };
+            },
             (error) => ({ ok: false, error: error.message }),
           )
           .then((entry) => {
@@ -181,15 +228,16 @@ export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_
   return {
     describe: `hub ${base}`,
     load: async () => {
-      const list = await cachedFetch(new URL('products.json', base).href);
+      const list = await cachedFetch(new URL('products.json', base).href, (value) => {
+        const { errors } = validateProducts(value);
+        return errors.length > 0 ? `products.json is invalid: ${errors.join('; ')}` : null;
+      });
       if (!list.ok) return snapshot([], [{ product: '*', error: `hub ${base} unavailable: ${list.error}` }]);
-      const { products, errors } = validateProducts(list.value);
-      if (errors.length > 0) return snapshot([], [{ product: '*', error: `hub ${base} unavailable: products.json is invalid: ${errors.join('; ')}` }]);
+      const { products } = validateProducts(list.value);
       const results = await Promise.all(
         products.map(async ({ product, repo }) => {
-          const entry = await cachedFetch(new URL(`${product}/docs-bundle.json`, base).href);
-          const problem = entry.ok ? bundleShapeError(entry.value, product) : entry.error;
-          return problem ? { unavailable: { product, repo, error: problem } } : { bundle: entry.value };
+          const entry = await cachedFetch(new URL(`${product}/docs-bundle.json`, base).href, (value) => bundleShapeError(value, product));
+          return entry.ok ? { bundle: entry.value } : { unavailable: { product, repo, error: entry.error } };
         }),
       );
       return snapshot(

@@ -63,7 +63,7 @@ The validation rules:
 - Every path is repository-relative, POSIX, and normalized. Absolute paths, `..` segments, and symlinks that resolve outside the repository are refused. Every source must exist.
 - Documents are listed once. They may not repeat the landing page, and they may not match `exclude`.
 - A topic `source` must point at the landing page or at a listed document, so it is published. Its `#anchor` must be a top-level heading, slugged by [github-slugger](https://github.com/Flet/github-slugger): lowercase, punctuation dropped, spaces become `-`, and repeated headings get `-1`, `-2`, and so on.
-- `covers` holds globs of the code a document describes; the [freshness gate](#check) uses them. A bare directory name such as `src/cli` means `src/cli/**`. A glob that matches no tracked file (`git ls-files`; every file outside git) is a configuration error, because it could never mark its document stale.
+- `covers` holds globs of the code a document describes; the [freshness gate](#check) uses them. A bare directory name such as `src/cli` means `src/cli/**`. A glob that matches no tracked file (`git ls-files`; every file outside git) fails the `covers` gate of `check`, because it could never mark its document stale. It does not block `build` or the MCP server.
 
 Section names group the navigation in the order they first appear in `documents`.
 
@@ -84,10 +84,11 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 `check` runs the gates below and reports every failure, not only the first.
 
 1. **manifest:** `docs-kit.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
-2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, and `srcset` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
+2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, and `srcset` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents resolves. HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (or is the landing page) or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a top-level heading.
-5. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
+5. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
+6. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
 ### build
 
@@ -95,15 +96,15 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.github.io/<product>/]
 ```
 
-`build` runs `check` without freshness and refuses to build if it fails. It then replaces `--out` with:
+`build` runs `check` without the covers and freshness gates and refuses to build if it fails. It then replaces `--out` with:
 
 - `index.html` (the landing page), one page per document, and `docs-kit.css`. Every page has navigation grouped by section, a link to the hub at <https://kontourai.github.io/>, and a link to the repository.
 - Links between published documents, rewritten to the generated pages, in Markdown and in raw HTML (`href`, `src`, `srcset`). Links to other repository files go to `https://github.com/<repo>/blob/<sha>/<path>`, or to `tree` for directories.
-- Copies of the local images that published documents reference.
+- Copies of the local images and embedded media (`src`, `srcset`, such as a `<video>` file) that published documents reference.
 - Sanitized HTML. Every product site shares the `kontourai.github.io` origin, so rendered Markdown is reduced to GitHub-like output: no `script` or `style`, no `on*` attributes, and only `http(s)`, `mailto`, and image `data:` URLs.
-- `.nojekyll` and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
+- `.nojekyll`, a `.docs-kit-build` marker, and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
 
-`build` then checks every internal `href` and `src` in the generated site, including `#fragments`, and exits `1` if any of them is broken. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files or untracked files that are not git-ignored. A directory that does not exist yet, or holds only ignored files (such as a previous build in a git-ignored `dist-pages/`), is allowed.
+`build` then checks every internal `href` and `src` in the generated site, including `#fragments`, and exits `1` if any of them is broken. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory without the `.docs-kit-build` marker that a previous build wrote, inside or outside git and whether or not it is ignored. A new or empty directory is fine.
 
 ### mcp
 
@@ -153,9 +154,9 @@ The server exposes five read-only tools. Every result carries the source commit 
 
 The server has three sources:
 
-- `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds on every tool call, so a long session sees current docs. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
-- `--workspace dir` does the same for every immediate subdirectory that contains `docs-kit.json`, rescanning on every call. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
-- `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
+- `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds whenever the checkout changes, so a long session sees current docs. The cache key is HEAD, a hash of `git status --porcelain`, and the mtime and size of the manifest and each published source. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
+- `--workspace dir` does the same for every immediate subdirectory that contains `docs-kit.json`. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
+- `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed or malformed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
 
 Claude Code:
 

@@ -26,27 +26,29 @@ const SANITIZE_OPTIONS = {
   allowedTags: [
     ...new Set([
       ...sanitizeHtml.defaults.allowedTags,
-      'img', 'picture', 'source', 'h1', 'h2', 'details', 'summary', 'del', 'ins', 's', 'kbd', 'sup', 'sub', 'input', 'div', 'span',
+      'img', 'picture', 'source', 'video', 'h1', 'h2', 'details', 'summary', 'del', 'ins', 's', 'kbd', 'sup', 'sub', 'input', 'div', 'span',
     ]),
   ],
   allowedAttributes: {
     '*': ['id', 'class', 'title', 'align', 'dir', 'lang', 'aria-label', 'aria-hidden'],
     a: ['href', 'name'],
     img: ['src', 'srcset', 'alt', 'width', 'height', 'loading'],
-    source: ['srcset', 'media', 'type'],
+    source: ['src', 'srcset', 'media', 'type'],
+    video: ['src', 'controls', 'width', 'height', 'poster', 'muted', 'loop', 'autoplay', 'playsinline'],
+    details: ['open'],
     input: ['type', 'checked', 'disabled'],
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
     ol: ['start'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
-  allowedSchemesByTag: { img: ['http', 'https', 'data'], source: ['http', 'https', 'data'] },
+  allowedSchemesByTag: { img: ['http', 'https', 'data'], source: ['http', 'https', 'data'], video: ['http', 'https'] },
   allowProtocolRelative: true,
 };
 
 /**
  * Map a link written in `fromSource` to its URL on the generated site:
- * published docs become their pages, local images are copied, other repo
+ * published docs become their pages, local images and embedded media are copied, other repo
  * files go to GitHub at the built commit, and unsafe schemes are neutralized.
  * Unresolvable local targets are left as written so the generated-site check
  * reports them.
@@ -66,7 +68,9 @@ function createHrefRewriter({ root, manifest, sha, prefix, published, assets }) 
     if (published.has(target.path)) return `${relativeUrl(fromOutput, outputPathFor(manifest, target.path))}${hash}`;
     const stat = statInRepo(root, target.path);
     if (!stat) return href;
-    if (stat.kind === 'file' && IMAGE_FILE.test(target.path)) {
+    // Embedded resources (Markdown images, src, srcset: images, video, audio)
+    // are copied; plain links copy only image files.
+    if (stat.kind === 'file' && (image || IMAGE_FILE.test(target.path))) {
       assets.add(target.path);
       return relativeUrl(fromOutput, target.path);
     }
@@ -142,12 +146,14 @@ function gitIn(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+export const BUILD_MARKER = '.docs-kit-build';
+
 /**
- * `build` deletes --out before writing, so refuse any directory whose loss
- * is not regenerable: the repository root or an ancestor, anything inside a
- * .git directory, a directory holding tracked files, or one holding untracked
- * files that are not git-ignored. A path that does not exist yet, or holds
- * only ignored files (a previous build in an ignored dist dir), is allowed.
+ * `build` deletes --out before writing, so only delete what docs-kit made:
+ * refuse the repository root or an ancestor, anything inside a .git
+ * directory, a directory holding git-tracked files, and any existing
+ * non-empty directory without the BUILD_MARKER a previous build wrote. This
+ * holds inside and outside git, git-ignored or not.
  */
 function assertSafeOut(root, out) {
   const resolvedRoot = path.resolve(root);
@@ -160,26 +166,26 @@ function assertSafeOut(root, out) {
   try {
     stat = statSync(resolvedOut);
   } catch {
-    return;
+    return; // does not exist yet
   }
   if (!stat.isDirectory()) throw new UsageError(`--out ${out} exists and is not a directory; refusing to delete it`);
-  let gitDir;
   try {
-    gitDir = path.resolve(resolvedOut, gitIn(resolvedOut, ['rev-parse', '--absolute-git-dir']).trim());
-  } catch {
-    return; // not inside any git checkout
+    const gitDir = path.resolve(resolvedOut, gitIn(resolvedOut, ['rev-parse', '--absolute-git-dir']).trim());
+    const insideGitDir = path.relative(gitDir, resolvedOut);
+    if (insideGitDir === '' || (!insideGitDir.startsWith('..') && !path.isAbsolute(insideGitDir)))
+      throw new UsageError(`--out ${out} is inside a .git directory; refusing to delete it`);
+    const tracked = trackedFiles(resolvedOut) ?? [];
+    if (tracked.length > 0)
+      throw new UsageError(`--out ${out} contains ${tracked.length} git-tracked file(s) (e.g. ${tracked[0]}); refusing to delete it`);
+  } catch (error) {
+    if (error instanceof UsageError) throw error;
+    // Not inside a git checkout: the marker rule below still applies.
   }
-  const insideGitDir = path.relative(gitDir, resolvedOut);
-  if (insideGitDir === '' || (!insideGitDir.startsWith('..') && !path.isAbsolute(insideGitDir)))
-    throw new UsageError(`--out ${out} is inside a .git directory; refusing to delete it`);
-  const tracked = trackedFiles(resolvedOut) ?? [];
-  if (tracked.length > 0)
-    throw new UsageError(`--out ${out} contains ${tracked.length} git-tracked file(s) (e.g. ${tracked[0]}); refusing to delete it`);
-  const untracked = gitIn(resolvedOut, ['ls-files', '-z', '--others', '--exclude-standard']).split('\0').filter(Boolean);
-  if (untracked.length > 0)
+  const entries = readdirSync(resolvedOut);
+  if (entries.length > 0 && !entries.includes(BUILD_MARKER))
     throw new UsageError(
-      `--out ${out} contains ${untracked.length} untracked file(s) that are not git-ignored (e.g. ${untracked[0]}); ` +
-        'refusing to delete it. Add the output directory to .gitignore or choose another --out.',
+      `--out ${out} is a non-empty directory that docs-kit did not create (no ${BUILD_MARKER} marker); refusing to delete it. ` +
+        'Choose an empty or new directory.',
     );
 }
 
@@ -311,6 +317,7 @@ export function runBuild({ root, out, baseUrl }) {
   }
   writeFileSync(path.join(out, 'docs-kit.css'), SITE_CSS);
   writeFileSync(path.join(out, '.nojekyll'), '');
+  writeFileSync(path.join(out, BUILD_MARKER), 'Generated by docs-kit build. This directory is replaced on every build.\n');
   const bundle = assembleBundle({ manifest, read, sha, siteUrl });
   writeFileSync(path.join(out, 'docs-bundle.json'), `${JSON.stringify(bundle, null, 2)}\n`);
 
