@@ -3,6 +3,7 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitEnv } from '../src/git.mjs';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const BIN = path.join(REPO_ROOT, 'bin', 'docs-kit.mjs');
@@ -11,7 +12,7 @@ export const FIXTURES = path.join(REPO_ROOT, 'test', 'fixtures');
 /** Run the real CLI as a child process. Resolves { status, stdout, stderr, output }. */
 export function runCli(args, { cwd = REPO_ROOT, env = {} } = {}) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [BIN, ...args], { cwd, env: { ...process.env, ...env }, encoding: 'utf8' }, (error, stdout, stderr) => {
+    execFile(process.execPath, [BIN, ...args], { cwd, env: { ...gitEnv(), ...env }, encoding: 'utf8' }, (error, stdout, stderr) => {
       const status = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
       resolve({ status, stdout, stderr, output: `${stdout}\n${stderr}` });
     });
@@ -29,7 +30,8 @@ const GIT_ENV = {
 export function git(cwd, args) {
   return execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], {
     cwd,
-    env: { ...process.env, ...GIT_ENV },
+    // Scrubbed so fixture setup run under a git hook never writes the hook's repository.
+    env: { ...gitEnv(), ...GIT_ENV },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();

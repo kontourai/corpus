@@ -5,7 +5,7 @@ import sanitizeHtml from 'sanitize-html';
 import { assembleBundle, defaultSiteUrl, normalizeBaseUrl } from './bundle.mjs';
 import { formatCheckReport, publishedSources, runChecks } from './check.mjs';
 import { EXIT_OK, GateFailure, UsageError } from './errors.mjs';
-import { headSha, repoPrefix, trackedFiles } from './git.mjs';
+import { gitEnv, headSha, repoPrefix, trackedFiles } from './git.mjs';
 import { execFileSync } from 'node:child_process';
 import { outputPathFor } from './manifest.mjs';
 import { analyzeMarkdown, documentTitle, extractHtmlAnchors, extractHtmlReferences, firstParagraph, resolveLink, rewriteHtmlReferences } from './markdown.mjs';
@@ -143,7 +143,7 @@ function sectionCards(manifest, titles, descriptions) {
 }
 
 function gitIn(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync('git', args, { cwd, env: gitEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 export const BUILD_MARKER = '.docs-kit-build';

@@ -1,9 +1,32 @@
 import { execFileSync } from 'node:child_process';
 import { UsageError } from './errors.mjs';
 
+// Variables that point git at a repository other than the one `cwd` is in.
+// Git hooks export them (GIT_DIR in pre-push, GIT_INDEX_FILE in pre-commit),
+// so docs-kit run from a hook would otherwise read, or a caller's fixture
+// setup write, the hook's repository instead of `--root`.
+const REPO_REDIRECT_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_NAMESPACE',
+  'GIT_PREFIX',
+];
+
+/** `env` without the variables that redirect git away from `cwd`. */
+export function gitEnv(env = process.env) {
+  const clean = { ...env };
+  for (const name of REPO_REDIRECT_VARS) delete clean[name];
+  return clean;
+}
+
 function git(root, args) {
   return execFileSync('git', args, {
     cwd: root,
+    env: gitEnv(),
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

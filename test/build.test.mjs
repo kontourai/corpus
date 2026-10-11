@@ -311,3 +311,18 @@ test('build sanitizes rendered HTML: no script, no on* handlers, no javascript: 
   assert.match(html, /<details><summary>More<\/summary>Kept\.<\/details>/);
   assert.match(html, /<h2 id="workflows">Workflows<a class="anchor" href="#workflows"/, 'heading ids and anchor links survive');
 });
+
+test('git calls ignore GIT_DIR and friends exported by a git hook, reading --root and never writing the hook repository', async (t) => {
+  const root = fixtureRepo(t, 'valid');
+  const other = fixtureRepo(t, 'second');
+  const otherHead = git(other, ['rev-parse', 'HEAD']);
+  const rootHead = git(root, ['rev-parse', 'HEAD']);
+  assert.notEqual(rootHead, otherHead);
+  const out = path.join(scratch(t), 'site');
+  const hookEnv = { GIT_DIR: path.join(other, '.git'), GIT_INDEX_FILE: path.join(other, '.git', 'index') };
+  const result = await runCli(['build', '--root', root, '--out', out], { env: hookEnv });
+  assert.equal(result.status, 0, result.output);
+  const bundle = JSON.parse(readFileSync(path.join(out, 'docs-bundle.json'), 'utf8'));
+  assert.equal(bundle.sha, rootHead);
+  assert.equal(git(other, ['rev-parse', 'HEAD']), otherHead);
+});
