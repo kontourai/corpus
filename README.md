@@ -1,5 +1,13 @@
 # docs-kit
 
+**Docs gate, GitHub Pages site, and docs MCP server for Kontour products.**
+
+[![CI](https://github.com/kontourai/docs-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/kontourai/docs-kit/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-kontourai.github.io-blue)](https://kontourai.github.io/docs-kit/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+[Documentation](https://kontourai.github.io/docs-kit/) · [Docs hub](https://kontourai.github.io/)
+
 `@kontourai/docs-kit` gives every Kontour product the same three things from one manifest:
 
 - **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, redirects, local paths, and (on pull requests) freshness.
