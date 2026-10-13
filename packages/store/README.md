@@ -119,7 +119,7 @@ profiles against installed code, and runs the installed docs CLI without a
 build. CI runs this on Node 22 and 24.
 
 [The expected-fail list](test/expected-fails.json) is keyed by public vector ID,
-profile, deferred owner decision and observed failure pattern. Unknown failures,
+profile, deferred owner decision and either an exact failing assertion or a specific error pattern. Unknown failures,
 missing probes and listed vectors that pass fail the run. Search is a host
 integration obligation. [The extraction record](../../docs/store-extraction.md)
 contains source mapping and executed evidence. The ported transaction suite

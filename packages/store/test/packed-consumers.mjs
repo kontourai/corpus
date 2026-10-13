@@ -64,7 +64,7 @@ assert.equal((await stores[0].get(id))?.body, 'Typed body');
 function invalidConfigurations(): void {
   // @ts-expect-error Coordination identity must be supplied even with an explicit lock and directory.
   new KitDefaultStoreAdapter({ storeRoot: resolve("invalid-identity"), lock, coordinationDirectory: resolve("invalid-coordination") });
-  // @ts-expect-error Both host coordination services are required.
+  // @ts-expect-error All host coordination services are required.
   new KitDefaultStoreAdapter({ storeRoot: resolve('invalid-default') });
   // @ts-expect-error A standalone lock still needs an explicit directory.
   new KitObsidianStoreAdapter({ storeRoot: resolve('invalid-vault'), lock });
