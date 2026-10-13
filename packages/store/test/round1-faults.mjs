@@ -42,6 +42,7 @@ function run(label, args, success, command = 'npm') {
 run('build-baseline', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
 const results = [];
 const selected = process.argv.slice(3);
+for (const id of selected) assert.ok(controls.some((control) => control.id === id), `Unknown fault control: ${id}`);
 for (const control of controls.filter((control) => !selected.length || selected.includes(control.id))) {
   const file = join(repo, control.file);
   const original = readFileSync(file, 'utf8');

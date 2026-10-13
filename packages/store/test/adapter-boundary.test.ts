@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { expect, test } from 'vitest';
 const mutation = '(?:appendFile|copyFile|cp|rename|rmdir|rm|truncate|unlink|writeFile)(?:Sync)?';
 const fsModule = `['"](?:node:)?fs(?:/promises)?['"]`;
 function bypasses(source: string): string[] {
@@ -12,11 +12,14 @@ function bypasses(source: string): string[] {
   }
   return found;
 }
-describe('adapter publication ownership', () => {
-  for (const file of ['default-store', 'obsidian-store']) {
-    test(`${file} delegates file mutations to the transaction owner`, () => {
-      const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
-      expect(bypasses(source)).toEqual([]);
-    });
+test('package adapters and helpers leave raw file mutations to their owners', () => {
+  const root = new URL('../src/', import.meta.url);
+  const owners = new Set(['shared/file-transactions.ts', 'standalone-lock.ts']);
+  const found: string[] = [];
+  for (const file of readdirSync(root, { recursive: true }).map(String)) {
+    if (!file.endsWith('.ts') || owners.has(file.replaceAll('\\', '/'))) continue;
+    const source = readFileSync(new URL(file, root), 'utf8');
+    found.push(...bypasses(source).map((mutation) => `${file}: ${mutation}`));
   }
+  expect(found).toEqual([]);
 });

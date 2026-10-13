@@ -38,9 +38,9 @@ evidence, error and adapter interfaces → `packages/store/src/contracts.ts`;
 provider and descriptors stay host-owned. `services.ts`, `standalone-lock.ts`,
 `index.ts` and `observation.ts` compose/export the extracted owners.
 
-The Station-only source-scan test for host document services and vault onboarding
+The Station-only source scan for host document services and vault onboarding
 `validateRoot` tests were not ported: those host owners are outside the package.
-All 123 remaining behavioral tests are executed, not merely copied. Logger mocks
+The 123 ported behavioral tests were executed, not merely copied; round 1 also restores a derived package-wide raw-fs guard. Logger mocks
 become injected diagnostics; transaction fixtures receive an isolated coordination
 directory. The Station lock itself is neither copied nor moved.
 
@@ -63,7 +63,7 @@ acceptance), physical-ID collisions without indexes/after archival/mismatched
 frontmatter, symlink refusal, lost/corrupt derived indexes and disk graph integrity.
 The vault path index is authoritative, so derived-index loss probes preserve it.
 
-## Evidence
+## Initial extraction evidence (before round 1)
 
 EXECUTED on macOS, Node `22.22.2` and `24.19.0`:
 
