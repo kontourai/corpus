@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "check": "cat <<-EOF\n\tveritas fake\n\tEOF\nveritas readiness"
+  }
+}

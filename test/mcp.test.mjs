@@ -330,7 +330,7 @@ test('checkout cache keys before building, so an edit during a build is picked u
   assert.deepEqual(first.data.products[0].builtOn, []);
   const file = path.join(repo, 'corpus.json');
   const raw = JSON.parse(readFileSync(file));
-  raw.builtOn = [{ product: 'knowledge', via: ['knowledge', 'knowledge-query'], for: 'Read source records', evidence: 'cli' }];
+  raw.builtOn = [{ product: 'knowledge', via: ['@kontourai/knowledge'], bin: 'knowledge-query', for: 'Read source records', evidence: 'cli' }];
   writeFileSync(file, JSON.stringify(raw));
   const changed = await call(client, 'list_products');
   assert.deepEqual(changed.data.products[0].builtOn, raw.builtOn);

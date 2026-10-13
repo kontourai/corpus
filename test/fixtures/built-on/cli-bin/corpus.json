@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "veritas",
+      "via": "@kontourai/governance",
+      "for": "Check governance readiness",
+      "bin": "veritas",
+      "evidence": "cli"
+    }
+  ],
+  "documents": []
+}

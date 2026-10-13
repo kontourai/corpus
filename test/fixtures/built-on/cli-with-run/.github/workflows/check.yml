@@ -1,0 +1,6 @@
+jobs:
+  check:
+    steps:
+      - uses: example/action@v1
+        with:
+          run: veritas readiness

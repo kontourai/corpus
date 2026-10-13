@@ -32,7 +32,7 @@ export function bundleShapeError(bundle, product) {
     if (!isString(bundle.purpose) || !bundle.purpose.trim()) return 'bundle purpose must be a non-empty string';
     if (!Array.isArray(bundle.builtOn)) return 'bundle builtOn must be an array';
     for (const entry of bundle.builtOn) {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some((key) => !['product', 'via', 'for', 'evidence'].includes(key)) || (Object.hasOwn(entry, 'evidence') && entry.evidence !== 'cli') || ['product', 'for'].some((key) => !isString(entry[key]) || !entry[key].trim()) || !(Array.isArray(entry.via) ? entry.via.length > 0 && entry.via.every((via) => isString(via) && via.trim()) : isString(entry.via) && entry.via.trim())) return 'bundle builtOn entries must contain product and for strings, and via as a string or non-empty string array';
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some((key) => !['product', 'via', 'for', 'evidence', 'bin'].includes(key)) || (Object.hasOwn(entry, 'bin') && (typeof entry.bin !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(entry.bin))) || (Object.hasOwn(entry, 'evidence') && entry.evidence !== 'cli') || ['product', 'for'].some((key) => !isString(entry[key]) || !entry[key].trim()) || !(Array.isArray(entry.via) ? entry.via.length > 0 && entry.via.every((via) => isString(via) && via.trim()) : isString(entry.via) && entry.via.trim())) return 'bundle builtOn entries must contain product and for strings, and via as a string or non-empty string array';
     }
   }
   if (product && bundle.product !== product) return `bundle is for product "${bundle.product}", expected "${product}"`;

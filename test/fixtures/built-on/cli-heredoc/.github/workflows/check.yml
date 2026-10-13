@@ -1,0 +1,7 @@
+jobs:
+  check:
+    steps:
+      - run: |
+          cat <<'EOF'
+          veritas readiness
+          EOF
