@@ -14,7 +14,6 @@ mutation_log:
   custom:
   - 1.10
   - 3
-  following: retained
 expires_at: 2030-01-01T00:00:00.000Z
 tags: [following]
 links: []
