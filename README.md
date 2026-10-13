@@ -24,7 +24,7 @@ npx -y github:kontourai/corpus#<sha> corpus check
 
 Corpus owns source-bound content: documentation checking, publishing, and retrieval today, with a shared Knowledge store planned separately. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
 
-This repository retains its own v1 `docs-kit.json` and `docs-kit` product identity until the GitHub rename and the org workflow pin upgrade are complete. A follow-up will migrate it to `corpus.json` v2; the v2 fixtures already exercise the new schema.
+This repository dogfoods `corpus.json` schema v2 with the `corpus` product identity and publishes at `/corpus/`. Its `builtOn` list is empty: the docs CLI consumes third-party libraries, but no other Kontour product through a public contract.
 
 The root package is a zero-install, plain ESM docs CLI. `corpus` and the legacy `docs-kit` bin run the same commands with identical output and exit codes. Generated `docs-kit.css`, `docs-kit.js`, and `.docs-kit-build` names remain compatible.
 
@@ -135,7 +135,7 @@ A meta refresh drops the URL fragment, so the stub also carries a small inline s
 corpus <check|build|locate|mcp|hub|init> [options]
 ```
 
-Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An invalid `docs-kit.json` is a configuration error (`2`), and so is a git error.
+Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An invalid manifest is a configuration error (`2`), and so is a git error.
 
 ### check
 
@@ -145,7 +145,7 @@ corpus check [--root dir] [--base <git-ref>] [--advisory]
 
 `check` runs the gates below and reports every failure, not only the first.
 
-1. **manifest:** `docs-kit.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
+1. **manifest:** `corpus.json` (or legacy `docs-kit.json`) is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents (bundle-only ones included) resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (with or without `"publish": false`), is the landing page, or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
