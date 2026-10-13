@@ -9,7 +9,9 @@ This extraction preserves Station semantics at
 `2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`. The only planned codec change in this
 release preserves text scalars from old Knowledge Kit writers. Future working-set,
 expiry, compiled-source and proposal decisions are explicit expected failures,
-not implemented behavior. Nothing has been published to npm by this change.
+not implemented behavior. Version `0.1.0-next.0` is the first npm candidate,
+published only after owner bootstrap and trusted-publisher setup through the
+[workspace publish workflow](../../README.md#publishing-the-store-workspaces).
 
 ## Host composition
 

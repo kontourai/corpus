@@ -1,5 +1,11 @@
 # Store extraction evidence
 
+Publication preparation at `0.1.0-next.0` adds an owner-dispatched
+[workspace publish workflow](../README.md#publishing-the-store-workspaces).
+The packed TypeScript consumer now pins `@types/node@24.19.2` alongside
+`typescript@5.9.3`, with install scripts disabled. This preparation does not
+claim npm publication or change the behavioral evidence below.
+
 This package-only change implements adjusted phase 3 steps 1–2. It does not
 publish, merge, migrate consumers or apply the deferred owner decisions.
 Station source: `2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136` (`origin/main`).

@@ -48,7 +48,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   run(process.execPath, ['probe.mjs'], js);
   for (const file of ['conformance.mjs', 'conformance-harness.mjs', 'store-child.mjs', 'expected-fails.json']) cpSync(join(packageRoot, 'test', file), join(js, file));
   console.log(run(process.execPath, ['conformance.mjs'], js));
-  console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24'], ts));
+  console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';

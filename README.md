@@ -20,6 +20,38 @@ The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. C
 npx -y github:kontourai/corpus#<sha> corpus check
 ```
 
+## Publishing the store workspaces
+
+The [publish workflow](.github/workflows/publish-npm.yml) publishes only
+`@kontourai/corpus-store` and `@kontourai/corpus-conformance`. The root
+`@kontourai/corpus` package stays git-installed. Dispatch `publish-npm.yml`
+on `main` with an exact `version` matching both workspace manifests;
+the initial candidate is `0.1.0-next.0`. Release-please does not manage these
+workspace versions yet.
+
+The workflow builds Store, runs its contracts and packed-consumer checks,
+then publishes the two `npm pack` tarballs with provenance. Every prerelease
+uses `next`; stable versions use `latest`. Both versions must be absent on npm
+before either publish begins. An existing version, registry error other than
+E404, or unconfirmed response stops publication. If one publish succeeds and
+the other fails, the run cannot simply be repeated: investigate the failure
+and prepare a new matching version pair. The registry cannot publish the pair
+atomically.
+
+An owner must first create both npm packages and configure GitHub Actions
+trusted publishers for organization `kontourai`, repository `corpus`, workflow
+`publish-npm.yml`, environment `npm-publish`, with direct `npm publish` allowed.
+Bootstrap with a separate prerelease version and non-`latest` tag so the CI
+candidate remains unpublished. Configure the GitHub `npm-publish` environment
+for `main` and owner approval before dispatch. CI uses Node 24, pinned npm
+11.17.0, `id-token: write`, and no registry token or `setup-node` `registry-url`.
+
+Exercise the executable publish guard with fixture registry responses:
+
+```sh
+node --test test/npm-publish-guard.test.mjs
+```
+
 ## Purpose and audience
 
 Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly. Corpus owns documentation checking, publishing, and retrieval today, with [Corpus Store](packages/store/README.md) providing mutable file-backed records as a separate package. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
