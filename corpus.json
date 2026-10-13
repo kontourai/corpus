@@ -80,6 +80,6 @@
     }
   ],
   "exclude": [],
-  "purpose": "Help users check, publish, locate, and retrieve documentation bound to its source revision.",
+  "purpose": "Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly.",
   "builtOn": []
 }

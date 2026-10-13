@@ -22,7 +22,7 @@ npx -y github:kontourai/corpus#<sha> corpus check
 
 ## Purpose and audience
 
-Corpus owns source-bound content: documentation checking, publishing, and retrieval today, with a shared Knowledge store planned separately. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
+Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly. Corpus owns documentation checking, publishing, and retrieval today, with a shared Knowledge store planned separately. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
 
 This repository dogfoods `corpus.json` schema v2 with the `corpus` product identity and publishes at `/corpus/`. Its `builtOn` list is empty: the docs CLI consumes third-party libraries, but no other Kontour product through a public contract.
 
