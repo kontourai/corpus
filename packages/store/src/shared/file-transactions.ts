@@ -56,7 +56,7 @@ export function observeExactKnowledgeRecordFile(
   root: string,
   coordinationDirectory: string,
   id: string,
-  coordinationIdentity?: () => (() => void),
+  coordinationIdentity: () => (() => void),
 ) {
   if (
     !isSafePathSegment(id) ||
@@ -68,7 +68,9 @@ export function observeExactKnowledgeRecordFile(
   ) {
     throw new KnowledgeObservationRefusal('unavailable');
   }
-  const recheckIdentity = coordinationIdentity?.();
+  if (typeof coordinationIdentity !== 'function') throw new KnowledgeObservationRefusal('unavailable');
+  const recheckIdentity = coordinationIdentity();
+  if (typeof recheckIdentity !== 'function') throw new KnowledgeObservationRefusal('unavailable');
   const coordinationRoot = resolve(coordinationDirectory);
   const recheckRoot = observeDirectoryChain(root);
   const rootInfo = lstatSync(root);
@@ -79,7 +81,7 @@ export function observeExactKnowledgeRecordFile(
   );
   const check = () => {
     // Re-check the captured writer namespace after the host's final authorization.
-    recheckIdentity?.();
+    recheckIdentity();
     recheckRoot();
     recheckCoordination();
     requireObservationArtifactAbsent(join(root, JOURNAL_FILE));
@@ -179,7 +181,7 @@ export class KnowledgeFileTransactions {
 
   constructor(root: string, hooks: KnowledgeFileTransactionHooks = {}, options: Omit<StoreOptions, "storeRoot">) {
     this.services = resolveServices(options);
-    this.recheckCoordinationIdentity = this.services.coordinationIdentity?.();
+    this.recheckCoordinationIdentity = this.services.coordinationIdentity();
     this.root = resolve(root);
     this.journalPath = join(this.root, JOURNAL_FILE);
     this.hooks = hooks;

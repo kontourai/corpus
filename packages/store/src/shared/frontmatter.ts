@@ -1,11 +1,10 @@
-import { isDeepStrictEqual } from 'node:util';
 import { dump, FAILSAFE_SCHEMA, CORE_SCHEMA, EVENT_ID, SCALAR_STYLE, getScalarValue, parseEvents, load, type Event, type ScalarEvent, type LoadOptions } from 'js-yaml';
 
 interface ParsedMarkdown { meta: Record<string, unknown>; body: string }
 type Path = (string | number)[];
 interface SourceNode { kind: 'scalar' | 'mapping' | 'sequence' | 'alias'; start: number; end: number; scalar?: ScalarEvent; pairs?: { key: SourceNode; value: SourceNode; name: string }[]; items?: SourceNode[] }
-interface SavedPair { path: Path; start: number; end: number; value: unknown }
-interface SourceState { yaml: string; pairs: SavedPair[] }
+interface SavedScalar { key: string; start: number; end: number; value: string }
+interface SourceState { yaml: string; scalars: SavedScalar[] }
 // Enumerable symbols survive the record spreads in both adapters; YAML and JSON omit them.
 const SOURCE = Symbol('corpus.frontmatter.source');
 const ROOT_STRINGS = new Set(['id', 'type', 'title', 'category', 'status', 'created_at', 'updated_at', 'expires_at', '_body_sentinel']);
@@ -98,25 +97,21 @@ function sourceTree(source: string, options?: Pick<LoadOptions, 'maxDepth'>): So
   }
   return node();
 }
-function pairEnd(source: string, end: number): number {
-  const newline = source.indexOf('\n', end);
-  const tail = source.slice(end, newline < 0 ? source.length : newline);
-  return /^[ \t]*(?:#.*)?$/.test(tail) ? (newline < 0 ? source.length : newline) : end;
-}
-function pairs(root: SourceNode, source: string, meta: unknown): SavedPair[] {
-  const result: SavedPair[] = [];
-  function walk(node: SourceNode, path: Path) {
-    for (const pair of node.pairs ?? []) {
-      const childPath = [...path, pair.name];
-      if (fieldType(childPath, meta) === 'unknown') {
-        result.push({ path: childPath, start: pair.key.start, end: pairEnd(source, pair.value.end), value: structuredClone(at(meta, childPath)) });
-      }
-      walk(pair.value, childPath);
-    }
-    node.items?.forEach((item, i) => walk(item, [...path, i]));
+function lossyScalars(root: SourceNode, source: string, meta: unknown, core: unknown): SavedScalar[] {
+  const saved: SavedScalar[] = [];
+  for (const pair of root.pairs ?? []) {
+    const scalar = pair.value.scalar;
+    const value = at(meta, [pair.name]);
+    if (fieldType([pair.name], meta) !== 'unknown' || !scalar || scalar.style !== SCALAR_STYLE.PLAIN || scalar.anchorStart !== -1 || scalar.tagStart !== -1 || typeof value !== 'string' || at(core, [pair.name]) === value) continue;
+    const text = source.slice(pair.value.start, pair.value.end);
+    if (/[\r\n]/.test(text)) continue;
+    // Retained text must remain a legal plain scalar with exactly this string value.
+    try {
+      const reread = load(`value: ${text}`, { schema: FAILSAFE_SCHEMA }) as Record<string, unknown>;
+      if (reread.value === value) saved.push({ key: pair.name, start: pair.value.start, end: pair.value.end, value });
+    } catch { /* Invalid legacy tokens are serialized as quoted strings. */ }
   }
-  walk(root, []);
-  return result;
+  return saved;
 }
 function repairDash(source: string): { source: string; originalOffset: (offset: number) => number } {
   const edits: { start: number; end: number; replacement: string }[] = [];
@@ -181,24 +176,24 @@ export function parseMarkdown(text: string, options?: Pick<LoadOptions, 'maxDept
   if (typeof meta !== 'object' || Array.isArray(meta)) throw new Error('Knowledge frontmatter must be a mapping');
   const record = meta as Record<string, unknown>;
   const tree = sourceTree(source, options);
-  convert(record, load(source, { ...options, schema: CORE_SCHEMA }), tree);
-  const saved = pairs(tree, source, record).map((pair) => ({ ...pair, start: offset(pair.start), end: offset(pair.end) }));
-  Object.defineProperty(record, SOURCE, { enumerable: true, value: { yaml: raw, pairs: saved } satisfies SourceState });
+  const core = load(source, { ...options, schema: CORE_SCHEMA });
+  convert(record, core, tree);
+  const saved = lossyScalars(tree, source, record, core).map((scalar) => ({ ...scalar, start: offset(scalar.start), end: offset(scalar.end) }));
+  Object.defineProperty(record, SOURCE, { enumerable: true, value: { yaml: raw, scalars: saved } satisfies SourceState });
   return { meta: record, body };
 }
 export function serializeMarkdown(meta: Record<string, unknown>, body: string): string {
   let frontmatter = dump(meta, { lineWidth: -1 }).trimEnd();
   const saved = (meta as Record<symbol, SourceState>)[SOURCE];
-  if (saved?.pairs.length) {
-    const emitted = pairs(sourceTree(frontmatter), frontmatter, meta);
+  if (saved?.scalars.length) {
+    const emitted = sourceTree(frontmatter).pairs ?? [];
     const replacements: { start: number; end: number; text: string }[] = [];
-    for (const pair of saved.pairs) {
-      if (!isDeepStrictEqual(at(meta, pair.path), pair.value)) continue;
-      const target = emitted.find((candidate) => isDeepStrictEqual(candidate.path, pair.path));
-      if (target) replacements.push({ start: target.start, end: target.end, text: saved.yaml.slice(pair.start, pair.end) });
+    for (const scalar of saved.scalars) {
+      if (meta[scalar.key] !== scalar.value) continue;
+      const target = emitted.find((pair) => pair.name === scalar.key)?.value;
+      if (target?.scalar) replacements.push({ start: target.start, end: target.end, text: saved.yaml.slice(scalar.start, scalar.end) });
     }
-    const outermost = replacements.filter((candidate) => !replacements.some((parent) => parent !== candidate && parent.start <= candidate.start && parent.end >= candidate.end));
-    for (const replacement of outermost.sort((a, b) => b.start - a.start)) frontmatter = frontmatter.slice(0, replacement.start) + replacement.text + frontmatter.slice(replacement.end);
+    for (const replacement of replacements.sort((a, b) => b.start - a.start)) frontmatter = frontmatter.slice(0, replacement.start) + replacement.text + frontmatter.slice(replacement.end);
   }
   return `---\n${frontmatter}\n---\n\n${body}`;
 }

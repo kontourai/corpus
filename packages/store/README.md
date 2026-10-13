@@ -19,6 +19,7 @@ const store = new KitDefaultStoreAdapter({
   storeRoot: '/private/records',
   coordinationDirectory: '/private/host/coordination/knowledge-file-transactions',
   lock: hostFileMutationLock,
+  coordinationIdentity: hostCoordinationIdentity,
   clock: () => Date.now(),
   ids: () => crypto.randomUUID(),
   diagnostics: { warn(message, fields) { console.warn(message, fields); } },
@@ -41,7 +42,7 @@ index format or public storage API is claimed by this extraction.
 
 The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or
-Promise<void>. Station keeps its own implementation. Both `lock` and `coordinationDirectory` are required. Every cooperating writer
+Promise<void>. Station keeps its own implementation. All three of `lock`, `coordinationDirectory` and `coordinationIdentity` are required. Opening without them, or with an identity factory that does not return a recheck, throws before filesystem I/O. Every cooperating writer
 must inject the same lock protocol and coordination directory. Pass the final
 private directory, not a host home path. The package preserves the hashed
 realpath/device/inode `.lock` name and `.station-knowledge-transaction.json` v1
@@ -68,9 +69,13 @@ Station. Unknown fields use core-schema types when conversion is lossless: `3`,
 `true` and `null` become number, boolean and null; `1.10` and a bare `-` remain
 text. Unknown quoted strings stay strings.
 
-The codec retains source ranges and snapshots for unknown fields, including
-nested mutation evidence. Unchanged values re-emit their exact original source
-text. A changed container still retains unchanged scalar siblings. Station's
+The codec retains original tokens only for unchanged, top-level, single-line
+plain scalars whose core-schema conversion would be lossy (`1.10`, `1e3`,
+`0x10`, `~`). Every retained token must re-parse as the same string under the
+package's failsafe scalar reader. Invalid legacy text such as a bare `-` is
+quoted. Block scalars, flow collections, sequences, mappings, nested fields and
+multiline text go through normal serialization from their parsed values. No
+collection fragments are copied into a different indentation context. Station's
 serializer remains the writer for changed fields and new records. Station-written
 fixtures include all mutation evidence shapes and round-trip byte for byte.
 
@@ -123,7 +128,7 @@ existing internal hooks without adding a public storage seam.
 
 ## Coordination identity
 
-Hosts with a runtime-home resolver inject `coordinationIdentity`, a factory that
+Every host supplies `coordinationIdentity`, a factory that
 captures that home and returns a recheck. It must validate the home with
 `observeDirectoryChain(home)` (including strict realpath/no-symlink checks),
 then reject if the current runtime-home resolver returns a different absolute
@@ -133,4 +138,18 @@ same factory as the fourth argument to
 its returned recheck repeats the home/namespace check before returning source.
 Filesystem identity checks alone cannot detect a host resolver selecting another
 home, so hosts with that policy must inject the resolver check. Standalone hosts
-with a fixed explicit directory may omit it. No Station home resolver is imported.
+with a fixed directory must explicitly provide a factory that captures and
+rechecks their selected private parent directory (which must exist before opening). No Station home resolver is imported.
+
+
+For example, a standalone identity can use the public observation helper:
+
+```js
+import { observeDirectoryChain } from '@kontourai/corpus-store/observation';
+const coordinationIdentity = () => observeDirectoryChain('/private/host');
+```
+
+The same identity is required on the construction-free observation port. Hosts
+with a runtime-home resolver must additionally check that resolver against the
+captured home. Record data remains identical on re-read; whitespace/style may
+normalize except for the approved top-level lossy plain tokens.

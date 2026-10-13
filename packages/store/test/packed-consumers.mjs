@@ -38,7 +38,7 @@ assert.equal(typeof KnowledgeStoreCorruptionError, 'function');
 assert.equal(typeof observeExactKnowledgeRecordFile, 'function');
 assert.equal(typeof standaloneFileMutationLock, 'function');
 for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
- const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, lock: standaloneFileMutationLock });
+ const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
  const id = await adapter.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  assert.equal((await adapter.get(id)).body, 'Consumer body');
 }
@@ -56,12 +56,14 @@ import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observa
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 const lock: FileMutationLock = async (_path) => () => {};
-const options: StoreOptions = { storeRoot: resolve('typed-store'), coordinationDirectory: resolve('typed-coordination'), lock, clock: () => 0, ids: () => 'id', diagnostics: { warn() {} }, transactionObserver(_operation, _outcome) {} };
+const options: StoreOptions = { storeRoot: resolve('typed-store'), coordinationDirectory: resolve('typed-coordination'), coordinationIdentity: () => () => {}, lock, clock: () => 0, ids: () => 'id', diagnostics: { warn() {} }, transactionObserver(_operation, _outcome) {} };
 const stores: KnowledgeStoreAdapter[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
 async function read(): Promise<KitRecord | null> { return stores[0].get('id'); }
 const id = await stores[0].create({ type: 'raw', title: 'Typed consumer', body: 'Typed body', category: 'testing', provenance: { agent: 'consumer' } });
 assert.equal((await stores[0].get(id))?.body, 'Typed body');
 function invalidConfigurations(): void {
+  // @ts-expect-error Coordination identity must be supplied even with an explicit lock and directory.
+  new KitDefaultStoreAdapter({ storeRoot: resolve("invalid-identity"), lock, coordinationDirectory: resolve("invalid-coordination") });
   // @ts-expect-error Both host coordination services are required.
   new KitDefaultStoreAdapter({ storeRoot: resolve('invalid-default') });
   // @ts-expect-error A standalone lock still needs an explicit directory.

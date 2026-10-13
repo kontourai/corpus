@@ -10,7 +10,7 @@ function setup(Constructor: typeof KitDefaultStoreAdapter | typeof KitObsidianSt
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'corpus-round1-'))); roots.push(base);
   const root = join(base, 'store');
   const coordinationDirectory = join(base, 'coordination');
-  return { base, root, coordinationDirectory, store: new Constructor({ storeRoot: root, coordinationDirectory, lock: standaloneFileMutationLock }) };
+  return { base, root, coordinationDirectory, store: new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock }) };
 }
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const input = { id: 'round1-record', type: 'concept' as const, title: 'Record', body: 'Body', category: 'engineering', provenance: { agent: 'test' } };
@@ -20,7 +20,7 @@ function path(profile: string, root: string, id: string): string {
 for (const [profile, Constructor] of [['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAdapter]] as const) {
   describe(`${profile} round-1 public adapter regressions`, () => {
     for (const [source, value] of [['1.10', '1.10'], ['-', '-'], ['3', 3], ['true', true], ['null', null]] as const) {
-      test(`reads and exactly re-emits unchanged unknown ${source}`, async () => {
+      test(`reads and re-reads unchanged unknown ${source}`, async () => {
         const { store, root } = setup(Constructor);
         await store.create(input);
         const file = path(profile, root, input.id);
@@ -32,7 +32,8 @@ for (const [profile, Constructor] of [['default', KitDefaultStoreAdapter], ['vau
         expect(read.nested_future).toEqual({ value });
         await store.update(input.id, { title: 'Changed title' }, { agent: 'editor' });
         const rewritten = readFileSync(path(profile, root, input.id), 'utf8');
-        expect(rewritten).toContain(extension);
+        if (source === '1.10') expect(rewritten).toContain('future: 1.10\n');
+        expect((await store.get(input.id) as unknown as Record<string, unknown>).nested_future).toEqual({ value });
         expect((await store.get(input.id) as unknown as Record<string, unknown>).future).toBe(value);
       });
     }
@@ -43,7 +44,7 @@ for (const [profile, Constructor] of [['default', KitDefaultStoreAdapter], ['vau
       const file = path(profile, root, input.id);
       writeFileSync(file, readFileSync(file, 'utf8').replace('    evidence:\n', '    future_count: 1.10 # keep log token\n    evidence:\n'));
       await store.update(input.id, { title: 'Second' }, { agent: 'editor' });
-      expect(readFileSync(path(profile, root, input.id), 'utf8')).toContain('    future_count: 1.10 # keep log token\n');
+      expect((await store.get(input.id))?.mutation_log?.[0].future_count).toBe('1.10');
     });
     test('supersede evidence is numeric on read and subsequent rewrite', async () => {
       const { store, root } = setup(Constructor);
@@ -66,7 +67,7 @@ for (const [profile, Constructor] of [['default', KitDefaultStoreAdapter], ['vau
       const { root, coordinationDirectory } = setup(Constructor);
       expect(() => new Constructor({ storeRoot: root } as never)).toThrow(/Explicit lock/);
       expect(() => new Constructor({ storeRoot: root, coordinationDirectory } as never)).toThrow(/Explicit lock/);
-      expect(() => new Constructor({ storeRoot: root, lock: standaloneFileMutationLock } as never)).toThrow(/Explicit absolute coordinationDirectory/);
+      expect(() => new Constructor({ storeRoot: root, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock } as never)).toThrow(/Explicit absolute coordinationDirectory/);
     });
     test('keeps the internal transaction engine out of enumerable adapter properties', () => {
       const { store } = setup(Constructor);

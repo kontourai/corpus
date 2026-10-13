@@ -20,3 +20,12 @@ update fields; link added links; both propose shapes; apply/reject evidence;
 supersede numeric count; superseded-by IDs; and retire status/rationale/ref fields.
 The vault fixture also carries its rendered body sentinel. Values include
 ambiguous scalar strings to prove declared string fields retain their types.
+
+
+`round2/literal.md` and `round2/strip.md` execute the unchanged pinned Station
+serializer with unknown multiline notes placed before expiry/tags. `folded.md`
+uses the same Station-written envelope but changes the notes to a value-equivalent
+folded block; Station's lineWidth:-1 writer does not emit folded blocks.
+`kit-sequence.md` models the old Kit's unindented sequence layout in log entries;
+`flow.md` models a valid externally authored flow collection. Each places a
+subsequent key after the collection to expose delimiter/indentation data loss.

@@ -22,6 +22,7 @@ test('uses injected lock, clock, IDs and non-authoritative observers through pub
   const outcomes: string[] = [];
   const store = new KitDefaultStoreAdapter({
     storeRoot: root, coordinationDirectory: coordination,
+    coordinationIdentity: () => () => {},
     lock(path) { acquired.push(path); return () => { releases++; }; },
     clock: () => Date.parse('2026-01-01T00:00:00.000Z'),
     ids: () => `injected-${ids++}`,
@@ -40,24 +41,24 @@ test('uses injected lock, clock, IDs and non-authoritative observers through pub
 });
 test('exact observation is construction-free, refuses writer artifacts and detects byte replacement', async () => {
   const { root, coordination } = fixture();
-  const store = new KitDefaultStoreAdapter({ storeRoot: root, coordinationDirectory: coordination, lock: standaloneFileMutationLock });
+  const store = new KitDefaultStoreAdapter({ storeRoot: root, coordinationDirectory: coordination, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
   const id = await store.create({ ...input, id: 'observed-record' });
   const beforeRoot = readdirSync(root).sort();
   const beforeCoordination = readdirSync(coordination).sort();
-  const observed = observeExactKnowledgeRecordFile(root, coordination, id);
+  const observed = observeExactKnowledgeRecordFile(root, coordination, id, () => () => {});
   expect(observed.file).not.toBeNull();
   observed.recheck();
   expect(readdirSync(root).sort()).toEqual(beforeRoot);
   expect(readdirSync(coordination).sort()).toEqual(beforeCoordination);
   const journal = join(root, '.station-knowledge-transaction.json');
   writeFileSync(journal, '{}');
-  expect(() => observeExactKnowledgeRecordFile(root, coordination, id)).toThrow(KnowledgeObservationRefusal);
+  expect(() => observeExactKnowledgeRecordFile(root, coordination, id, () => () => {})).toThrow(KnowledgeObservationRefusal);
   rmSync(journal);
   const info = lstatSync(root);
   const hash = createHash('sha256').update(`${realpathSync(root)}\0${info.dev}\0${info.ino}`).digest('hex');
   const lock = join(coordination, `${hash}.lock`);
   mkdirSync(lock);
-  expect(() => observeExactKnowledgeRecordFile(root, coordination, id)).toThrow(KnowledgeObservationRefusal);
+  expect(() => observeExactKnowledgeRecordFile(root, coordination, id, () => () => {})).toThrow(KnowledgeObservationRefusal);
   rmSync(lock, { recursive: true });
   const path = join(root, 'records', `${id}.md`);
   writeFileSync(path, readFileSync(path, 'utf8') + '\nexternal edit');

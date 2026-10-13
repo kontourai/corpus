@@ -10,7 +10,7 @@ import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutation
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
   const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
-  return new Constructor({ storeRoot: root, coordinationDirectory, lock: standaloneFileMutationLock });
+  return new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
 }
 export async function recordPath(profile, root, id) {
   if (profile === 'default') return join(root, 'records', `${id}.md`);

@@ -122,8 +122,8 @@ record field exists. Unknown extension scalars follow the orchestrator's lossles
 core-schema rule, with source slices retained for unchanged values.
 
 Round 1 also requires explicit lock/coordination options; adds injected host-home
-identity rechecks; binds expected failures to ref/kind/expected/actual assertions
-and adjudicates selected vectors; restores held-owner PID/liveness and raw-fs
+identity rechecks; binds 6 of the 20 expected failures to ref/kind/expected/actual assertions
+and 14 to specific error patterns, and adjudicates selected vectors; restores held-owner PID/liveness and raw-fs
 publication guards; removes machine-private paths; and hides the existing
 internal transaction field from enumeration. Origin main was merged, including
 #13's dependency and instruction changes. Package/root CI is rerun after this
@@ -140,7 +140,7 @@ EXECUTED at source revision `9ec0bed` on macOS:
 - Packed JS and strict TS consumers execute successfully on both Node versions.
   TS also rejects missing lock/directory configurations at compile time.
 - All 124 vectors per default/vault profile execute against installed tarballs:
-  104 pass, 20 exact expected failures, with no unexpected result. Selected
+  104 pass, 20 expected failures, with no unexpected result. Six are assertion-bound and fourteen are specific-error-pattern-bound. Selected
   vectors receive the same adjudication.
 - Packed docs CLI executes without a build, including the merged builtOn gate.
 - Both Node versions produce store tarball SHA-256
@@ -188,3 +188,29 @@ immediate semantic convergence. Search vectors remain an expected host-level
 failure because retrieval is deliberately outside this library. No ranked
 search, hosted CI, mixed Station/standalone lock or deployment qualification is
 inferred from the package tests.
+
+
+## Round 2 policy and data preservation
+
+The current rule replaces round 1's broad source-slice preservation. Only an
+unchanged top-level, single-line plain scalar whose core conversion is lossy may
+retain its original token, and that token must be valid YAML that re-parses as
+the same failsafe string. Collections, block scalars, nested or multiline data
+use the normal serializer. Invalid bare-dash text is always quoted. This avoids
+copying missing line separators or obsolete indentation into new YAML.
+
+The package preserves parsed values and following keys across updates for
+Station-written `|` and `|-`, externally authored `>` accepted by Station,
+Kit-style unindented log sequences, and flow collections. Station's serializer
+uses `lineWidth: -1` and does not emit folded `>`; the folded fixture therefore
+starts with a Station-written envelope and deliberately models an external edit.
+`coordinationIdentity` is now mandatory for stores and exact observation; its
+factory/recheck shape is validated before directory preparation. Fixed-directory
+standalone hosts must also opt in to an explicit identity.
+
+6 of the 20 expected failures are bound to ref/kind/expected/actual, and 14 to
+specific error patterns. This is a diagnostic extraction with deferred owner
+decisions, not a claim of complete semantic conformance.
+
+Station comparison and negative-control receipts follow once executed at the
+committed round-2 baseline.

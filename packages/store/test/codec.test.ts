@@ -56,23 +56,24 @@ test('unknown extension changes replace saved source instead of resurrecting old
 });
 
 
-test('changed extension containers preserve their unchanged scalar siblings', () => {
+test('changed extension containers serialize their unchanged scalar siblings safely', () => {
   const { meta, body } = parseMarkdown('---\nfuture: { precise: 1.10, changed: 3, quoted: "true" }\n---\n\nBody');
   (meta.future as Record<string, unknown>).changed = 4;
   const rewritten = serializeMarkdown(meta, body);
-  expect(rewritten).toContain('precise: 1.10\n');
+  expect(rewritten).toContain("precise: '1.10'\n");
   expect(rewritten).toContain('changed: 4\n');
-  expect(rewritten).toContain('quoted: "true"\n');
+  expect(parseMarkdown(rewritten).meta.future).toMatchObject({ quoted: 'true' });
   const read = parseMarkdown(rewritten).meta.future;
   expect(read).toEqual({ precise: '1.10', changed: 4, quoted: 'true' });
 });
 
-test('unchanged extension blocks, sequences and quoted keys retain source text', () => {
+test('unchanged extension blocks and sequences retain values through canonical serialization', () => {
   const extension = '"future": { values: [1.10, 3, true, null], quoted: "3" } # retain format\nfuture_body: |\n  exact body\n  second line\n';
   const original = `---\ntitle: Title\n${extension}---\n\nBody`;
   const { meta, body } = parseMarkdown(original);
   expect(meta.future).toEqual({ values: ['1.10', 3, true, null], quoted: '3' });
-  expect(serializeMarkdown(meta, body)).toBe(original);
+  const rewritten = serializeMarkdown(meta, body);
+  expect(parseMarkdown(rewritten).meta).toMatchObject({ future: meta.future, future_body: meta.future_body });
 });
 
 
@@ -81,5 +82,5 @@ test('operation-specific string fields do not capture unknown fields on other lo
   const log = meta.mutation_log as Record<string, unknown>[];
   expect(log[0].rationale).toBe(3);
   expect(log[1].rationale).toBe('true');
-  expect(serializeMarkdown(meta, body)).toContain('    rationale: 3 # future update extension');
+  expect((parseMarkdown(serializeMarkdown(meta, body)).meta.mutation_log as Record<string, unknown>[])[0].rationale).toBe(3);
 });

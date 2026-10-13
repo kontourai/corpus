@@ -17,8 +17,8 @@ import { runAdapterContractSuite } from './contract-suite.js';
 
 const loggerWarnSpy = vi.fn();
 class KitObsidianStoreAdapter extends SourceAdapter {
-  constructor(options: Omit<ConstructorParameters<typeof SourceAdapter>[0], "lock" | "coordinationDirectory">) {
-    super({ ...options, lock: standaloneFileMutationLock, coordinationDirectory: join(options.storeRoot, "coordination"), diagnostics: { warn: loggerWarnSpy } });
+  constructor(options: Omit<ConstructorParameters<typeof SourceAdapter>[0], "lock" | "coordinationDirectory" | "coordinationIdentity">) {
+    super({ ...options, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, coordinationDirectory: join(options.storeRoot, "coordination"), diagnostics: { warn: loggerWarnSpy } });
   }
 }
 

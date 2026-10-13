@@ -14,19 +14,23 @@ export interface StoreOptions {
   coordinationDirectory: string;
   lock: FileMutationLock;
   /** Captures host runtime-home identity; returned function rechecks it before I/O and observation return. */
-  coordinationIdentity?: () => (() => void);
+  coordinationIdentity: () => (() => void);
   clock?: () => number;
   ids?: () => string;
   diagnostics?: Diagnostics;
   transactionObserver?: (operation: string, outcome: string) => void;
 }
-export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver' | 'coordinationIdentity'>;
+export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'coordinationIdentity' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver'>;
 export const serviceScope = new AsyncLocalStorage<ResolvedServices>();
 export function resolveServices(options: Omit<StoreOptions, 'storeRoot'>): ResolvedServices {
   if (typeof options?.lock !== 'function') throw new Error('Explicit lock is required');
   if (typeof options.coordinationDirectory !== 'string' || !isAbsolute(options.coordinationDirectory)) throw new Error('Explicit absolute coordinationDirectory is required');
+  if (typeof options.coordinationIdentity !== 'function') throw new Error('Explicit coordinationIdentity is required');
+  const recheck = options.coordinationIdentity();
+  if (typeof recheck !== 'function') throw new Error('coordinationIdentity must return a recheck function');
   return {
     ...options,
+    coordinationIdentity: () => recheck,
     coordinationDirectory: resolve(options.coordinationDirectory),
     lock: options.lock,
     clock: options.clock ?? Date.now,
