@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "check": "echo veritas readiness; veritas-other check"
+  }
+}

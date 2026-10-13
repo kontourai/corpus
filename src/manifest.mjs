@@ -181,8 +181,9 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
     if (!Array.isArray(raw.builtOn)) errors.push(`${where}: builtOn must be an array`);
     else raw.builtOn.forEach((entry, index) => {
       const at = `${where}: builtOn[${index}]`;
-      if (!checkKeys(entry, at, ['product', 'via', 'for'], ['product', 'via', 'for'], errors)) return;
+      if (!checkKeys(entry, at, ['product', 'via', 'for', 'evidence'], ['product', 'via', 'for'], errors)) return;
       for (const key of ['product', 'via', 'for']) checkString(entry[key], `${at}.${key}`, errors);
+      if (Object.hasOwn(entry, 'evidence') && entry.evidence !== 'cli') errors.push(`${at}.evidence must be "cli"`);
       if (typeof entry.product === 'string' && !PRODUCT_SLUG.test(entry.product)) errors.push(`${at}.product must be a lowercase slug`);
     });
   }

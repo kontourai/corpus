@@ -1,3 +1,4 @@
+import { checkBuiltOn } from './built-on.mjs';
 import { readFileSync } from 'node:fs';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
@@ -263,6 +264,10 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
       gates.push({ name, skipped: `${MANIFEST_FILE} is invalid` });
     return { exitCode, gates, manifest: null };
   }
+
+  const builtOn = checkBuiltOn(root, manifest);
+  gates.push({ name: 'builtOn', ...builtOn });
+  if (builtOn.failures?.length) raise(EXIT_GATE);
 
   const read = createDocumentReader(root);
   for (const [name, run] of [

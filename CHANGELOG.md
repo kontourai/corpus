@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Verify v2 builtOn against runtime and workspace Kontour dependencies, warn on dev-only use, and report explicit skips. Support reasoned CLI invocation evidence in manifests and bundles.
+
 ## Unreleased — Corpus
 
 - The MCP initialization response's `serverInfo.name` is now `corpus` (previously `docs-kit`), under both CLI bins. In this repository, only the MCP server-identity test keys on that name; production tool lookup uses the unchanged tool names. External clients that explicitly match `serverInfo.name === "docs-kit"` must update that match; arbitrary external consumers have not been audited. Station's shared MCP connection code records the negotiated name as metadata rather than using it to route docs tools.

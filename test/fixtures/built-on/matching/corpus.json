@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "flow-agents",
+      "via": "@kontourai/flow-agents",
+      "for": "Use its public contract"
+    },
+    {
+      "product": "knowledge",
+      "via": "@kontourai/knowledge",
+      "for": "Use its public contract"
+    },
+    {
+      "product": "surface",
+      "via": "@kontourai/surface",
+      "for": "Use its public contract"
+    }
+  ],
+  "documents": []
+}

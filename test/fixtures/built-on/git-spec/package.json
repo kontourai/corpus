@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "knowledge-alias": "github:kontourai/knowledge#sha",
+    "flow-alias": "git+https://github.com/kontourai/flow-agents.git#sha"
+  }
+}

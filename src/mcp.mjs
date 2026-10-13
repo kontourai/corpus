@@ -32,7 +32,7 @@ export function bundleShapeError(bundle, product) {
     if (!isString(bundle.purpose) || !bundle.purpose.trim()) return 'bundle purpose must be a non-empty string';
     if (!Array.isArray(bundle.builtOn)) return 'bundle builtOn must be an array';
     for (const entry of bundle.builtOn) {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some((key) => !['product', 'via', 'for'].includes(key)) || ['product', 'via', 'for'].some((key) => !isString(entry[key]) || !entry[key].trim())) return 'bundle builtOn entries must contain product, via, and for strings';
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some((key) => !['product', 'via', 'for', 'evidence'].includes(key)) || (Object.hasOwn(entry, 'evidence') && entry.evidence !== 'cli') || ['product', 'via', 'for'].some((key) => !isString(entry[key]) || !entry[key].trim())) return 'bundle builtOn entries must contain product, via, and for strings';
     }
   }
   if (product && bundle.product !== product) return `bundle is for product "${bundle.product}", expected "${product}"`;

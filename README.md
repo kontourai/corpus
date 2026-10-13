@@ -10,7 +10,7 @@
 
 `@kontourai/corpus` gives every repository the same three things from one manifest:
 
-- **A docs gate for CI.** `corpus check` validates links, anchors, reachability, topics, redirects, local paths, and (on pull requests) freshness.
+- **A docs gate for CI.** `corpus check` validates links, anchors, reachability, topics, redirects, local paths, v2 building-block declarations, and (on pull requests) freshness.
 - **A GitHub Pages site.** `corpus build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 
@@ -76,7 +76,7 @@ Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json
 | --- | --- | --- |
 | `schemaVersion` | yes | `2` for new manifests; `1` remains supported with a deprecation warning. |
 | `purpose` | v2 | Non-empty sentence describing the promise to users. |
-| `builtOn` | v2 | Public-contract building blocks: `{ "product": "id", "via": "package or CLI", "for": "use" }`; may be empty. |
+| `builtOn` | v2 | Public-contract building blocks: `{ "product": "id", "via": "package or CLI", "for": "use" }`; may be empty. Optional `"evidence": "cli"` requires a command invocation (see below). |
 | `product` | yes | Lowercase slug. It must equal the repository name in `repo`, because the site lives at `https://kontourai.github.io/<product>/` and the hub fetches `/<product>/docs-bundle.json`. |
 | `title` | yes | Display name. |
 | `tagline` | no | One line shown in the site header and on the hub. |
@@ -144,6 +144,11 @@ corpus check [--root dir] [--base <git-ref>] [--advisory]
 ```
 
 `check` runs the gates below and reports every failure, not only the first.
+
+For v2 manifests, the **builtOn** gate compares declarations with root and workspace `package.json` dependencies, peer dependencies, and optional dependencies. `@kontourai/*` packages and `github:kontourai/*` / `git+https://github.com/kontourai/*` specs count; the scope or GitHub repository name gives the product id. `via` must name the dependency package or that product's bare CLI name. Missing runtime declarations and declarations without a dependency fail with exit `1` and a fix. Dev-only packages warn, whether declared or not; malformed dependency evidence exits `2`. Workspaces support an array of directory globs or `{ "packages": [...] }`. A missing root `package.json` prints an explicit skip; v1 skips this gate.
+
+A declaration without a package dependency can use `{ "product": "veritas", "via": "veritas", "for": "Check governance readiness", "evidence": "cli" }`. The non-empty `for` supplies the reason. The gate requires this bare command in root/workspace package scripts or `.github/workflows/*.yml` / `*.yaml` `run` steps. It recognizes direct invocations and `npx [-y|--yes]` / `pnpm exec`, at the start of a command or after shell separators. Comments, step names, and `echo` mentions do not count. This is textual invocation evidence, not proof that the command ran successfully; complex shell wrappers and reusable workflow references require a direct invocation to qualify.
+
 
 1. **manifest:** `corpus.json` (or legacy `docs-kit.json`) is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents (bundle-only ones included) resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).

@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "check": "node setup.mjs && npx -y veritas readiness"
+  }
+}
