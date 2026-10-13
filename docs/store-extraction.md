@@ -65,8 +65,53 @@ The vault path index is authoritative, so derived-index loss probes preserve it.
 
 ## Evidence
 
-Execution receipts and fault-injection outcomes are recorded here after the
-final implementation is qualified. Local evidence is distinct from hosted CI.
+EXECUTED on macOS, Node `22.22.2` and `24.19.0`:
+
+- Package-local TypeScript build succeeds, producing ESM and declarations.
+- Store suite: 134/134 tests (123 ported behavior tests, 9 codec regressions,
+  2 injected-service/observation tests), seven files, on both Node versions.
+- Root docs/conformance-runner suite: 138/138 tests on Node 24.
+- Built and installed-tarball conformance: all 124 vectors per profile execute;
+  104 pass and 20 are the explicitly listed deferred decisions, for both default
+  and vault. No unexpected failures or unexpected passes.
+- Isolated JS consumer imports all public subpaths, creates/reads both profiles,
+  and proves source and storage deep imports are rejected.
+- Isolated TS consumer compiles declarations with strict NodeNext and executes
+  the emitted JS against the installed package with a real create/read.
+- Installed packed docs CLI checks this repository without building docs or
+  importing store sources. The installed root has no prepare or build script.
+- Packed store SHA-256 on **both** Node versions:
+  `e492f8678cfa88bab42789bb76ad28f0d5c54af8028579bc1d8a5d6bf9ae49e6`.
+  Store source is identical to extraction commit
+  `d71564d361e21dd7a96d02c6d0c29b293296534b`; executable TS pack fixture is
+  recorded in `f964bf1f0eee628f6a1cc3fbca235e2c1a3e7421`.
+- Docs dogfood and committed-range whitespace checks pass.
+
+EXECUTED fault proofs at clean committed baseline
+`d71564d361e21dd7a96d02c6d0c29b293296534b`, Node `24.19.0`:
+
+| Injection | Baseline | Injected | Restored |
+| --- | --- | --- | --- |
+| Skip injected lock acquisition in the transaction owner | exit 0 | exit 1: subprocess create/update conflicts, failed storage invariants | exit 0 |
+| Restore typed YAML loading and remove legacy-dash repair | exit 0 | exit 1: `1.10`, `null`, `true`, `-` fixtures and unknown-text metadata fail | exit 0 |
+| Add passing `create-roundtrip` to expected-fail list | exit 0 | exit 1: expected-fail vector passed, remove it from the list | exit 0 |
+
+Each mutation was restored byte for byte, rebuilt, and rerun. The fault driver
+asserts a clean tree before and after, writes separate negative logs, and can be
+reproduced from a committed worktree with:
+
+```sh
+npm run proof:faults --workspace=@kontourai/corpus-store -- /tmp/corpus-store-fault-proof
+```
+
+Local receipts are under `/tmp/corpus-program/`: `store-fault-proof/results.json`
+and per-phase logs, `store-tests-qualified.log`, `store-tests-node22.log`,
+`root-tests.log`, `packed-node22.log`, `packed-node24-final.log`, and the raw
+`conformance-baseline.json`. These local files are diagnostic artifacts, not
+published evidence or hosted CI results. CI is configured to repeat build,
+contracts and packed qualification on Linux Node 22/24; that configuration alone
+is not a hosted PASS. This change makes no Windows or mixed-host qualification
+claim.
 
 ## Plan disagreements and limits
 
