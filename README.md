@@ -29,8 +29,11 @@ on `main` with an exact `version` matching both workspace manifests;
 the initial candidate is `0.1.0-next.0`. Release-please does not manage these
 workspace versions yet.
 
-The workflow builds Store, runs its contracts and packed-consumer checks,
-then publishes the two `npm pack` tarballs with provenance. Every prerelease
+The verification job builds Store, runs its contracts and packed-consumer checks,
+and uploads the two tested `npm pack` tarballs with SHA-256 hashes. A separate
+publish job checks those hashes after download and immediately before publishing
+the same tarballs with provenance. Only the publish job has OIDC permission;
+test and build steps use `contents: read`. Every prerelease
 uses `next`; stable versions use `latest`. Both versions must be absent on npm
 before either publish begins. An existing version, registry error other than
 E404, or unconfirmed response stops publication. If one publish succeeds and
@@ -41,8 +44,14 @@ atomically.
 An owner must first create both npm packages and configure GitHub Actions
 trusted publishers for organization `kontourai`, repository `corpus`, workflow
 `publish-npm.yml`, environment `npm-publish`, with direct `npm publish` allowed.
-Bootstrap with a separate prerelease version and non-`latest` tag so the CI
-candidate remains unpublished. Configure the GitHub `npm-publish` environment
+Bootstrap primarily with staged publishing, which creates a `0.0.0-stage`
+placeholder for a new name. Reject the bootstrap stages with 2FA before CI
+publication so their reserved target versions are released; approving them
+would consume the CI candidate. A separate bootstrap prerelease is a fallback.
+Inspect dist-tags immediately after bootstrap: `latest` unset may not be
+achievable if npm assigns it to the placeholder. The orchestrator can deprecate
+that placeholder and direct users to `@next`; do not move or remove `latest`.
+Configure the GitHub `npm-publish` environment
 for `main` and owner approval before dispatch. CI uses Node 24, pinned npm
 11.17.0, `id-token: write`, and no registry token or `setup-node` `registry-url`.
 

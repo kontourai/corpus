@@ -10,7 +10,8 @@
   "files": [
     "index.mjs",
     "vectors.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22"

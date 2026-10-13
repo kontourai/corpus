@@ -3,20 +3,23 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repo = resolve(packageRoot, '../..');
+const artifacts = process.argv[2] ? resolve(process.argv[2]) : null;
 const temporary = mkdtempSync(join(tmpdir(), 'corpus-pack-consumers-'));
+function sha256(file) { return createHash('sha256').update(readFileSync(file)).digest('hex'); }
 function run(command, args, cwd) { return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000 }); }
 function pack(cwd) {
-  const output = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', temporary], cwd));
+  const output = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temporary], cwd));
   return join(temporary, output[0].filename);
 }
 try {
   const store = pack(packageRoot);
   const conformance = pack(join(repo, 'packages/conformance'));
+  const verified = [store, conformance].map((file) => ({ file, hash: sha256(file) }));
   const docs = pack(repo);
   const js = join(temporary, 'js-consumer');
   const ts = join(temporary, 'ts-consumer');
@@ -80,5 +83,18 @@ void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
   const rootMetadata = JSON.parse(readFileSync(join(docsConsumer, 'node_modules/@kontourai/corpus/package.json')));
   assert.equal(rootMetadata.scripts.prepare, undefined);
   assert.equal(rootMetadata.scripts.build, undefined);
-  console.log(JSON.stringify({ node: process.version, storeSha256: createHash('sha256').update(readFileSync(store)).digest('hex'), js: 'PASS', ts: 'PASS', docsPackedBuildFree: 'PASS' }));
+  if (artifacts) {
+    mkdirSync(artifacts, { recursive: true });
+    const sums = [];
+    for (const { file, hash } of verified) {
+      assert.equal(sha256(file), hash, 'verified tarball changed during consumer tests');
+      const filename = basename(file);
+      const destination = join(artifacts, filename);
+      cpSync(file, destination);
+      assert.equal(sha256(destination), hash, 'exported tarball differs from verified tarball');
+      sums.push(`${hash}  ${filename}`);
+    }
+    writeFileSync(join(artifacts, 'SHA256SUMS'), sums.join('\n') + '\n');
+  }
+  console.log(JSON.stringify({ node: process.version, storeSha256: verified[0].hash, conformanceSha256: verified[1].hash, js: 'PASS', ts: 'PASS', docsPackedBuildFree: 'PASS' }));
 } finally { rmSync(temporary, { recursive: true, force: true }); }
