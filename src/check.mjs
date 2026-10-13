@@ -4,7 +4,7 @@ import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
-import { MANIFEST_FILE, manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
+import { manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
@@ -136,8 +136,9 @@ function ancestors(file) {
 export function checkRedirects(root, manifest, read) {
   const failures = [];
   if (manifest.redirects.length === 0) return failures;
-  for (const key of duplicateRedirectKeys(readFileSync(toFsPath(root, MANIFEST_FILE), 'utf8')))
-    failures.push(`redirects["${key}"] appears more than once in ${MANIFEST_FILE}`);
+  const file = manifestFile(root);
+  for (const key of duplicateRedirectKeys(readFileSync(toFsPath(root, file), 'utf8')))
+    failures.push(`redirects["${key}"] appears more than once in ${file}`);
 
   const written = new Map(); // lowercased path -> description
   for (const source of publishedSources(manifest)) written.set(foldPath(outputPathFor(manifest, source)), `the page generated for ${source}`);
@@ -261,7 +262,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   if (errors.length > 0) {
     raise(EXIT_USAGE);
     for (const name of ['links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
-      gates.push({ name, skipped: `${MANIFEST_FILE} is invalid` });
+      gates.push({ name, skipped: `${manifestFile(root)} is invalid` });
     return { exitCode, gates, manifest: null };
   }
 
