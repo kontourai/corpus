@@ -75,7 +75,16 @@ export async function runConformance(adapterFactory, { cases = vectors } = {}) {
         }
       }
       for (const expected of vector.expected) {
-        assert.ok(Object.hasOwn(expected, 'equals') || Object.hasOwn(expected, 'length'), 'malformed expected entry: requires equals or length');
+        assert.ok(Object.hasOwn(expected, 'equals') || Object.hasOwn(expected, 'length') || expected.absent === true, 'malformed expected entry: requires equals or length or absent:true');
+        if (expected.absent === true) {
+          const parts = expected.ref.split('.');
+          assert.ok(parts.length > 1, 'absence assertion requires a field reference');
+          const key = parts.pop();
+          const parent = reference(values, parts.join('.'));
+          assert.ok(parent && typeof parent === 'object', 'absence assertion requires an object');
+          assert.equal(Object.hasOwn(parent, key), false, `${expected.ref} must be absent`);
+          continue;
+        }
         const actual = reference(values, expected.ref);
         if (Object.hasOwn(expected, 'equals')) assert.deepEqual(actual, resolve(expected.equals, values));
         if (Object.hasOwn(expected, 'length')) assert.equal(actual?.length, expected.length);

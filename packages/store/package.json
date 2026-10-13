@@ -1,0 +1,55 @@
+{
+  "name": "@kontourai/corpus-store",
+  "version": "0.1.0",
+  "description": "Transactional file-backed mutable records with Station-compatible default and vault profiles.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kontourai/corpus.git",
+    "directory": "packages/store"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./observation": {
+      "types": "./dist/observation.d.ts",
+      "import": "./dist/observation.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "conformance": "node test/conformance.mjs",
+    "verify:pack": "node test/packed-consumers.mjs",
+    "proof:faults": "node test/fault-injection.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "5.4.2"
+  },
+  "devDependencies": {
+    "@kontourai/corpus-conformance": "0.1.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "tsx": "^4.20.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

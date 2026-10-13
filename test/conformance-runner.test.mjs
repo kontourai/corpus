@@ -48,3 +48,12 @@ test('runner rejects malformed expected entries without equals or length', async
   assert.equal(report.results[0].passed, false);
   assert.match(report.results[0].error, /malformed expected entry.*equals or length/);
 });
+
+
+test('absence expectations check field removal and reject a retained null', async () => {
+  const cases = [{ id: 'absence', operations: [{ call: 'get', args: [], save: 'record' }], expected: [{ ref: 'record.expires_at', absent: true }] }];
+  assert.equal((await runConformance(() => ({ get: async () => ({}) }), { cases })).passed, true);
+  const retained = await runConformance(() => ({ get: async () => ({ expires_at: null }) }), { cases });
+  assert.equal(retained.passed, false);
+  assert.match(retained.results[0].error, /must be absent/);
+});
