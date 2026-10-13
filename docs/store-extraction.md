@@ -212,5 +212,65 @@ standalone hosts must also opt in to an explicit identity.
 specific error patterns. This is a diagnostic extraction with deferred owner
 decisions, not a claim of complete semantic conformance.
 
-Station comparison and negative-control receipts follow once executed at the
-committed round-2 baseline.
+EXECUTED on macOS at `1ff4b262163edf3edf4c5481302300ce41f0733f`:
+
+- Node 22.22.2 and 24.19.0: 181/181 store tests, including both-profile block,
+  sequence, following-key, standard-YAML and required-identity regressions.
+- Node 24.19.0: 233/233 root tests.
+- Strict TS/executable JS tarball consumers and build-free packed docs CLI pass
+  on both Node versions. All 124 vectors per profile execute with 104 passes,
+  6 assertion-bound expected failures and 14 error-pattern-bound expected failures.
+- Both Node versions produce store tarball SHA-256
+  `5fd72a61f7dc1940e2632dc29f1c9b6f0540660d56b8eb6fa40456df36b966af`.
+
+EXECUTED Station byte comparison: the driver reads immutable Station revision
+`2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136` into an isolated snapshot and runs
+its actual adapters and lock, using the installed dependency set from the
+supplied Station checkout. Separate Corpus stores use the same fixed mutation
+clock, explicit IDs and inputs. No Station checkout or user store is modified.
+The stores contain `|`, `|-`, externally authored `>`, Kit-style log sequences,
+flow collections and counterparts without lossy numeric text. Updates append
+following expiry/tags keys and move vault titles; both owners must re-read their
+own prior extension values identically.
+
+[The complete comparison receipt](store-byte-comparison.json) records per-file
+hashes and results. Of 18 files, 14 are byte-identical. Only these four differ:
+
+| Profile | File | Reason |
+| --- | --- | --- |
+| Default | `records/kit-sequence.md` | Corpus preserves nested `1.10` as a string; Station reads/writes numeric `1.1`. |
+| Default | `records/flow.md` | The same decided unknown-text divergence within a flow collection. |
+| Vault | `engineering/kit-sequence-updated.md` | The same nested-sequence text divergence. |
+| Vault | `engineering/flow-updated.md` | The same flow-collection text divergence. |
+
+Block-scalar records, lossless sequence/flow counterparts and all emitted
+indexes match byte for byte. Folded input normalizes through each owner's
+serializer identically. No swallowed keys, malformed records or unexpected
+file differences remain in this comparison.
+
+EXECUTED reverted-fix controls at clean baseline
+`627217c3629c5021ef9b6c3743b5f7a46ab2cda5`, Node 24.19.0:
+
+| Control | Injected regression | Baseline | Injected | Restored |
+| --- | --- | --- | --- | --- |
+| N1 | Restore c0c44c7 codec: EOF block absorbs newly appended tags | 0 | 1 | 0 |
+| N2 | Restore c0c44c7 codec: Kit-indented items become sibling log entries | 0 | 1 | 0 |
+| N3 | Restore c0c44c7 codec: bare dash is published as invalid YAML | 0 | 1 | 0 |
+| N4 | Restore silent missing-identity fallback | 0 | 1 | 0 |
+| N4 types | Make coordination identity optional in declarations | 0 | 1 | 0 |
+| N5 | Misstate all 20 failures as assertion-bound | 0 | 1 | 0 |
+
+Each source mutation was restored exactly and the worktree checked clean. The
+first N1 probe already had a following key and did not exercise the EOF-to-new-key
+transition; the retained regression adds keys during update. The first N2 fixture
+produced a related indentation parse error; the retained fixture reproduces the
+reported sibling-entry/schema failure. Neither incomplete diagnostic counted as
+completed fault proof.
+
+```sh
+npm run proof:round2 --workspace=@kontourai/corpus-store -- <output-directory>
+npm run compare:station --workspace=@kontourai/corpus-store -- <station-repository> <report.json>
+```
+
+Hosted CI is tracked against the exact pushed head on the PR. These local
+receipts do not claim hosted CI success.
