@@ -23,7 +23,7 @@ ambiguous scalar strings to prove declared string fields retain their types.
 
 
 `round2/literal.md` and `round2/strip.md` execute the unchanged pinned Station
-serializer with unknown multiline notes placed before expiry/tags. `folded.md`
+serializer with unknown multiline notes at the end of the original header; update appends expiry/tags after them. `folded.md`
 uses the same Station-written envelope but changes the notes to a value-equivalent
 folded block; Station's lineWidth:-1 writer does not emit folded blocks.
 `kit-sequence.md` models the old Kit's unindented sequence layout in log entries;

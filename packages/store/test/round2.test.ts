@@ -25,15 +25,15 @@ for (const [profile, Constructor] of [['default', KitDefaultStoreAdapter], ['vau
         const rendered = readFileSync(file, 'utf8');
         writeFileSync(file, fixture.slice(0, fixture.indexOf('\n---\n', 4)) + rendered.slice(rendered.indexOf('\n---\n', 4)));
         const before = structuredClone(await store.get('round2-record')) as unknown as Record<string, unknown>;
-        await store.update('round2-record', { title: 'Updated' }, { agent: 'editor' });
+        await store.update('round2-record', { title: 'Updated', expires_at: '2030-01-01T00:00:00.000Z', tags: ['following'] }, { agent: 'editor' });
         const after = structuredClone(await store.get('round2-record')) as unknown as Record<string, unknown>;
         expect(after.notes).toBe(before.notes);
         expect(after.custom).toEqual(before.custom);
         if (name === 'kit-sequence') expect((after.mutation_log as unknown[])[0]).toEqual((before.mutation_log as unknown[])[0]);
-        expect(after.expires_at).toBe(meta.expires_at);
+        expect(after.expires_at).toBe('2030-01-01T00:00:00.000Z');
         expect(after.tags).toEqual(['following']);
         const standard = yaml(readFileSync(recordPath(profile, root, 'round2-record'), 'utf8'));
-        expect(standard.expires_at).toBe(meta.expires_at);
+        expect(standard.expires_at).toBe('2030-01-01T00:00:00.000Z');
         expect(standard.tags).toEqual(['following']);
       });
     }

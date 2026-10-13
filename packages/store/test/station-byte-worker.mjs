@@ -28,12 +28,12 @@ for (const [profile, Station, Corpus] of [['default', StationDefault, KitDefault
       const path = recordPath(profile, root, scenario); const rendered = readFileSync(path, 'utf8');
       writeFileSync(path, fixture.slice(0, fixture.indexOf('\n---\n', 4)) + rendered.slice(rendered.indexOf('\n---\n', 4)));
       const before = await adapter.get(scenario);
-      await adapter.update(scenario, { title: `${scenario}-updated` }, { agent: 'comparison' });
+      await adapter.update(scenario, { title: `${scenario}-updated`, expires_at: '2030-01-01T00:00:00.000Z', tags: ['following'] }, { agent: 'comparison' });
       const after = await adapter.get(scenario);
       assert.equal(after.notes, before.notes);
       assert.deepEqual(after.custom, before.custom);
-      assert.equal(after.expires_at, before.expires_at);
-      assert.deepEqual(after.tags, before.tags);
+      assert.equal(after.expires_at, '2030-01-01T00:00:00.000Z');
+      assert.deepEqual(after.tags, ['following']);
       if (fixtureName === 'kit-sequence') assert.deepEqual(after.mutation_log[0], before.mutation_log[0]);
     }
   }
