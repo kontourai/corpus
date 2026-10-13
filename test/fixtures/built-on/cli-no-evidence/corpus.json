@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "veritas",
+      "via": "veritas",
+      "for": "Check governance readiness"
+    }
+  ],
+  "documents": []
+}

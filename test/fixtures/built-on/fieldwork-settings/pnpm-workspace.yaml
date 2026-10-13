@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild@0.28.1: true
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - '@kontourai/*'
+pmOnFail: ignore

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "knowledge",
+      "via": "knowledge-alias",
+      "for": "Use its public contract"
+    },
+    {
+      "product": "flow-agents",
+      "via": "flow-alias",
+      "for": "Use its public contract"
+    }
+  ],
+  "documents": []
+}

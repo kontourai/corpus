@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@kontourai/console-core": "^1",
+    "@kontourai/console-ui": "^1"
+  }
+}

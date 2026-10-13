@@ -1,0 +1,6 @@
+{
+  "name": "@kontourai/component",
+  "dependencies": {
+    "@kontourai/sibling": "workspace:*"
+  }
+}

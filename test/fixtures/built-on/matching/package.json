@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@kontourai/flow-agents": "^1"
+  },
+  "peerDependencies": {
+    "@kontourai/knowledge": "^1"
+  },
+  "optionalDependencies": {
+    "@kontourai/surface": "^1"
+  }
+}

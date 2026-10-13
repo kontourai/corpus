@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "check": "npm exec -- veritas readiness"
+  }
+}

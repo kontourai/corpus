@@ -1,0 +1,10 @@
+{
+  "name": "@kontourai/sample",
+  "dependencies": {
+    "@kontourai/sample": "*",
+    "@kontourai/component": "workspace:*"
+  },
+  "devDependencies": {
+    "@kontourai/component": "workspace:*"
+  }
+}

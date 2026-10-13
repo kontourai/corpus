@@ -1,0 +1,6 @@
+name: Check
+jobs:
+  check:
+    steps:
+      - run: |
+          veritas readiness
