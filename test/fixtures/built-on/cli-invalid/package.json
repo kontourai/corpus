@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "check": "echo veritas readiness; veritas-other check"
+    "check": "echo \"text; veritas readiness\" # ; veritas readiness"
   }
 }

@@ -49,11 +49,30 @@ function workflowCommands(text) {
   return commands;
 }
 
+function unquotedCommands(command) {
+  let quote = null;
+  let comment = false;
+  let escaped = false;
+  let text = '';
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
+    if (char === '\n') { comment = false; text += char; continue; }
+    if (comment) { text += ' '; continue; }
+    if (escaped) { text += ' '; escaped = false; continue; }
+    if (char === '\\' && quote !== "'") { escaped = true; text += ' '; continue; }
+    if (quote) { if (char === quote) quote = null; text += ' '; continue; }
+    if (char === '"' || char === "'" || char === '`') { quote = char; text += ' '; continue; }
+    if (char === '#' && (index === 0 || /\s/.test(command[index - 1]))) { comment = true; text += ' '; continue; }
+    text += char;
+  }
+  return text;
+}
+
 function invokes(command, via) {
   // Deliberately narrow: a bare executable, optionally run through npx or pnpm exec.
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(via)) return false;
   const escaped = via.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|&&|\\|\\||[;|])\\s*(?:(?:npx(?:\\s+--yes|\\s+-y)?|pnpm\\s+exec)\\s+)?${escaped}(?=\\s|$)`).test(command);
+  return new RegExp(`(?:^|&&|\\|\\||[;|])\\s*(?:(?:npx(?:\\s+--yes|\\s+-y)?|pnpm\\s+exec)\\s+)?${escaped}(?=\\s|$)`, 'm').test(unquotedCommands(command));
 }
 
 export function checkBuiltOn(root, manifest) {
