@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fixtureRepo, git, runCli, scratch } from './helpers.mjs';
@@ -331,4 +331,24 @@ test('redirects: the generated-site check fails a stub whose script target diffe
   // A stub with its script removed fails.
   writeFileSync(path.join(out, 'old.html'), stub.replace(/<script>[\s\S]*?<\/script>\n/, ''));
   assert.match(checkGeneratedSite(out).failures.join('\n'), /old\.html: redirect stub needs exactly one redirect script, found 0/);
+});
+
+test('redirects: the duplicate-key scan reads corpus.json when that is the manifest', async (t) => {
+  const repo = fixtureRepo(t, 'valid');
+  setRedirects(repo, { 'old.html': 'README.md', 'other.html': 'README.md' });
+  const legacy = path.join(repo, 'docs-kit.json');
+  const manifest = JSON.parse(readFileSync(legacy, 'utf8'));
+  const corpus = path.join(repo, 'corpus.json');
+  writeFileSync(corpus, `${JSON.stringify({ ...manifest, schemaVersion: 2, purpose: 'Docs stay bound to their source.', builtOn: [] }, null, 2)}\n`);
+  rmSync(legacy);
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'corpus.json']);
+  const clean = await runCli(['check', '--root', repo]);
+  assert.equal(clean.status, 0, clean.output);
+
+  // JSON.parse would silently keep only the last of two equal keys.
+  writeFileSync(corpus, readFileSync(corpus, 'utf8').replace('"other.html": "README.md"', '"other.html": "README.md", "other.html": "README.md"'));
+  const duplicate = await runCli(['check', '--root', repo]);
+  assert.equal(duplicate.status, 1, duplicate.output);
+  assert.match(duplicate.stderr, /redirects\["other\.html"\] appears more than once in corpus\.json/);
 });
