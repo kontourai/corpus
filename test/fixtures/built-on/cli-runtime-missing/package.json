@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@kontourai/flow-agents": "^1"
+  },
+  "scripts": {
+    "check": "flow-agents run"
+  }
+}

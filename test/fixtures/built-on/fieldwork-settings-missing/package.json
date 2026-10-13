@@ -1,0 +1,9 @@
+{
+  "name": "@kontourai/fieldwork",
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "@kontourai/datum": "^1"
+  }
+}

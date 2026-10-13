@@ -1,0 +1,6 @@
+name: veritas readiness
+# run: veritas readiness
+jobs:
+  check:
+    steps:
+      - run: echo veritas readiness

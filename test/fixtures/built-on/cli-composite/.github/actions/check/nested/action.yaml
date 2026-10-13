@@ -1,0 +1,6 @@
+name: Check
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: veritas readiness

@@ -1,0 +1,14 @@
+{
+  "name": "@kontourai/sample",
+  "workspaces": [
+    "packages/*",
+    "!packages/component"
+  ],
+  "dependencies": {
+    "@kontourai/sample": "*",
+    "@kontourai/component": "workspace:*"
+  },
+  "devDependencies": {
+    "@kontourai/component": "workspace:*"
+  }
+}

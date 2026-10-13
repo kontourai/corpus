@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@kontourai/veritas": "^1"
+  }
+}

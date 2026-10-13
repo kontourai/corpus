@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@kontourai/flow-agents": "^1"
+  }
+}
