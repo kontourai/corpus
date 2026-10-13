@@ -1,31 +1,41 @@
-# docs-kit
+# Corpus
 
-**Docs gate, GitHub Pages site, and docs MCP server for Kontour products.**
+**Check, publish, locate, and retrieve source-bound documentation.**
 
-[![CI](https://github.com/kontourai/docs-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/kontourai/docs-kit/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-kontourai.github.io-blue)](https://kontourai.github.io/docs-kit/)
+[![CI](https://github.com/kontourai/corpus/actions/workflows/ci.yml/badge.svg)](https://github.com/kontourai/corpus/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-kontourai.github.io-blue)](https://kontourai.github.io/corpus/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Documentation](https://kontourai.github.io/docs-kit/) · [Docs hub](https://kontourai.github.io/)
+[Documentation](https://kontourai.github.io/corpus/) · [Docs hub](https://kontourai.github.io/)
 
-`@kontourai/docs-kit` gives every Kontour product the same three things from one manifest:
+`@kontourai/corpus` gives every repository the same three things from one manifest:
 
-- **A docs gate for CI.** `docs-kit check` validates links, anchors, reachability, topics, redirects, local paths, and (on pull requests) freshness.
-- **A GitHub Pages site.** `docs-kit build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
-- **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `docs-kit mcp` serves every product's bundle from one MCP server.
+- **A docs gate for CI.** `corpus check` validates links, anchors, reachability, topics, redirects, local paths, and (on pull requests) freshness.
+- **A GitHub Pages site.** `corpus build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
+- **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 
 It is plain ESM JavaScript for Node 22 or newer, with no build step. Run it straight from git, pinned to a commit:
 
 ```sh
-npx -y github:kontourai/docs-kit#<sha> docs-kit check
+npx -y github:kontourai/corpus#<sha> corpus check
 ```
+
+## Purpose and audience
+
+Corpus owns source-bound content: documentation checking, publishing, and retrieval today, with a shared Knowledge store planned separately. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
+
+This repository retains its own v1 `docs-kit.json` and `docs-kit` product identity until the GitHub rename and the org workflow pin upgrade are complete. A follow-up will migrate it to `corpus.json` v2; the v2 fixtures already exercise the new schema.
+
+The root package is a zero-install, plain ESM docs CLI. `corpus` and the legacy `docs-kit` bin run the same commands with identical output and exit codes. Generated `docs-kit.css`, `docs-kit.js`, and `.docs-kit-build` names remain compatible.
+
+The separate [`@kontourai/corpus-conformance`](packages/conformance/README.md) workspace ships public Knowledge store vectors and an adapter-factory runner. Its expected outcomes come from the contract and owner decisions. The shared mutable store is a later package.
 
 ## Contents
 
 - [Manifest reference](#manifest-reference)
 - [CLI reference](#cli-reference)
 - [MCP server](#mcp-server)
-- [Adopting docs-kit in a repo](#adopting-docs-kit-in-a-repo)
+- [Adopting corpus in a repo](#adopting-corpus-in-a-repo)
 - [Bundle and products.json formats](docs/bundle-format.md)
 - [What the generated site contains](docs/site-output.md)
 - [Known limits](#known-limits)
@@ -33,11 +43,13 @@ npx -y github:kontourai/docs-kit#<sha> docs-kit check
 
 ## Manifest reference
 
-Each repository has a `docs-kit.json` at its root:
+Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json` is also read. If both exist, delete `docs-kit.json` to use `corpus.json`, or delete `corpus.json` to retain the legacy name.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "purpose": "Make process and execution state visible to users.",
+  "builtOn": [],
   "product": "flow",
   "title": "Flow",
   "tagline": "Process transparency for agentic work",
@@ -62,7 +74,9 @@ Each repository has a `docs-kit.json` at its root:
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | yes | Exactly `1`. |
+| `schemaVersion` | yes | `2` for new manifests; `1` remains supported with a deprecation warning. |
+| `purpose` | v2 | Non-empty sentence describing the promise to users. |
+| `builtOn` | v2 | Public-contract building blocks: `{ "product": "id", "via": "package or CLI", "for": "use" }`; may be empty. |
 | `product` | yes | Lowercase slug. It must equal the repository name in `repo`, because the site lives at `https://kontourai.github.io/<product>/` and the hub fetches `/<product>/docs-bundle.json`. |
 | `title` | yes | Display name. |
 | `tagline` | no | One line shown in the site header and on the hub. |
@@ -103,7 +117,7 @@ A `documents` entry with `"publish": false` is an agent-facing document that is 
 
 ### Redirects
 
-GitHub Pages cannot send HTTP redirects, so when a page URL changes (for example `/flow/gates-and-route-back.html` became `/flow/docs/gates-and-route-back.html` when a product moved to docs-kit), list the old path under `redirects` and `build` writes a stub page there. The stub refreshes to the target at once (`<meta http-equiv="refresh" content="0; url=...">`), names it with `<link rel="canonical">`, asks search engines not to index it (`<meta name="robots" content="noindex">`), and shows a plain link to it.
+GitHub Pages cannot send HTTP redirects, so when a page URL changes (for example `/flow/gates-and-route-back.html` became `/flow/docs/gates-and-route-back.html` when a product moved to corpus), list the old path under `redirects` and `build` writes a stub page there. The stub refreshes to the target at once (`<meta http-equiv="refresh" content="0; url=...">`), names it with `<link rel="canonical">`, asks search engines not to index it (`<meta name="robots" content="noindex">`), and shows a plain link to it.
 
 A meta refresh drops the URL fragment, so the stub also carries a small inline script, placed before the meta refresh, that redirects with `location.replace` and keeps the fragment: `old.html#section` lands on the target's `#section`. When the target names its own anchor (`docs/gates.md#route-back`), that anchor wins and the incoming fragment is dropped, because the manifest chose it and the old page's fragment may not exist on the new page. An incoming fragment applies only to a target without one, for source and `https://` targets alike. Without JavaScript, the meta refresh still redirects, without the fragment. The script is template output, not document content: the target is embedded as a JSON string with every `<`, U+2028, and U+2029 escaped, so it cannot close the script element.
 
@@ -111,14 +125,14 @@ A meta refresh drops the URL fragment, so the stub also carries a small inline s
 - GitHub Pages serves `x.html` for a request to `/x`, so a key `x.html` also redirects the extensionless URL `/x`.
 - A value is either a source path, optionally with `#anchor` (`docs/gates.md`, `docs/gates.md#route-back`), or an absolute `https://` URL, which the stub uses in its parsed, normalized form (`new URL(value).href`). A source must be the landing page or a listed document that is published (not `"publish": false`), and its `#anchor` follows the rules of the [links gate](#check): a heading slug, or an `id` or `name` in raw HTML.
 - A source target becomes a relative URL from the stub's own directory, so `adr/0001-x.html` pointing at `docs/gates.md` refreshes to `../docs/gates.html`. Its canonical URL is absolute, under `--base-url`.
-- A key must not be a page docs-kit generates (`index.html` or a document's `.html`), compared after Unicode NFC normalization and case folding, and must not need a directory where docs-kit writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
+- A key must not be a page corpus generates (`index.html` or a document's `.html`), compared after Unicode NFC normalization and case folding, and must not need a directory where corpus writes a file, or the reverse. A key may appear only once in the file. A stub that would overwrite a copied image or media file fails `build` with exit `1`, because assets are known only after rendering.
 - Malformed keys or values are manifest errors (exit `2`). A target that is missing, unpublished, or has an unresolved anchor, and a colliding or repeated key, fail the `redirects` gate (exit `1`).
 - Redirects are not part of `docs-bundle.json`.
 
 ## CLI reference
 
 ```text
-docs-kit <check|build|mcp|hub|init> [options]
+corpus <check|build|locate|mcp|hub|init> [options]
 ```
 
 Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An invalid `docs-kit.json` is a configuration error (`2`), and so is a git error.
@@ -126,7 +140,7 @@ Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An in
 ### check
 
 ```sh
-docs-kit check [--root dir] [--base <git-ref>] [--advisory]
+corpus check [--root dir] [--base <git-ref>] [--advisory]
 ```
 
 `check` runs the gates below and reports every failure, not only the first.
@@ -135,7 +149,7 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents (bundle-only ones included) resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (with or without `"publish": false`), is the landing page, or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
-5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file docs-kit generates.
+5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file corpus generates.
 6. **paths:** no absolute home-directory path appears in the landing page or any listed document, bundle-only ones included: `/Users/<name>/`, `/home/<name>/`, or `C:\Users\<name>\` (any drive letter, either slash). The whole Markdown body is scanned as text, so prose, code, links, and raw HTML all count; front matter is not, because it is never published. Each hit is reported as `file:line`. A path inside a URL such as `https://host/home/x/` does not match, and neither does a placeholder name such as `<name>`, `$USER`, or `{user}`. Two non-personal directories are exempt: `/Users/Shared/` (the macOS shared folder) and `/home/runner/` (the GitHub Actions runner home). List a document in `allowLocalPaths` when it needs real example paths.
 7. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
 8. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
@@ -143,7 +157,7 @@ docs-kit check [--root dir] [--base <git-ref>] [--advisory]
 ### build
 
 ```sh
-docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.github.io/<product>/]
+corpus build [--root dir] [--out dist-pages] [--base-url https://kontourai.github.io/<product>/]
 ```
 
 `build` runs `check` without the covers and freshness gates and refuses to build if it fails. It then replaces `--out` with:
@@ -157,12 +171,20 @@ docs-kit build [--root dir] [--out dist-pages] [--base-url https://kontourai.git
 - A redirect stub for each `redirects` key. See [Redirects](#redirects).
 - `.nojekyll`, a `.docs-kit-build` marker, and `docs-bundle.json`. The bundle is described in [docs/bundle-format.md](docs/bundle-format.md#docs-bundlejson).
 
-`build` then checks every internal `href` and `src` in the generated site, and the URL of each redirect stub's meta refresh, including `#fragments`, and exits `1` if any of them is broken. Each stub must also have exactly one redirect script whose target resolves and equals its meta refresh URL. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory unless every file in it is listed in the `.docs-kit-build` manifest that a previous build wrote. This applies inside or outside git, whether or not the directory is ignored. A file added by hand blocks the rebuild, and the error names it. A new or empty directory is fine. A forged marker is trusted: docs-kit deletes whatever a marker lists.
+`build` then checks every internal `href` and `src` in the generated site, and the URL of each redirect stub's meta refresh, including `#fragments`, and exits `1` if any of them is broken. Each stub must also have exactly one redirect script whose target resolves and equals its meta refresh URL. `build` needs a git checkout because the bundle and the GitHub links carry `git rev-parse HEAD`. `--out` is resolved relative to the current directory and is deleted before each build. `build` refuses an `--out` that is the repository or a parent of it, is inside a `.git` directory, or contains git-tracked files. It also refuses any existing non-empty directory unless every file in it is listed in the `.docs-kit-build` manifest that a previous build wrote. This applies inside or outside git, whether or not the directory is ignored. A file added by hand blocks the rebuild, and the error names it. A new or empty directory is fine. A forged marker is trusted: corpus deletes whatever a marker lists.
+
+### locate
+
+```sh
+corpus locate --root . --quote "a passage from the docs" [--source README.md]
+```
+
+Returns JSON source locations using the same quote matcher as MCP. Exit `1` means the quote could not be located; missing options are usage errors (`2`).
 
 ### mcp
 
 ```sh
-docs-kit mcp [--repo dir | --workspace dir | --hub url]
+corpus mcp [--repo dir | --workspace dir | --hub url]
 ```
 
 `mcp` starts a stdio MCP server. Give it at most one source; with none, it uses `--hub https://kontourai.github.io/`. See [MCP server](#mcp-server).
@@ -170,7 +192,7 @@ docs-kit mcp [--repo dir | --workspace dir | --hub url]
 ### hub
 
 ```sh
-docs-kit hub [--products products.json] [--out dist-hub]
+corpus hub [--products products.json] [--out dist-hub]
 ```
 
 `hub` builds the organization hub: a self-contained `index.html` and a copy of `products.json`. It validates `products.json` strictly. Serve the output at the origin root (`https://kontourai.github.io/`), because each product card loads `/<product>/docs-bundle.json` from the same origin. Each card also loads `https://api.github.com/repos/<repo>/commits/HEAD` (the default branch), which it caches in `localStorage` for 10 minutes. Each card shows one state:
@@ -188,10 +210,10 @@ If more than one state applies, the first one in the table wins.
 ### init
 
 ```sh
-docs-kit init [--root dir]
+corpus init [--root dir]
 ```
 
-`init` writes a starter `docs-kit.json`. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest.
+`init` preserves the legacy scaffolding behavior: it writes a v1 `docs-kit.json`. Rename it to `corpus.json`, set `schemaVersion` to `2`, and add `purpose` and `builtOn`. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest.
 
 ## MCP server
 
@@ -211,13 +233,13 @@ The server exposes six read-only tools. Every result carries the source commit `
 The server has three sources:
 
 - `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds whenever the checkout changes, so a long session sees current docs. The cache key is HEAD, a hash of `git status --porcelain`, and the mtime and size of the manifest and each published source. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
-- `--workspace dir` does the same for every immediate subdirectory that contains `docs-kit.json`. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
+- `--workspace dir` does the same for every immediate subdirectory that contains `corpus.json` or `docs-kit.json`. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
 - `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed or malformed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
 
 Claude Code:
 
 ```sh
-claude mcp add kontour-docs -- npx -y github:kontourai/docs-kit#<sha> docs-kit mcp
+claude mcp add kontour-docs -- npx -y github:kontourai/corpus#<sha> corpus mcp
 ```
 
 Codex (`~/.codex/config.toml`):
@@ -225,19 +247,19 @@ Codex (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.kontour-docs]
 command = "npx"
-args = ["-y", "github:kontourai/docs-kit#<sha>", "docs-kit", "mcp"]
+args = ["-y", "github:kontourai/corpus#<sha>", "corpus", "mcp"]
 ```
 
 To serve local checkouts while you write docs, add `--workspace ~/dev/github/kontourai` or `--repo .` after `mcp`.
 
-## Adopting docs-kit in a repo
+## Adopting corpus in a repo
 
-1. Pin a docs-kit commit. Use its full sha everywhere below as `<sha>`.
+1. Pin a corpus commit. Use its full sha everywhere below as `<sha>`.
 2. Scaffold and review the manifest. Order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
 
    ```sh
-   npx -y github:kontourai/docs-kit#<sha> docs-kit init
-   npx -y github:kontourai/docs-kit#<sha> docs-kit check
+   npx -y github:kontourai/corpus#<sha> corpus init
+   npx -y github:kontourai/corpus#<sha> corpus check
    ```
 
 3. Add the gate to CI. On pull requests, `fetch-depth: 0` makes the base branch available for freshness. Drop `--advisory` once the `covers` globs are trusted.
@@ -249,15 +271,15 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
    - uses: actions/setup-node@v6
      with:
        node-version: 24
-   - run: npx -y github:kontourai/docs-kit#<sha> docs-kit check
+   - run: npx -y github:kontourai/corpus#<sha> corpus check
    - if: github.event_name == 'pull_request'
-     run: npx -y github:kontourai/docs-kit#<sha> docs-kit check --base origin/${{ github.base_ref }} --advisory
+     run: npx -y github:kontourai/corpus#<sha> corpus check --base origin/${{ github.base_ref }} --advisory
    ```
 
 4. Publish Pages from `main`. Set the repository's Pages source to GitHub Actions, then run:
 
    ```yaml
-   - run: npx -y github:kontourai/docs-kit#<sha> docs-kit build --out dist-pages
+   - run: npx -y github:kontourai/corpus#<sha> corpus build --out dist-pages
    - uses: actions/upload-pages-artifact@v5
      with:
        path: dist-pages
@@ -286,7 +308,7 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 - The selection toolbar's line ranges cover whole annotated blocks (a top-level paragraph, list item, table row, code block, or blockquote), not the selected characters. Raw HTML blocks have no line attribute, so a selection inside one carries only the page's path and sha.
 - `locate` matches letters and digits, so it cannot tell apart passages that differ only in punctuation, and text that renders differently from its source (an image's alt text, a Mermaid diagram) needs the head-and-tail fallback.
 - WebMCP is a Chromium-only draft whose API is still changing; the in-page tools follow the October 2026 draft and the earlier synchronous form, and may need updating as it evolves.
-- The hub's install snippet shows `<sha>` as a placeholder. It cannot know which docs-kit commit to recommend.
+- The hub's install snippet shows `<sha>` as a placeholder. It cannot know which corpus commit to recommend.
 
 ## License
 

@@ -1,12 +1,16 @@
 # Bundle and products.json formats
 
-Two JSON files connect product sites to the hub and to the MCP server. `docs-kit build` writes `docs-bundle.json` next to each product site. The hub repository maintains `products.json`.
+Two JSON files connect product sites to the hub and to the MCP server. `corpus build` writes `docs-bundle.json` next to each product site. The hub repository maintains `products.json`.
 
 ## docs-bundle.json
 
+Schema v2 adds `purpose` and `builtOn` from the manifest. The MCP reader and hub accept both v1 and v2 bundles; v1 has no purpose metadata. A v1 manifest still builds a v1 bundle. `list_products` includes both new fields for v2 bundles. The content digest algorithm remains unchanged; it identifies document content, not product metadata.
+
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "purpose": "Make process and execution state visible to users.",
+  "builtOn": [],
   "product": "flow",
   "title": "Flow",
   "tagline": "Process transparency for agentic work",
@@ -25,7 +29,7 @@ Two JSON files connect product sites to the hub and to the MCP server. `docs-kit
 }
 ```
 
-- `documents[0]` is the landing page, with `landing: true` and `section: null`. The listed documents follow in manifest order, with `landing: false`. A document's `title` is the `title` set on its `documents` entry in `docs-kit.json`, if any. Otherwise it is its first Markdown H1 outside blockquotes and lists, then the text of the first raw-HTML `<h1>` that has text, then a simple front-matter `title:`, then the file name without `.md`. `markdown` is the source file as written, minus a leading YAML front-matter block.
+- `documents[0]` is the landing page, with `landing: true` and `section: null`. The listed documents follow in manifest order, with `landing: false`. A document's `title` is the `title` set on its `documents` entry in `corpus.json`, if any. Otherwise it is its first Markdown H1 outside blockquotes and lists, then the text of the first raw-HTML `<h1>` that has text, then a simple front-matter `title:`, then the file name without `.md`. `markdown` is the source file as written, minus a leading YAML front-matter block.
 - Each document's `url` is the page `build` generates: `index.html` for the landing page, otherwise the source path with `.md` replaced by `.html`, under `siteUrl`. A [bundle-only document](../README.md#bundle-only-documents) (`"publish": false`) has no page, so its `url` is `https://github.com/<repo>/blob/<sha>/<path>` (`HEAD` in place of `<sha>` when `mcp` serves a directory outside git), and its `markdown` has relative links made absolute (images and other embedded files to `https://raw.githubusercontent.com/<repo>/<sha>/<path>`), as are topics taken from it. Published documents keep their Markdown as written. Redirect stubs from the manifest's `redirects` are not listed; the bundle has no field for them.
 - `repoPath` and `lineOffset` (since 0.6.0) say where `markdown` sits in the repository: `repoPath` is the source path from the git top level (it differs from `source` only when `--root` is a subdirectory), and `lineOffset` is the number of front-matter lines stripped before `markdown`'s first line, so line N of `markdown` is line N + `lineOffset` of the file. The MCP [`locate`](../README.md#mcp-server) tool uses them for file line numbers and GitHub links. Both are optional for readers: a bundle built before 0.6.0 has neither, and `locate` then assumes no front matter and says so. Neither is part of `digest`.
 - A topic's `markdown` is a heading section: it runs from the anchor heading up to the next top-level heading of the same or a higher level. Deeper headings stay in the section. A topic without an anchor gets the whole document.
@@ -48,4 +52,4 @@ The hub's product list, validated strictly. An unknown key is refused, and each 
 }
 ```
 
-`docs-kit hub` copies it next to `index.html`. `docs-kit mcp --hub <url>` reads `<url>/products.json` and then `<url>/<product>/docs-bundle.json` for each product.
+`corpus hub` copies it next to `index.html`. `corpus mcp --hub <url>` reads `<url>/products.json` and then `<url>/<product>/docs-bundle.json` for each product.

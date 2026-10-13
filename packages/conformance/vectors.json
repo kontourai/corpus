@@ -1,0 +1,7088 @@
+{
+  "schemaVersion": 1,
+  "vectors": [
+    {
+      "id": "create-roundtrip",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.provenance.agent",
+          "equals": "creator"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.2; \u00a76.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-type-raw",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.type",
+          "equals": "raw"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71; Addenda A.1,C.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-type-compiled",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source0"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source0",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.type",
+          "equals": "compiled"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71; Addenda A.1,C.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-type-concept",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.type",
+          "equals": "concept"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71; Addenda A.1,C.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-type-snapshot",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "snapshot",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.type",
+          "equals": "snapshot"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71; Addenda A.1,C.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-type-person",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "person",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.type",
+          "equals": "person"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71; Addenda A.1,C.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-missing-type",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-missing-title",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-missing-body",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-missing-category",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-missing-provenance",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-type-invalid",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "invalid",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-title-",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-body-",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-body-33",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": 33,
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-body-   ",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "   ",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-category-",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-category-Bad Category!",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "Bad Category!",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-category-engineering..api",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering..api",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-invalid-provenance-{'agent': ''}",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": ""
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a73"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "body-verbatim-21",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "First\n\n## Sources\nKeep this prose.",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "First\n\n## Sources\nKeep this prose."
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.2; \u00a79; Addendum C.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "body-verbatim-22",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "## Related\nText\n## People\nMore text",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "## Related\nText\n## People\nMore text"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.2; \u00a79; Addendum C.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "body-verbatim-23",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "> [!note]- Raw Notes\n> actual authored content",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "> [!note]- Raw Notes\n> actual authored content"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.2; \u00a79; Addendum C.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "body-verbatim-24",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "First\n\n## A\ntext\n\n## B\ntext",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "First\n\n## A\ntext\n\n## B\ntext"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.2; \u00a79; Addendum C.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "body-not-frontmatter",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "special": "body-not-frontmatter"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a79"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "duplicate-id",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "fixed-record"
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "Edited"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "replacement",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "fixed-record"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.title",
+          "equals": "Edited"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1 uniqueness"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reuse-after-retire",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "fixed-record"
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "done"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "fixed-record"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "retired"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; B.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-title",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "Updated"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.title",
+          "equals": "Updated"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "update"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a74.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-body",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "body": "Updated body"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "Updated body"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "update"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a74.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-category",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "category": "engineering.api"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.category",
+          "equals": "engineering.api"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "update"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a74.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-tags",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "tags": [
+                "one",
+                "two"
+              ]
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.tags",
+          "equals": [
+            "one",
+            "two"
+          ]
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "update"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a74.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-immutable",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "New",
+              "id": "wrong",
+              "type": "concept",
+              "created_at": "2000-01-01",
+              "provenance": {
+                "agent": "wrong"
+              }
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "record.type",
+          "equals": "raw"
+        },
+        {
+          "ref": "record.created_at",
+          "equals": "$before.created_at"
+        },
+        {
+          "ref": "record.provenance.agent",
+          "equals": "creator"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-reject-33",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {},
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-reject-34",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "x"
+            },
+            {}
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-reject-35",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "nonexistent",
+            {
+              "title": "x"
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "mutation-log-append",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "one"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "two"
+            },
+            {
+              "agent": "second"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log",
+          "length": 2
+        },
+        {
+          "ref": "record.mutation_log.0",
+          "equals": "$before.mutation_log.0"
+        },
+        {
+          "ref": "record.provenance",
+          "equals": "$before.provenance"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a74.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "links-related",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$b"
+          ],
+          "save": "back"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "links.forward",
+          "length": 1
+        },
+        {
+          "ref": "links.forward.0.kind",
+          "equals": "related"
+        },
+        {
+          "ref": "back.reverse.0.source_id",
+          "equals": "$a"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a72.2; \u00a75; \u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "links-future-kind",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "future-kind"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "future-kind"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$b"
+          ],
+          "save": "back"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "links.forward",
+          "length": 1
+        },
+        {
+          "ref": "links.forward.0.kind",
+          "equals": "future-kind"
+        },
+        {
+          "ref": "back.reverse.0.source_id",
+          "equals": "$a"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a72.2; \u00a75; \u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "create-explicit-links",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$b",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.links.0.target_id",
+          "equals": "$b"
+        },
+        {
+          "ref": "links.forward.0.kind",
+          "equals": "source"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1; \u00a75"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "wikilinks-index",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "text [[$b]]",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "links.forward.0.target_id",
+          "equals": "$b"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a72.3 default adapter profile"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "update-links",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "links": [
+                {
+                  "target_id": "$b",
+                  "kind": "related"
+                }
+              ]
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "links.forward.0.target_id",
+          "equals": "$b"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.2; \u00a75"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "link-reject-42",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "link-reject-43",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "missing",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "link-reject-44",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "link",
+          "args": [
+            "missing",
+            [
+              {
+                "target_id": "$a",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "link-reject-45",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$a",
+                "kind": "related"
+              }
+            ],
+            {}
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "proposal-roundtrip",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$b"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "propose"
+        },
+        {
+          "ref": "links.forward.0.kind",
+          "equals": "proposes"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-roundtrip",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "accepted",
+              "rationale": "evidence"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "accepted"
+        },
+        {
+          "ref": "record.mutation_log.1.op",
+          "equals": "apply"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.5"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-roundtrip",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "declined"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.updated_at",
+          "equals": "$before.updated_at"
+        },
+        {
+          "ref": "record.mutation_log.1.op",
+          "equals": "reject"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-missing-agent",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "proposal": "Change it"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-missing-proposal",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-missing-target",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "missing",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-missing-proposer",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "missing",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-target-raw",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "propose"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-missing-agent",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-missing-new_body",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "rationale": "yes"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-missing-rationale",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-missing-target",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "missing",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-missing-proposer",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "missing",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-without-proposal",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.5\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-target-raw",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply"
+        },
+        {
+          "ref": "record.body",
+          "equals": "new"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-missing-agent",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "reason": "no"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-missing-reason",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-missing-target",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "missing",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-missing-proposer",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "missing",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-without-proposal",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.5\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-target-raw",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "reject"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "category-exact-prefix",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering.api",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering.api.rest",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "c",
+              "body": "original body",
+              "category": "design",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering.api"
+          ],
+          "save": "exact"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering.api",
+            {
+              "prefix": true
+            }
+          ],
+          "save": "prefix"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "no-match"
+          ],
+          "save": "none"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "exact",
+          "length": 1
+        },
+        {
+          "ref": "prefix",
+          "length": 2
+        },
+        {
+          "ref": "none",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a73; \u00a77"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "list-type",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source1"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source1",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "c",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "raw"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled"
+          ],
+          "save": "compiled"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "concept"
+          ],
+          "save": "concept"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "raw",
+          "length": 2
+        },
+        {
+          "ref": "compiled",
+          "length": 1
+        },
+        {
+          "ref": "concept",
+          "length": 1
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a77"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "alias-survival",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "engineering/first"
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "aliases": [
+                "engineering/second"
+              ],
+              "category": "engineering.api"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "engineering/first"
+          ],
+          "save": "first"
+        },
+        {
+          "call": "get",
+          "args": [
+            "engineering/second"
+          ],
+          "save": "second"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "first.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "second.id",
+          "equals": "$a"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.4\u2013H.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "alias-conflict",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "engineering/shared"
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "engineering/shared"
+              ]
+            }
+          ],
+          "expect_error": "SLUG_CONFLICT"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.4; \u00a78.1"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "alias-malformed",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "INVALID SPACE"
+              ]
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "prefix-resolution",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "special": "prefix-resolution"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.2\u2013H.3; H.7"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "prefix-ambiguity",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "aaaaaaaa-1111-4111-8111-111111111111"
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "id": "aaaaaaaa-2222-4222-8222-222222222222"
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "get",
+          "args": [
+            "aaaaaaaa"
+          ],
+          "expect_error": "AMBIGUOUS_ID"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "aaaaaaaa"
+          ],
+          "expect_error": "AMBIGUOUS_ID"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "missing-handle",
+      "operations": [
+        {
+          "call": "get",
+          "args": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "00000000-0000-0000-0000-000000000000"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record",
+          "equals": null
+        },
+        {
+          "ref": "links",
+          "equals": {
+            "forward": [],
+            "reverse": []
+          }
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a77; H.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "retire-working-set",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source0"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source0",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled"
+          ],
+          "save": "listed"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "history"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering"
+          ],
+          "save": "cat"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "catHistory"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.status",
+          "equals": "retired"
+        },
+        {
+          "ref": "listed",
+          "length": 0
+        },
+        {
+          "ref": "cat",
+          "length": 0
+        },
+        {
+          "ref": "history",
+          "length": 1
+        },
+        {
+          "ref": "catHistory",
+          "length": 1
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.3\u2013B.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "retire-transitions",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "implemented",
+            {
+              "agent": "editor",
+              "rationale": "obsolete",
+              "implementedByRef": "PR#1"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "implemented"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "implemented",
+            {
+              "agent": "editor",
+              "rationale": "obsolete",
+              "implementedByRef": "PR#2"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "implemented.status",
+          "equals": "implemented"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.2; B.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "retire-invalid-retired",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.2; B.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "retire-invalid-implemented",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "implemented",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.2; B.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "retire-invalid-invalid",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "invalid",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.2; B.4"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "supersede-history",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source0"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source0",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source2"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source2",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$b",
+            [
+              "$a"
+            ],
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "superseded-by"
+        },
+        {
+          "ref": "links.reverse.0.source_id",
+          "equals": "$b"
+        },
+        {
+          "ref": "links.reverse.0.kind",
+          "equals": "supersedes"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "A.5\u2013A.7; J.3; L.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "supersede-listing",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source0"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source0",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source2"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source2",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$b",
+            [
+              "$a"
+            ],
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled"
+          ],
+          "save": "listed"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "history"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "listed",
+          "length": 1
+        },
+        {
+          "ref": "history",
+          "length": 2
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "L.6; J.3"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "supersede-invalid-82",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$a",
+            [],
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "A.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "supersede-invalid-83",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "missing",
+            [
+              "$a"
+            ],
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "A.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "supersede-invalid-84",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$a",
+            [
+              "$a"
+            ],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "A.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "freshness-roundtrip",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "expires_at": "2000-01-01T00:00:00.000Z",
+              "ttl_seconds": 60
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "expires_at": null
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "cleared"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.ttl_seconds",
+          "equals": 60
+        },
+        {
+          "ref": "record.expires_at",
+          "equals": "2000-01-01T00:00:00.000Z"
+        },
+        {
+          "ref": "cleared.expires_at",
+          "equals": null
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "freshness-invalid-86",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "ttl_seconds": 0
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "freshness-invalid-87",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "ttl_seconds": -1
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "freshness-invalid-88",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "ttl_seconds": "60"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "freshness-invalid-89",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "expires_at": "invalid"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reindex-lost",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "special": "reindex",
+          "mode": "lost"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a75.2 (optional capability)"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reindex-corrupt",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "special": "reindex",
+          "mode": "corrupt"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a75.2 (optional capability)"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reindex-idempotent",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "special": "reindex",
+          "mode": "idempotent"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a75.2 (optional capability)"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "legacy-label-sanitize",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$b",
+                  "kind": "related",
+                  "label": "placeholder"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "special": "legacy-label"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.links.0.label",
+          "equals": "evil label with newlines"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a72 label display; Station delimiter-safety profile"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            631,
+            639
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "concurrent-create",
+      "operations": [
+        {
+          "special": "concurrent-create"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/design/knowledge-foundation.md",
+          "lines": [
+            169,
+            169
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "concurrent-update",
+      "operations": [
+        {
+          "special": "concurrent-update"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/design/knowledge-foundation.md",
+          "lines": [
+            169,
+            169
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "interrupted-create",
+      "operations": [
+        {
+          "special": "interrupted-create"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/design/knowledge-foundation.md",
+          "lines": [
+            169,
+            169
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "traversal-create",
+      "operations": [
+        {
+          "special": "traversal-create"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false,
+      "expected_semantics": "No publication outside selected store root; accepted opaque IDs remain gettable. Safe acceptance is allowed."
+    },
+    {
+      "id": "physical-id-unindexed",
+      "operations": [
+        {
+          "special": "physical-id-unindexed"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "physical-id-archived",
+      "operations": [
+        {
+          "special": "physical-id-archived"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "physical-id-mismatch",
+      "operations": [
+        {
+          "special": "physical-id-mismatch"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "symlink-record",
+      "operations": [
+        {
+          "special": "symlink-record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.1; \u00a75 atomic index; J.2"
+        },
+        {
+          "repository": "station",
+          "path": "docs/guides/knowledge.md",
+          "lines": [
+            43,
+            66
+          ]
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "raw-compiled-concept-chain",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "raw",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "raw"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "compiled",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$raw",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "compiled"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "concept",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$compiled",
+                  "kind": "example"
+                }
+              ]
+            }
+          ],
+          "save": "concept"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$raw"
+          ],
+          "save": "backlinks"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$compiled"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "backlinks.reverse.0.kind",
+          "equals": "source"
+        },
+        {
+          "ref": "record.links.0.target_id",
+          "equals": "$raw"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a71.3\u20131.4; \u00a75"
+        }
+      ]
+    },
+    {
+      "id": "graph-integrity",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "runner"
+            }
+          ]
+        },
+        {
+          "special": "graph-integrity"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a75.1"
+        }
+      ]
+    },
+    {
+      "id": "alias-create-getlinks",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "engineering/alias"
+              ],
+              "links": [
+                {
+                  "target_id": "$b",
+                  "kind": "related"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "engineering/alias"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "engineering/alias"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "links.forward.0.target_id",
+          "equals": "$b"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.2\u2013H.4"
+        }
+      ]
+    },
+    {
+      "id": "identity-path-list",
+      "operations": [
+        {
+          "special": "identity-path-list"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.1 accepted create retrievable; \u00a77 list all records of type; \u00a79 default records layout"
+        }
+      ]
+    },
+    {
+      "id": "read-exact",
+      "operations": [
+        {
+          "special": "read-fixture"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "record.body",
+          "equals": "original body"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a77; H.2"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "read-alias-links",
+      "operations": [
+        {
+          "special": "read-fixture"
+        },
+        {
+          "call": "get",
+          "args": [
+            "engineering/raw"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "engineering/raw"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "links.reverse.0.source_id",
+          "equals": "$b"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a77; H.2"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "read-short-prefix",
+      "operations": [
+        {
+          "special": "read-fixture"
+        },
+        {
+          "call": "get",
+          "args": [
+            "aaaaaaaa"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "get",
+          "args": [
+            "aaaa"
+          ],
+          "save": "short"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "short",
+          "equals": null
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "H.2\u2013H.3"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "read-type-category",
+      "operations": [
+        {
+          "special": "read-fixture"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "typed"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering.api"
+          ],
+          "save": "exact"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering.api",
+            {
+              "prefix": true
+            }
+          ],
+          "save": "prefix"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "typed",
+          "length": 1
+        },
+        {
+          "ref": "exact",
+          "length": 1
+        },
+        {
+          "ref": "prefix",
+          "length": 2
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a77; \u00a73"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "read-retired",
+      "operations": [
+        {
+          "special": "read-fixture",
+          "retired": true
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "working"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "history"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "retired"
+        },
+        {
+          "ref": "working",
+          "length": 0
+        },
+        {
+          "ref": "history",
+          "length": 1
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.3\u2013B.6"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "read-stale-filter",
+      "operations": [
+        {
+          "special": "read-fixture"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "stale": true,
+              "now": 0
+            }
+          ],
+          "save": "list"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "list",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.5"
+        }
+      ],
+      "fixture_policy": "read-fixture uses real writable adapter solely to populate preconditions; no mutation claim is credited to read facade"
+    },
+    {
+      "id": "compiled-without-source",
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "1.3; owner decision"
+        }
+      ],
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "evidence",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        }
+      ],
+      "expected": []
+    },
+    {
+      "id": "ttl-creation-anchor",
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2; J.5; owner decision"
+        }
+      ],
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "evidence",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "ttl_seconds": 60
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "special": "ttl-anchor"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "expiry-precedence",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "ttl_seconds": 60,
+              "expires_at": "2030-01-01T00:00:00.000Z"
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "stale": true,
+              "now": 1893456000000
+            }
+          ],
+          "save": "stale"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "stale": true,
+              "now": 1893455999999
+            }
+          ],
+          "save": "fresh"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "stale",
+          "length": 1
+        },
+        {
+          "ref": "fresh",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "J.2; J.5; owner decision"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "search-working-set",
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "B.3-B.6; owner working-set decision"
+        }
+      ],
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "needle",
+              "body": "needle evidence",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "obsolete"
+            }
+          ]
+        },
+        {
+          "call": "search",
+          "args": [
+            "needle"
+          ],
+          "save": "working"
+        },
+        {
+          "call": "search",
+          "args": [
+            "needle",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "history"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "working",
+          "length": 0
+        },
+        {
+          "ref": "history",
+          "length": 1
+        }
+      ]
+    },
+    {
+      "id": "propose-target-compiled",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "propose"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-target-snapshot",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "snapshot",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "propose"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "propose-target-person",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "person",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "proposal": "Change it"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "propose"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-target-compiled",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply"
+        },
+        {
+          "ref": "record.body",
+          "equals": "new"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-target-snapshot",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "snapshot",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply"
+        },
+        {
+          "ref": "record.body",
+          "equals": "new"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "apply-target-person",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "person",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "new_body": "new",
+              "rationale": "yes"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply"
+        },
+        {
+          "ref": "record.body",
+          "equals": "new"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-target-compiled",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "source",
+              "body": "source evidence",
+              "category": "conformance.source",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "source"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$source",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "reject"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-target-snapshot",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "snapshot",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "reject"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    },
+    {
+      "id": "reject-target-person",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "person",
+              "title": "a",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "raw",
+              "title": "b",
+              "body": "original body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "proposes"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$b",
+            {
+              "agent": "editor",
+              "reason": "no"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "reject"
+        }
+      ],
+      "source": [
+        {
+          "repository": "flow-agents",
+          "path": "kits/knowledge/docs/store-contract.md",
+          "clause": "\u00a76.4\u20136.6"
+        }
+      ],
+      "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
+      "production_seam": false
+    }
+  ]
+}

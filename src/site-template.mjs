@@ -159,7 +159,7 @@ export function sitePage({ manifest, title, description, navHtml, content, toRoo
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-${description ? `<meta name="description" content="${escapeHtml(description)}">\n` : ''}<meta name="generator" content="@kontourai/docs-kit">
+${description ? `<meta name="description" content="${escapeHtml(description)}">\n` : ''}<meta name="generator" content="@kontourai/corpus">
 <link rel="stylesheet" href="${toRoot}docs-kit.css">
 <script src="${toRoot}${SITE_SCRIPT_FILE}" defer></script>
 </head>
@@ -182,7 +182,7 @@ ${content}
 </div>
 <footer class="site-footer">
   Built from <a href="${escapeHtml(`${repoUrl}/commit/${sha}`)}"><code>${escapeHtml(sha.slice(0, 7))}</code></a> of
-  <a href="${escapeHtml(repoUrl)}">${escapeHtml(manifest.repo)}</a> with docs-kit.
+  <a href="${escapeHtml(repoUrl)}">${escapeHtml(manifest.repo)}</a> with Corpus.
   Part of the <a href="${HUB_URL}">Kontour documentation hub</a>.
 </footer>
 ${mermaid ? MERMAID_SCRIPTS : ''}</body>

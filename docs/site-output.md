@@ -1,6 +1,6 @@
 # What the generated site contains
 
-`docs-kit build --out dist-pages` replaces the output directory with a static site that GitHub Pages can serve as is.
+`corpus build --out dist-pages` replaces the output directory with a static site that GitHub Pages can serve as is.
 
 ## Pages
 
@@ -43,7 +43,7 @@ Every page's `<main>` names its source once: `data-src-path` (the path from the 
 - each item of a top-level list;
 - each row of a top-level table (the header row, then one line per body row).
 
-Blocks nested inside a list item or a blockquote are covered by their annotated ancestor. Raw HTML blocks have no line attribute. The sanitizer keeps exactly one `data-*` name, `data-src-line`, on `p`, `h1`-`h6`, `li`, `tr`, `pre`, and `blockquote`, and docs-kit removes any `data-src-line` written in a document's raw HTML before rendering, so provenance only ever comes from the build.
+Blocks nested inside a list item or a blockquote are covered by their annotated ancestor. Raw HTML blocks have no line attribute. The sanitizer keeps exactly one `data-*` name, `data-src-line`, on `p`, `h1`-`h6`, `li`, `tr`, `pre`, and `blockquote`, and corpus removes any `data-src-line` written in a document's raw HTML before rendering, so provenance only ever comes from the build.
 
 ## Selection toolbar
 
@@ -56,7 +56,7 @@ Selecting text inside `<main>` shows a small toolbar next to the selection (belo
 | **Open issue** | Opens `https://github.com/<repo>/issues/new` prefilled with a title naming the path and lines, the challenge text, the quote, and the provenance, with `labels=docs-challenge` (GitHub applies a label only for users who may triage). The quote is a fenced code block, so `@names` and `#123` in the selection do not notify anyone or link issues. It is cut with an ellipsis so the whole URL stays within 8,000 characters. |
 | **Edit** | Opens `https://github.com/<repo>/edit/<branch>/<path>#L<start>`, with `branch` from the manifest. GitHub's editor may not scroll to `#L<start>`, and it opens the branch head, whose lines can differ from the built sha the toolbar's line numbers refer to. |
 
-`selectionActions.primary` in `docs-kit.json` chooses which action leads the toolbar and is highlighted: `ask` (the default) or `challenge-issue`. Alt+T moves focus to the toolbar, the arrow keys, Home, and End move between its buttons, and Escape closes it. Animations are off under `prefers-reduced-motion`, and the colors follow the light and dark themes.
+`selectionActions.primary` in `corpus.json` (or legacy `docs-kit.json`) chooses which action leads the toolbar and is highlighted: `ask` (the default) or `challenge-issue`. Alt+T moves focus to the toolbar, the arrow keys, Home, and End move between its buttons, and Escape closes it. Animations are off under `prefers-reduced-motion`, and the colors follow the light and dark themes.
 
 The page never calls a model and has no backend: it hands the prompt to your agent through the clipboard, or to GitHub through a URL. Where the clipboard API is missing or refused, the prompt appears in a dialog in a selected, read-only textarea for you to copy. Selected text reaches the page only as `textContent` or a textarea value, never as HTML. The script is template output written by `build`, not document content; Markdown still cannot add scripts.
 
@@ -70,7 +70,7 @@ When the browser exposes [WebMCP](https://webmachinelearning.github.io/webmcp/) 
 | `search_docs` | `query`, `limit?` (1-50, default 10) | ranked matches over this product's `docs-bundle.json`, fetched from the same origin |
 | `get_topic` | `id` | one topic from the bundle, as Markdown |
 
-WebMCP is a draft from the W3C Web Machine Learning Community Group, implemented only in Chromium (behind a flag or an origin trial), and its API is still changing; see the [explainer and spec](https://github.com/webmachinelearning/webmcp). docs-kit feature-detects it and registers each tool inside `try`/`catch`. It passes an `AbortSignal` (aborted on `pagehide`) for the current draft, whose `registerTool` returns a Promise, and it handles the older synchronous `registerTool` that returned an object with `unregister()`, answering that API in MCP `content` form. Any failure leaves the page working, with no tools.
+WebMCP is a draft from the W3C Web Machine Learning Community Group, implemented only in Chromium (behind a flag or an origin trial), and its API is still changing; see the [explainer and spec](https://github.com/webmachinelearning/webmcp). corpus feature-detects it and registers each tool inside `try`/`catch`. It passes an `AbortSignal` (aborted on `pagehide`) for the current draft, whose `registerTool` returns a Promise, and it handles the older synchronous `registerTool` that returned an object with `unregister()`, answering that API in MCP `content` form. Any failure leaves the page working, with no tools.
 
 ## Mermaid diagrams
 

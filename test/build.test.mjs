@@ -190,7 +190,7 @@ test('build --out only replaces directories it created (marker), and never track
     assert.equal(result.status, 0, `build ${i + 1}: ${result.output}`);
   }
   const marker = JSON.parse(readFileSync(path.join(fresh, '.docs-kit-build'), 'utf8'));
-  assert.equal(marker.generator, '@kontourai/docs-kit');
+  assert.equal(marker.generator, '@kontourai/corpus');
   assert.ok(marker.files.includes('index.html') && marker.files.includes('docs/assets/diagram.svg') && marker.files.includes('.nojekyll'));
   assert.ok(!marker.files.includes('.docs-kit-build'));
 
