@@ -38,7 +38,7 @@ assert.equal(typeof KnowledgeStoreCorruptionError, 'function');
 assert.equal(typeof observeExactKnowledgeRecordFile, 'function');
 assert.equal(typeof standaloneFileMutationLock, 'function');
 for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
- const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname });
+ const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, lock: standaloneFileMutationLock });
  const id = await adapter.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  assert.equal((await adapter.get(id)).body, 'Consumer body');
 }

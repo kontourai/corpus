@@ -86,6 +86,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
     this.aliasPath = join(this.root, 'alias-index.json');
     mkdirSync(this.recordsDir, { recursive: true });
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
+    Object.defineProperty(this, "files", { enumerable: false });
   }
 
   // ── Internal: record file access ─────────────────────────────────────────

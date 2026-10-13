@@ -37,7 +37,8 @@
     "test": "vitest run",
     "conformance": "node test/conformance.mjs",
     "verify:pack": "node test/packed-consumers.mjs",
-    "proof:faults": "node test/fault-injection.mjs"
+    "proof:faults": "node test/fault-injection.mjs",
+    "proof:round1": "node test/round1-faults.mjs"
   },
   "dependencies": {
     "js-yaml": "5.4.2"

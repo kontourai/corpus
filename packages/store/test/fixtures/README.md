@@ -13,3 +13,10 @@ uses the checked-in default-store on-disk contract fixture's fields and body,
 with a fixed ID/time; `freshness.md` uses its freshness fixture's expiry/TTL;
 `strings.md` adds ambiguous scalar strings using that same serializer. The
 codec tests parse and reserialize these saved independent bytes exactly.
+
+`mutation-default.md` and `mutation-vault.md` execute that same unchanged Station
+serializer with the complete Station-written mutation evidence inventory:
+update fields; link added links; both propose shapes; apply/reject evidence;
+supersede numeric count; superseded-by IDs; and retire status/rationale/ref fields.
+The vault fixture also carries its rendered body sentinel. Values include
+ambiguous scalar strings to prove declared string fields retain their types.

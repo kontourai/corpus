@@ -402,6 +402,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     this.aliasPath = join(this.root, 'alias-index.json');
     mkdirSync(this.root, { recursive: true });
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
+    Object.defineProperty(this, "files", { enumerable: false });
   }
 
   // ── Internal: path index (id -> {path, archived}) ─────────────────────────

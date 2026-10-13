@@ -38,7 +38,7 @@ if (
   await files.mutate('child-hold', async () => {
     if (!readyPath) throw new Error('readyPath is required');
     if (!releasePath) throw new Error('releasePath is required');
-    writeFileSync(readyPath, 'ready', 'utf8');
+    writeFileSync(readyPath, String(process.pid), 'utf8');
     while (!(await import('node:fs')).existsSync(releasePath)) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -47,7 +47,7 @@ if (
 } else if (mode === 'write-external') {
   if (!readyPath) throw new Error('readyPath is required');
   if (!releasePath) throw new Error('releasePath is required');
-  writeFileSync(readyPath, 'ready', 'utf8');
+  writeFileSync(readyPath, String(process.pid), 'utf8');
   while (!(await import('node:fs')).existsSync(releasePath)) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

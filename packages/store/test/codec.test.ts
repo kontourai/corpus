@@ -16,12 +16,12 @@ describe('old Kit writer scalar compatibility', () => {
       expect(body).toBe('Original old Kit body.');
     });
   }
-  test('keeps unknown scalars textual while coercing only numeric TTL', () => {
-    expect(parseMarkdown('---\nttl_seconds: 60\nfuture: 1.10\nflag: true\nempty: null\n---\n\nBody').meta).toEqual({ ttl_seconds: 60, future: '1.10', flag: 'true', empty: 'null' });
+  test('unknown extensions use only lossless core-schema scalar conversions', () => {
+    const { meta } = parseMarkdown('---\nttl_seconds: 60\nfuture: 1.10\nflag: true\nempty: null\ninteger: 3\ndash: -\n---\n\nBody');
+    expect(meta).toMatchObject({ ttl_seconds: 60, future: '1.10', flag: true, empty: null, integer: 3, dash: '-' });
   });
-  test('refuses malformed bare-dash YAML outside known legacy string positions', () => {
-    expect(() => parseMarkdown('---\nunknown: -\n---\n\nBody')).toThrow();
-    expect(() => parseMarkdown('---\nprovenance:\n  note: - # suspicious\n---\n\nBody')).toThrow();
+  test('rejects other malformed scalar syntax', () => {
+    expect(() => parseMarkdown('---\nprovenance:\n  note: [unterminated\n---\n\nBody')).toThrow();
   });
 });
 describe('Station serializer byte compatibility', () => {
@@ -32,4 +32,45 @@ describe('Station serializer byte compatibility', () => {
       expect(serializeMarkdown(parsed.meta, parsed.body)).toBe(original);
     });
   }
+});
+
+
+test('Station mutation evidence keeps its complete typed field inventory', () => {
+  const { meta } = parseMarkdown(readFileSync(join(fixtures, 'station', 'mutation-default.md'), 'utf8'));
+  expect(meta.ttl_seconds).toBe(60);
+  const log = meta.mutation_log as { op: string; evidence: Record<string, unknown>; at: string; agent: string; note: string }[];
+  expect(log.find((entry) => entry.op === 'supersede')?.evidence.superseded_count).toBe(1);
+  expect(log.find((entry) => entry.op === 'link')?.evidence.added).toEqual([{ target_id: 'source-record', kind: 'source', label: 'null' }]);
+  expect(log.find((entry) => entry.op === 'update')?.evidence.fields).toEqual(['title', 'tags']);
+  expect(log.find((entry) => entry.op === 'apply')?.evidence).toEqual({ proposer_id: 'proposer-record', rationale: 'null' });
+  expect(log.find((entry) => entry.op === 'reject')?.evidence.reason).toBe('-');
+  expect(log.every((entry) => entry.agent === 'true' && entry.note === '1.10' && typeof entry.at === 'string')).toBe(true);
+});
+
+test('unknown extension changes replace saved source instead of resurrecting old values', () => {
+  const { meta, body } = parseMarkdown('---\nfuture: 1.10\nflag: true\n---\n\nBody');
+  meta.future = 3;
+  const rewritten = serializeMarkdown(meta, body);
+  expect(rewritten).toContain('future: 3\n');
+  expect(rewritten).not.toContain('1.10');
+});
+
+
+test('changed extension containers preserve their unchanged scalar siblings', () => {
+  const { meta, body } = parseMarkdown('---\nfuture: { precise: 1.10, changed: 3, quoted: "true" }\n---\n\nBody');
+  (meta.future as Record<string, unknown>).changed = 4;
+  const rewritten = serializeMarkdown(meta, body);
+  expect(rewritten).toContain('precise: 1.10\n');
+  expect(rewritten).toContain('changed: 4\n');
+  expect(rewritten).toContain('quoted: "true"\n');
+  const read = parseMarkdown(rewritten).meta.future;
+  expect(read).toEqual({ precise: '1.10', changed: 4, quoted: 'true' });
+});
+
+test('unchanged extension blocks, sequences and quoted keys retain source text', () => {
+  const extension = '"future": { values: [1.10, 3, true, null], quoted: "3" } # retain format\nfuture_body: |\n  exact body\n  second line\n';
+  const original = `---\ntitle: Title\n${extension}---\n\nBody`;
+  const { meta, body } = parseMarkdown(original);
+  expect(meta.future).toEqual({ values: ['1.10', 3, true, null], quoted: '3' });
+  expect(serializeMarkdown(meta, body)).toBe(original);
 });

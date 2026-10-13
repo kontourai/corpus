@@ -101,17 +101,34 @@ asserts a clean tree before and after, writes separate negative logs, and can be
 reproduced from a committed worktree with:
 
 ```sh
-npm run proof:faults --workspace=@kontourai/corpus-store -- /tmp/corpus-store-fault-proof
+npm run proof:faults --workspace=@kontourai/corpus-store -- <output-directory>
 ```
 
-Local receipts are under `/tmp/corpus-program/`: `store-fault-proof/results.json`
-and per-phase logs, `store-tests-qualified.log`, `store-tests-node22.log`,
-`root-tests.log`, `packed-node22.log`, `packed-node24-final.log`, and the raw
-`conformance-baseline.json`. These local files are diagnostic artifacts, not
-published evidence or hosted CI results. CI is configured to repeat build,
-contracts and packed qualification on Linux Node 22/24; that configuration alone
-is not a hosted PASS. This change makes no Windows or mixed-host qualification
-claim.
+The fault driver writes diagnostic receipts to the caller-selected output
+directory. CI repeats build, contracts and packed qualification on Linux
+Node 22/24. Local results are distinct from hosted CI. No Windows or mixed-host
+qualification is inferred from these executions.
+
+## Round 1 corrections
+
+The independent review exposed numeric supersede evidence that the original
+empty-log byte fixtures missed. The field inventory is: record strings
+(id/type/title/category/status/timestamps/expiry/sentinel), tags/aliases,
+provenance strings and source IDs, link target/kind/label, log op/time/agent/note
+and supersession rationale/new ID; update evidence fields (string array), link
+added evidence (link array), propose/apply/reject/retire/superseded-by evidence
+strings; numeric TTL and supersede evidence count. No Station-written boolean
+record field exists. Unknown extension scalars follow the orchestrator's lossless
+core-schema rule, with source slices retained for unchanged values.
+
+Round 1 also requires explicit lock/coordination options; adds injected host-home
+identity rechecks; binds expected failures to ref/kind/expected/actual assertions
+and adjudicates selected vectors; restores held-owner PID/liveness and raw-fs
+publication guards; removes machine-private paths; and hides the existing
+internal transaction field from enumeration. Origin main was merged, including
+#13's dependency and instruction changes. Package/root CI is rerun after this
+merge. Each correction has a targeted negative control recorded below after
+execution.
 
 ## Plan disagreements and limits
 

@@ -101,7 +101,20 @@
       "vault"
     ],
     "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      }
+    }
   },
   "supersede-listing": {
     "profiles": [
@@ -109,7 +122,20 @@
       "vault"
     ],
     "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "listed",
+        "kind": "length",
+        "expected": 1,
+        "actual": 2
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 2,
+        "actual": 1
+      }
+    }
   },
   "read-retired": {
     "profiles": [
@@ -117,7 +143,20 @@
       "vault"
     ],
     "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      }
+    }
   },
   "read-stale-filter": {
     "profiles": [
@@ -125,7 +164,20 @@
       "vault"
     ],
     "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "list",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "list",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
   },
   "ttl-creation-anchor": {
     "profiles": [
@@ -133,7 +185,20 @@
       "vault"
     ],
     "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "ttl-anchor.before",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "ttl-anchor.before",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
   },
   "expiry-precedence": {
     "profiles": [
@@ -141,7 +206,20 @@
       "vault"
     ],
     "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
-    "errorPattern": "Expected values to be strictly equal"
+    "assertions": {
+      "default": {
+        "ref": "fresh",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "fresh",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
   },
   "compiled-without-source": {
     "profiles": [

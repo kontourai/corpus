@@ -41,17 +41,16 @@ index format or public storage API is claimed by this extraction.
 
 The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or
-Promise<void>. Station keeps its own implementation. Every cooperating writer
+Promise<void>. Station keeps its own implementation. Both `lock` and `coordinationDirectory` are required. Every cooperating writer
 must inject the same lock protocol and coordination directory. Pass the final
 private directory, not a host home path. The package preserves the hashed
 realpath/device/inode `.lock` name and `.station-knowledge-transaction.json` v1
 journal, including recovery and publication ordering.
 
-The default `standaloneFileMutationLock` is **standalone only and does not
+The explicitly selected `standaloneFileMutationLock` is **standalone only and does not
 interoperate with Station's lock**. It uses a filesystem bakery directory at the
 lock path, unique PID/UUID participants and atomic ticket publication, waiting
-for live owners and ignoring dead processes. Its default private coordination
-namespace is under the OS temp directory, scoped by user. It is intended for
+for live owners and ignoring dead processes. Every host supplies its own absolute private coordination directory; omission is rejected. It is intended for
 same-host processes on a local filesystem. PID reuse can conservatively delay
 acquisition until timeout. Inject the host services for shared stores; no mixed
 Station/standalone co-writer qualification is claimed.
@@ -62,13 +61,18 @@ host responsibilities. `provenance.agent` records attribution, not authority.
 
 ## Codec and format
 
-The reader uses failsafe YAML scalars, then coerces only `ttl_seconds` to a number.
-`1.10`, `null` and `true` remain text. Legacy bare-dash repair is restricted to
-known string fields emitted by old Kit writers. Other invalid YAML is rejected.
-The writer retains Station's js-yaml serializer options; saved Station fixture
-bytes round-trip exactly. Unknown fields remain readable; arbitrary previously
-typed unknown numeric/boolean metadata is read as text, so full byte parity for
-all possible external metadata is not asserted.
+The reader preserves Station's known string fields and reads its numeric fields
+(`ttl_seconds`, supersede evidence `superseded_count`) as numbers only when the
+source scalar is unquoted. Quoted numeric TTL remains corruption, matching
+Station. Unknown fields use core-schema types when conversion is lossless: `3`,
+`true` and `null` become number, boolean and null; `1.10` and a bare `-` remain
+text. Unknown quoted strings stay strings.
+
+The codec retains source ranges and snapshots for unknown fields, including
+nested mutation evidence. Unchanged values re-emit their exact original source
+text. A changed container still retains unchanged scalar siblings. Station's
+serializer remains the writer for changed fields and new records. Station-written
+fixtures include all mutation evidence shapes and round-trip byte for byte.
 
 Default layout: `records/<id>.md`, `graph-index.json`, `alias-index.json`.
 Vault layout: category-routed notes, `people/`, archives, `path-index.json`,
@@ -116,3 +120,17 @@ integration obligation. [The extraction record](../../docs/store-extraction.md)
 contains source mapping and executed evidence. The ported transaction suite
 retains internal crash hooks; the conformance crash subprocesses use those
 existing internal hooks without adding a public storage seam.
+
+## Coordination identity
+
+Hosts with a runtime-home resolver inject `coordinationIdentity`, a factory that
+captures that home and returns a recheck. It must validate the home with
+`observeDirectoryChain(home)` (including strict realpath/no-symlink checks),
+then reject if the current runtime-home resolver returns a different absolute
+path. The package calls the captured recheck before transaction I/O. Pass the
+same factory as the fourth argument to
+`observeExactKnowledgeRecordFile(root, coordinationDirectory, id, coordinationIdentity)`;
+its returned recheck repeats the home/namespace check before returning source.
+Filesystem identity checks alone cannot detect a host resolver selecting another
+home, so hosts with that policy must inject the resolver check. Standalone hosts
+with a fixed explicit directory may omit it. No Station home resolver is imported.

@@ -1,3 +1,4 @@
+import { standaloneFileMutationLock } from '../src/index.js';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,7 +33,7 @@ const input = {
 describe('knowledge persisted schema policy', () => {
   test('a malformed authoritative default record is corruption, not an empty result', async () => {
     const storeRoot = root('knowledge-default-corrupt-');
-    const adapter = new KitDefaultStoreAdapter({ storeRoot });
+    const adapter = new KitDefaultStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     writeFileSync(
       join(storeRoot, 'records', `${input.id}.md`),
@@ -47,7 +48,7 @@ describe('knowledge persisted schema policy', () => {
 
   test('default record filename identity cannot be redirected by tampered frontmatter', async () => {
     const storeRoot = root('knowledge-default-identity-');
-    const adapter = new KitDefaultStoreAdapter({ storeRoot });
+    const adapter = new KitDefaultStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     const path = join(storeRoot, 'records', `${input.id}.md`);
     writeFileSync(
@@ -82,7 +83,7 @@ describe('knowledge persisted schema policy', () => {
     ],
   ])('default record rejects malformed nested %s', async (_label, tamper) => {
     const storeRoot = root('knowledge-default-nested-');
-    const adapter = new KitDefaultStoreAdapter({ storeRoot });
+    const adapter = new KitDefaultStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     const path = join(storeRoot, 'records', `${input.id}.md`);
     writeFileSync(path, tamper(readFileSync(path, 'utf8')));
@@ -94,7 +95,7 @@ describe('knowledge persisted schema policy', () => {
 
   test('Obsidian path metadata is authoritative and fails closed when malformed', async () => {
     const storeRoot = root('knowledge-obsidian-path-corrupt-');
-    const adapter = new KitObsidianStoreAdapter({ storeRoot });
+    const adapter = new KitObsidianStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     writeFileSync(join(storeRoot, 'path-index.json'), '{}', 'utf8');
 
@@ -105,7 +106,7 @@ describe('knowledge persisted schema policy', () => {
 
   test('Obsidian path-index identity cannot be redirected by tampered frontmatter', async () => {
     const storeRoot = root('knowledge-obsidian-identity-');
-    const adapter = new KitObsidianStoreAdapter({ storeRoot });
+    const adapter = new KitObsidianStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     const index = JSON.parse(
       readFileSync(join(storeRoot, 'path-index.json'), 'utf8'),
@@ -129,7 +130,7 @@ describe('knowledge persisted schema policy', () => {
 
   test('Obsidian derived graph corruption requires and survives explicit reindex', async () => {
     const storeRoot = root('knowledge-obsidian-graph-corrupt-');
-    const adapter = new KitObsidianStoreAdapter({ storeRoot });
+    const adapter = new KitObsidianStoreAdapter({ storeRoot, lock: standaloneFileMutationLock, coordinationDirectory: join(storeRoot, "coordination") });
     await adapter.create(input);
     writeFileSync(join(storeRoot, 'graph-index.json'), '{', 'utf8');
 

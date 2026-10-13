@@ -7,6 +7,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   symlinkSync,
@@ -219,14 +220,27 @@ describe('KnowledgeFileTransactions', () => {
     const ready = join(root, 'child-ready');
     const release = join(root, 'child-release');
     const child = runChild(root, 'hold-lock', ready, release);
-    await waitForFile(ready);
-    expect(lstatSync(coordinationLockPath(root)).isDirectory()).toBe(true);
-    const files = new KnowledgeFileTransactions(root);
-    const parent = files.mutate('parent', () => {
-      files.writeText(join(root, 'parent.txt'), 'parent');
-    });
-    await writeFile(release, 'release');
-    expect(await childExit(child)).toBe(0);
+    const exited = childExit(child);
+    let parent: Promise<unknown> | undefined;
+    let code: number | null;
+    try {
+      await waitForFile(ready);
+      const holders = readdirSync(coordinationLockPath(root));
+      expect(holders).toHaveLength(1);
+      const ownerPid = Number(holders[0].split('-')[0]);
+      expect(ownerPid).toBe(Number(await readFile(ready, 'utf8')));
+      expect(ownerPid).not.toBe(process.pid);
+      expect(() => process.kill(ownerPid, 0)).not.toThrow();
+      expect(Number(readFileSync(join(coordinationLockPath(root), holders[0], 'ticket'), 'utf8'))).toBeGreaterThan(0);
+      const files = new KnowledgeFileTransactions(root);
+      parent = files.mutate('parent', () => {
+        files.writeText(join(root, 'parent.txt'), 'parent');
+      });
+    } finally {
+      await writeFile(release, 'release');
+      code = await exited;
+    }
+    expect(code).toBe(0);
     await parent;
     expect(await readFile(join(root, 'child.txt'), 'utf8')).toBe('child');
     expect(await readFile(join(root, 'parent.txt'), 'utf8')).toBe('parent');

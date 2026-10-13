@@ -56,6 +56,7 @@ export function observeExactKnowledgeRecordFile(
   root: string,
   coordinationDirectory: string,
   id: string,
+  coordinationIdentity?: () => (() => void),
 ) {
   if (
     !isSafePathSegment(id) ||
@@ -67,6 +68,7 @@ export function observeExactKnowledgeRecordFile(
   ) {
     throw new KnowledgeObservationRefusal('unavailable');
   }
+  const recheckIdentity = coordinationIdentity?.();
   const coordinationRoot = resolve(coordinationDirectory);
   const recheckRoot = observeDirectoryChain(root);
   const rootInfo = lstatSync(root);
@@ -77,6 +79,7 @@ export function observeExactKnowledgeRecordFile(
   );
   const check = () => {
     // Re-check the captured writer namespace after the host's final authorization.
+    recheckIdentity?.();
     recheckRoot();
     recheckCoordination();
     requireObservationArtifactAbsent(join(root, JOURNAL_FILE));
@@ -164,6 +167,7 @@ function isCanonicalBase64(value: string): boolean {
  */
 export class KnowledgeFileTransactions {
   private readonly services: ResolvedServices;
+  private readonly recheckCoordinationIdentity?: () => void;
   private readonly root: string;
   private readonly journalPath: string;
   private readonly lockPath: string;
@@ -173,8 +177,9 @@ export class KnowledgeFileTransactions {
   private readonly rootInode!: number;
   private readonly rootRealpath!: string;
 
-  constructor(root: string, hooks: KnowledgeFileTransactionHooks = {}, options: Omit<StoreOptions, "storeRoot"> = {}) {
+  constructor(root: string, hooks: KnowledgeFileTransactionHooks = {}, options: Omit<StoreOptions, "storeRoot">) {
     this.services = resolveServices(options);
+    this.recheckCoordinationIdentity = this.services.coordinationIdentity?.();
     this.root = resolve(root);
     this.journalPath = join(this.root, JOURNAL_FILE);
     this.hooks = hooks;
@@ -798,6 +803,7 @@ export class KnowledgeFileTransactions {
   }
 
   private validateRootIdentity(): void {
+    this.recheckCoordinationIdentity?.();
     try {
       const current = lstatSync(this.root);
       if (

@@ -1,3 +1,4 @@
+import { standaloneFileMutationLock } from '../src/index.js';
 import {
   existsSync,
   mkdirSync,
@@ -16,8 +17,8 @@ import { runAdapterContractSuite } from './contract-suite.js';
 
 const loggerWarnSpy = vi.fn();
 class KitObsidianStoreAdapter extends SourceAdapter {
-  constructor(options: ConstructorParameters<typeof SourceAdapter>[0]) {
-    super({ ...options, diagnostics: { warn: loggerWarnSpy } });
+  constructor(options: Omit<ConstructorParameters<typeof SourceAdapter>[0], "lock" | "coordinationDirectory">) {
+    super({ ...options, lock: standaloneFileMutationLock, coordinationDirectory: join(options.storeRoot, "coordination"), diagnostics: { warn: loggerWarnSpy } });
   }
 }
 

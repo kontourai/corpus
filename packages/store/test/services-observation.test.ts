@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { KitDefaultStoreAdapter } from '../src/index.js';
+import { KitDefaultStoreAdapter, standaloneFileMutationLock } from '../src/index.js';
 import { observeExactKnowledgeRecordFile, KnowledgeObservationRefusal } from '../src/observation.js';
 const roots: string[] = [];
 function fixture() {
@@ -40,7 +40,7 @@ test('uses injected lock, clock, IDs and non-authoritative observers through pub
 });
 test('exact observation is construction-free, refuses writer artifacts and detects byte replacement', async () => {
   const { root, coordination } = fixture();
-  const store = new KitDefaultStoreAdapter({ storeRoot: root, coordinationDirectory: coordination });
+  const store = new KitDefaultStoreAdapter({ storeRoot: root, coordinationDirectory: coordination, lock: standaloneFileMutationLock });
   const id = await store.create({ ...input, id: 'observed-record' });
   const beforeRoot = readdirSync(root).sort();
   const beforeCoordination = readdirSync(coordination).sort();
