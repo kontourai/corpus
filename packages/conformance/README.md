@@ -1,5 +1,10 @@
 # Corpus store conformance
 
+Version `0.1.0-next.0` is published alongside Corpus Store on the `next`
+dist-tag through the [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
+This package has no dependencies; Store uses it only for development tests,
+so neither package requires the other to be published first.
+
 These vectors describe expected results from the public Knowledge Kit store contract and Station's public documentation/contracts, with owner-approved decisions below. They are not snapshots of any implementation's behavior. No mutable store is shipped here.
 
 - Proposals, application, and rejection may target any record type.

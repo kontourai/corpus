@@ -1,6 +1,6 @@
 {
   "name": "@kontourai/corpus-conformance",
-  "version": "0.1.0",
+  "version": "0.1.0-next.0",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
@@ -10,7 +10,8 @@
   "files": [
     "index.mjs",
     "vectors.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22"
