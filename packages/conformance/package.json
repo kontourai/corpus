@@ -14,5 +14,14 @@
   ],
   "engines": {
     "node": ">=22"
+  },
+  "description": "Public Knowledge store conformance vectors and an adapter-factory runner.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kontourai/corpus.git",
+    "directory": "packages/conformance"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

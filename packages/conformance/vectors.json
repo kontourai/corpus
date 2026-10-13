@@ -942,7 +942,7 @@
               "id": "fixed-record"
             }
           ],
-          "expect_error": "ANY"
+          "expect_error": "MISSING_EVIDENCE"
         },
         {
           "call": "get",
@@ -1024,7 +1024,7 @@
               "id": "fixed-record"
             }
           ],
-          "expect_error": "ANY"
+          "expect_error": "MISSING_EVIDENCE"
         },
         {
           "call": "get",

@@ -24,6 +24,8 @@ npx -y github:kontourai/corpus#<sha> corpus check
 
 Corpus owns source-bound content: documentation checking, publishing, and retrieval today, with a shared Knowledge store planned separately. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
 
+This repository retains its own v1 `docs-kit.json` and `docs-kit` product identity until the GitHub rename and the org workflow pin upgrade are complete. A follow-up will migrate it to `corpus.json` v2; the v2 fixtures already exercise the new schema.
+
 The root package is a zero-install, plain ESM docs CLI. `corpus` and the legacy `docs-kit` bin run the same commands with identical output and exit codes. Generated `docs-kit.css`, `docs-kit.js`, and `.docs-kit-build` names remain compatible.
 
 The separate [`@kontourai/corpus-conformance`](packages/conformance/README.md) workspace ships public Knowledge store vectors and an adapter-factory runner. Its expected outcomes come from the contract and owner decisions. The shared mutable store is a later package.

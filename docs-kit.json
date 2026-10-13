@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 2,
-  "product": "corpus",
+  "schemaVersion": 1,
+  "product": "docs-kit",
   "title": "Corpus",
   "tagline": "Source-bound documentation checking, publishing, and retrieval",
-  "repo": "kontourai/corpus",
+  "repo": "kontourai/docs-kit",
   "landing": "README.md",
   "documents": [
     {
@@ -35,7 +35,7 @@
   "topics": [
     {
       "id": "manifest",
-      "title": "Corpus.json manifest reference",
+      "title": "Manifest reference",
       "source": "README.md#manifest-reference"
     },
     {
@@ -79,7 +79,5 @@
       "source": "README.md#known-limits"
     }
   ],
-  "exclude": [],
-  "purpose": "Check, publish, and retrieve source-bound content for repositories and product suites.",
-  "builtOn": []
+  "exclude": []
 }

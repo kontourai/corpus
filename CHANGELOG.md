@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Corpus
+
+- The MCP initialization response's `serverInfo.name` is now `corpus` (previously `docs-kit`), under both CLI bins. In this repository, only the MCP server-identity test keys on that name; production tool lookup uses the unchanged tool names. External clients that explicitly match `serverInfo.name === "docs-kit"` must update that match; arbitrary external consumers have not been audited. Station's shared MCP connection code records the negotiated name as metadata rather than using it to route docs tools.
+- The root package is `@kontourai/corpus`, with `corpus` and compatible `docs-kit` bins. Preferred v2 `corpus.json` manifests add required purpose and public-contract building blocks; v1 manifests and bundles remain supported. This repo keeps its own v1 `docs-kit.json` with `docs-kit` product/repo identity until the repository rename and org workflow pin upgrade, then migrates in a follow-up.
+- Public store conformance vectors require `MISSING_EVIDENCE` for duplicate IDs, including reuse after retirement. The runner rejects malformed expected entries without `equals` or `length`.
+
 ## 0.6.0
 
 Additive: v0.5.0 manifests stay valid, `products.json` is unchanged, and the bundle gains two optional per-document fields.

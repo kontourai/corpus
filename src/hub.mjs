@@ -157,7 +157,7 @@ ${products.map(productCard).join('\n')}
   </ul>
   <section class="install" id="install" aria-labelledby="install-heading">
     <h2 id="install-heading">Ask an agent about any building block</h2>
-    <p>The Corpus MCP server reads every published bundle listed here and answers <code>list_products</code>, <code>list_topics</code>, <code>get_topic</code>, <code>get_document</code>, and <code>search</code>. Replace <code>&lt;sha&gt;</code> with a commit of <a href="https://github.com/kontourai/corpus">kontourai/docs-kit</a>.</p>
+    <p>The Corpus MCP server reads every published bundle listed here and answers <code>list_products</code>, <code>list_topics</code>, <code>get_topic</code>, <code>get_document</code>, and <code>search</code>. Replace <code>&lt;sha&gt;</code> with a commit of <a href="https://github.com/kontourai/corpus">kontourai/corpus</a>.</p>
     <pre><code>npx -y github:kontourai/corpus#&lt;sha&gt; corpus mcp</code></pre>
     <p>Claude Code:</p>
     <pre><code>claude mcp add kontour-docs -- npx -y github:kontourai/corpus#&lt;sha&gt; corpus mcp</code></pre>

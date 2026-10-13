@@ -75,6 +75,7 @@ export async function runConformance(adapterFactory, { cases = vectors } = {}) {
         }
       }
       for (const expected of vector.expected) {
+        assert.ok(Object.hasOwn(expected, 'equals') || Object.hasOwn(expected, 'length'), 'malformed expected entry: requires equals or length');
         const actual = reference(values, expected.ref);
         if (Object.hasOwn(expected, 'equals')) assert.deepEqual(actual, resolve(expected.equals, values));
         if (Object.hasOwn(expected, 'length')) assert.equal(actual?.length, expected.length);

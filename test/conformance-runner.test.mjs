@@ -36,3 +36,15 @@ test('runner isolates vectors, preserves saved observations, and records cleanup
   assert.equal(cleanup.passed, false);
   assert.match(cleanup.results[0].error, /cleanup failed/);
 });
+test('runner rejects malformed expected entries without equals or length', async () => {
+  const report = await runConformance(() => ({ get: () => ({ body: 'evidence' }) }), {
+    cases: [{
+      id: 'malformed-expected',
+      operations: [{ call: 'get', args: [], save: 'record' }],
+      expected: [{ ref: 'record.body' }],
+    }],
+  });
+  assert.equal(report.passed, false);
+  assert.equal(report.results[0].passed, false);
+  assert.match(report.results[0].error, /malformed expected entry.*equals or length/);
+});
