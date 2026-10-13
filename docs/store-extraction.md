@@ -130,6 +130,56 @@ internal transaction field from enumeration. Origin main was merged, including
 merge. Each correction has a targeted negative control recorded below after
 execution.
 
+## Round 1 executed qualification
+
+EXECUTED at source revision `9ec0bed` on macOS:
+
+- Node 22.22.2 and 24.19.0: package build and 166/166 store tests.
+- Node 24.19.0: 231/231 root tests, including main #13's builtOn gate tests and
+  the new public-document path guard.
+- Packed JS and strict TS consumers execute successfully on both Node versions.
+  TS also rejects missing lock/directory configurations at compile time.
+- All 124 vectors per default/vault profile execute against installed tarballs:
+  104 pass, 20 exact expected failures, with no unexpected result. Selected
+  vectors receive the same adjudication.
+- Packed docs CLI executes without a build, including the merged builtOn gate.
+- Both Node versions produce store tarball SHA-256
+  `1db0ff939d4caf08adda171d920d17573724e0f26a60df3455e4f57806ce335f`.
+
+EXECUTED negative controls at clean baseline
+`862b17c6c5fd53f83790f503dc19e3d1eaec4dd6`, Node 24.19.0:
+
+| Control | Injected regression | Baseline | Injected | Restored |
+| --- | --- | --- | --- | --- |
+| B1 | Leave numeric supersede count as text | 0 | 1 | 0 |
+| B2-read | Disable lossless unknown-scalar conversion | 0 | 1 | 0 |
+| B2-source | Drop retained unknown-field source ranges | 0 | 1 | 0 |
+| B3 | Restore silent lock/directory fallback | 0 | 1 | 0 |
+| M1 | Skip injected writer/observation home-identity rechecks | 0 | 1 | 0 |
+| M2-assertion | Excuse a different assertion in a listed vector | 0 | 1 | 0 |
+| M2-selected | Bypass expected-fail adjudication for selected vectors | 0 | 1 | 0 |
+| M3-publication | Import raw file publication into an adapter | 0 | 1 | 0 |
+| M3-owner | Publish parent PID instead of actual lock holder PID | 0 | 1 | 0 |
+| L1 | Restore a machine-private path to the public document | 0 | 1 | 0 |
+| L2 | Make the transaction field enumerable again | 0 | 1 | 0 |
+| L3 | Restore unconditional quoted numeric-field coercion | 0 | 1 | 0 |
+| B3-types | Make required coordination options optional in declarations | 0 | 1 | 0 |
+| B4-packed-dependency | Drop the merged npm-package-arg dependency from the packed docs CLI | 0 | 1 | 0 |
+
+The derived publication guard was separately proved with the same 0 → 1 → 0
+sequence at `9ec0bed`. Each completed control restored the exact original bytes
+and confirmed a clean worktree. The first quoted-TTL control was corrected
+because removing only the plain-style condition still left core-schema typing
+intact; the completed control actually restores the original unconditional
+coercion. That diagnostic did not count as successful fault proof.
+
+```sh
+npm run proof:round1 --workspace=@kontourai/corpus-store -- <output-directory>
+```
+
+These are local execution receipts. Hosted CI status is reported on the PR for
+its exact pushed head; local results do not stand in for hosted checks.
+
 ## Plan disagreements and limits
 
 REASONED: the brief's extraction-only scope wins over design suggestions for
