@@ -20,17 +20,21 @@ export function deriveBuiltOn(root) {
   const files = listFiles(root);
   const matches = picomatch(patterns.map((pattern) => pattern.replace(/\/$/, '')));
   const packages = [['package.json', pkg], ...files.filter((file) => file.endsWith('/package.json') && matches(path.posix.dirname(file))).map((file) => [file, readPackage(root, file)])];
+  const ownPackages = new Set(packages.map(([, data]) => data.name).filter((name) => typeof name === 'string'));
   const dependencies = [];
+  const excluded = [];
   for (const [file, data] of packages) {
     for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']) {
       for (const [name, spec] of Object.entries(data[section] ?? {})) {
         const git = typeof spec === 'string' && /^(?:github:|git\+https:\/\/github\.com\/)kontourai\/([^/#]+)(?:\.git)?(?:#.*)?$/.exec(spec);
-        const product = name.startsWith('@kontourai/') ? name.slice('@kontourai/'.length) : git ? git[1].replace(/\.git$/, '') : null;
-        if (product) dependencies.push({ package: name, product, file, section, dev: section === 'devDependencies' });
+        if (!name.startsWith('@kontourai/') && !git) continue;
+        const dependency = { package: name, file, section, dev: section === 'devDependencies' };
+        if (name.startsWith('@kontourai/') && ownPackages.has(name)) excluded.push(dependency);
+        else dependencies.push(dependency);
       }
     }
   }
-  return { dependencies, packages, files };
+  return { dependencies, excluded, packages, files };
 }
 
 function workflowCommands(text) {
@@ -82,16 +86,21 @@ export function checkBuiltOn(root, manifest) {
   const { dependencies, packages, files } = derived;
   const failures = [];
   const warnings = [];
-  const matching = (entry, dep) => entry.product === dep.product && (entry.via === dep.package || entry.via === dep.product);
+  const declared = manifest.builtOn.flatMap((entry, index) => (Array.isArray(entry.via) ? entry.via : [entry.via]).map((via) => ({ entry, index, via })));
+  const seen = new Map();
+  for (const { index, via } of declared) {
+    if (seen.has(via)) failures.push(`builtOn: ${via} appears more than once (entries ${seen.get(via)} and ${index}); declare each package or CLI only once`);
+    else seen.set(via, index);
+  }
   for (const dep of dependencies.filter((dep) => !dep.dev)) {
-    if (!manifest.builtOn.some((entry) => matching(entry, dep))) failures.push(`${dep.file} ${dep.section}: ${dep.package} is missing from builtOn; add { product: "${dep.product}", via: "${dep.package}", for: "reason" }`);
+    if (!declared.some(({ via }) => via === dep.package)) failures.push(`${dep.file} ${dep.section}: ${dep.package} is missing from builtOn; add { product: "OWNER_PRODUCT_ID", via: "${dep.package}", for: "reason" }`);
   }
   const commands = packages.flatMap(([, pkg]) => Object.values(pkg.scripts ?? {}).filter((value) => typeof value === 'string'));
   for (const file of files.filter((file) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(file))) commands.push(...workflowCommands(readFileSync(path.join(root, file), 'utf8')));
-  for (const entry of manifest.builtOn) {
-    if (dependencies.some((dep) => matching(entry, dep))) continue;
-    if (entry.evidence === 'cli' && commands.some((command) => invokes(command, entry.via))) continue;
-    failures.push(`builtOn ${entry.product} (via ${entry.via}) has no matching dependency; remove it or use evidence: "cli" with a CLI invoked in package.json scripts or .github/workflows and explain its use in for`);
+  for (const { entry, via } of declared) {
+    if (dependencies.some((dep) => via === dep.package)) continue;
+    if (entry.evidence === 'cli' && commands.some((command) => invokes(command, via))) continue;
+    failures.push(`builtOn ${entry.product} (via ${via}) has no matching dependency; remove it or use evidence: "cli" with a CLI invoked in package.json scripts or .github/workflows and explain its use in for`);
   }
   const runtime = new Set(dependencies.filter((dep) => !dep.dev).map((dep) => dep.package));
   for (const name of [...new Set(dependencies.filter((dep) => dep.dev && !runtime.has(dep.package)).map((dep) => dep.package))].sort()) warnings.push(`dev-only: ${name}; declare it in builtOn if the product's promise depends on it`);

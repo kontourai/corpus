@@ -2,7 +2,7 @@
 
 ## 0.7.0
 
-- Verify v2 builtOn against runtime and workspace Kontour dependencies, warn on dev-only use, and report explicit skips. Support reasoned CLI invocation evidence in manifests and bundles.
+- Verify v2 builtOn per package against external runtime and workspace Kontour dependencies; exclude root/workspace package names, support declared product groupings through via arrays, and reject duplicate declarations, warn on dev-only use, and report explicit skips. Support reasoned CLI invocation evidence in manifests and bundles.
 
 ## Unreleased — Corpus
 

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "flow-agents",
+      "via": "flow-agents",
+      "for": "Use its public contract",
+      "evidence": "cli"
+    }
+  ],
+  "documents": []
+}

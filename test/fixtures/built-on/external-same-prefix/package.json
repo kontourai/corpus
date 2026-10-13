@@ -1,0 +1,9 @@
+{
+  "name": "@kontourai/sample",
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "@kontourai/sample-external": "^1"
+  }
+}

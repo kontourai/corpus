@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "console",
+      "via": [
+        "@kontourai/console-core",
+        "@kontourai/console-ui"
+      ],
+      "for": "Use its public contract"
+    },
+    {
+      "product": "other-product",
+      "via": "@kontourai/console-core",
+      "for": "Use its public contract"
+    }
+  ],
+  "documents": []
+}

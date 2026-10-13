@@ -6,6 +6,19 @@ import { test } from 'node:test';
 import { FIXTURES, REPO_ROOT, scratch } from './helpers.mjs';
 
 for (const [name, status, message] of [
+  ['grouped', 0, /PASS builtOn/],
+  ['declared-id', 0, /PASS builtOn/],
+  ['array-missing', 1, /@kontourai\/console-ui is missing from builtOn; add/],
+  ['array-phantom', 1, /via @kontourai\/console-ui.*no matching dependency/],
+  ['duplicate', 1, /@kontourai\/console-core appears more than once.*entries 0 and 1/],
+  ['duplicate-array', 1, /@kontourai\/console-core appears more than once/],
+  ['self-exclusion', 0, /PASS builtOn/],
+  ['external-same-prefix', 1, /@kontourai\/sample-external is missing/],
+  ['empty-via', 2, /via must be a non-empty array/],
+  ['invalid-via-item', 2, /via\[1\]/],
+  ['cli-array-valid', 0, /PASS builtOn/],
+  ['cli-array-invalid', 1, /via veritas-query.*no matching dependency/],
+  ['cli-runtime-missing', 1, /@kontourai\/flow-agents is missing/],
   ['matching', 0, /PASS builtOn/],
   ['missing', 1, /@kontourai\/flow-agents is missing from builtOn; add/],
   ['phantom', 1, /via @kontourai\/knowledge.*no matching dependency; remove/],
@@ -28,5 +41,6 @@ for (const [name, status, message] of [
     const result = spawnSync(process.execPath, [path.join(REPO_ROOT, 'bin/corpus.mjs'), 'check', '--root', root], { encoding: 'utf8' });
     assert.equal(result.status, status, result.stdout + result.stderr);
     assert.match(result.stdout + result.stderr, message);
+    if (name === 'self-exclusion') assert.doesNotMatch(result.stdout + result.stderr, /dev-only/);
   });
 }
