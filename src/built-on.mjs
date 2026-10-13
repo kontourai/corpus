@@ -102,7 +102,7 @@ function shellCommands(command) {
     }
     logical += line;
     if (quote) { logical += '\n'; continue; }
-    const tokens = parseShell(logical.replace(/\$\{\{[\s\S]*?\}\}/g, '__CORPUS_EXPRESSION__'), (name) => `$${name}`);
+    const tokens = parseShell(logical, (name) => `$${name}`);
     logical = '';
     for (let index = 0; index < tokens.length; index++) {
       if (['<<', '<<-'].includes(tokens[index]?.op) && typeof tokens[index + 1] === 'string') heredocs.push({ delimiter: tokens[index + 1], tabs: tokens[index].op === '<<-' });
