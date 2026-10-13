@@ -61,6 +61,13 @@ const stores: KnowledgeStoreAdapter[] = [new KitDefaultStoreAdapter(options), ne
 async function read(): Promise<KitRecord | null> { return stores[0].get('id'); }
 const id = await stores[0].create({ type: 'raw', title: 'Typed consumer', body: 'Typed body', category: 'testing', provenance: { agent: 'consumer' } });
 assert.equal((await stores[0].get(id))?.body, 'Typed body');
+function invalidConfigurations(): void {
+  // @ts-expect-error Both host coordination services are required.
+  new KitDefaultStoreAdapter({ storeRoot: resolve('invalid-default') });
+  // @ts-expect-error A standalone lock still needs an explicit directory.
+  new KitObsidianStoreAdapter({ storeRoot: resolve('invalid-vault'), lock });
+}
+void invalidConfigurations;
 void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
 `);
   run(process.execPath, [join(ts, 'node_modules/typescript/bin/tsc'), '--outDir', 'compiled', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--target', 'ES2022', 'probe.ts'], ts);

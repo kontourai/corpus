@@ -11,7 +11,7 @@ const SOURCE = Symbol('corpus.frontmatter.source');
 const ROOT_STRINGS = new Set(['id', 'type', 'title', 'category', 'status', 'created_at', 'updated_at', 'expires_at', '_body_sentinel']);
 const PROVENANCE_STRINGS = new Set(['agent', 'session_id', 'note']);
 const LINK_STRINGS = new Set(['target_id', 'kind', 'label']);
-const LOG_STRINGS = new Set(['op', 'at', 'agent', 'note', 'rationale', 'new_id']);
+const LOG_STRINGS = new Set(['op', 'at', 'agent', 'note']);
 const EVIDENCE_STRINGS: Record<string, Set<string>> = {
   update: new Set(), link: new Set(),
   propose: new Set(['concept_id', 'proposer_id', 'proposal']),
@@ -47,6 +47,9 @@ function fieldType(path: Path, meta: unknown): 'string' | 'number' | 'container'
   if (root === 'mutation_log') {
     if (path.length === 2) return 'container';
     if (path.length === 3 && LOG_STRINGS.has(String(key))) return 'string';
+    const operation = at(meta, ['mutation_log', index, 'op']);
+    if (path.length === 3 && key === 'rationale' && ['supersede', 'superseded-by'].includes(String(operation))) return 'string';
+    if (path.length === 3 && key === 'new_id' && operation === 'superseded-by') return 'string';
     if (key === 'evidence') {
       if (path.length === 3) return 'container';
       const op = at(meta, ['mutation_log', index, 'op']);

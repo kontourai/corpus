@@ -74,3 +74,12 @@ test('unchanged extension blocks, sequences and quoted keys retain source text',
   expect(meta.future).toEqual({ values: ['1.10', 3, true, null], quoted: '3' });
   expect(serializeMarkdown(meta, body)).toBe(original);
 });
+
+
+test('operation-specific string fields do not capture unknown fields on other log operations', () => {
+  const { meta, body } = parseMarkdown('---\nmutation_log:\n  - op: update\n    rationale: 3 # future update extension\n  - op: supersede\n    rationale: true\n---\n\nBody');
+  const log = meta.mutation_log as Record<string, unknown>[];
+  expect(log[0].rationale).toBe(3);
+  expect(log[1].rationale).toBe('true');
+  expect(serializeMarkdown(meta, body)).toContain('    rationale: 3 # future update extension');
+});

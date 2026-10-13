@@ -25,7 +25,8 @@ const controls = [
   { id: 'M3-owner', file: store + 'src/standalone-lock.ts', mutate: (s) => s.replace('`${process.pid}-${randomUUID()}`', '`${process.ppid}-${randomUUID()}`'), args: focused('test/file-transactions.test.ts'), reason: /serializes mutations across real processes/ },
   { id: 'L1', file: 'docs/store-extraction.md', mutate: (s) => s + '\nMachine-private receipt: /tmp/corpus-program/local-log.txt\n', command: process.execPath, args: ['--test', 'test/public-store-docs.test.mjs'], reason: /machine-private receipt paths/ },
   { id: 'L2', file: store + 'src/default-store.ts', mutate: (s) => s.replace('Object.defineProperty(this, "files", { enumerable: false });', 'Object.defineProperty(this, "files", { enumerable: true });'), args: focused('test/round1.test.ts'), reason: /out of enumerable adapter properties/ },
-  { id: 'L3', file: owner, mutate: (s) => s.replace("kind === 'number' && plain", "kind === 'number'"), args: focused('test/round1.test.ts'), reason: /quoted numeric TTL remains corruption/ },
+  { id: 'L3', file: owner, mutate: (s) => s.replace("if (kind === 'number' && plain && typeof typed === 'number') value = typed;", "if (kind === 'number' && typeof original === 'string' && Number.isFinite(Number(original))) value = Number(original);"), args: focused('test/round1.test.ts'), reason: /quoted numeric TTL remains corruption/ },
+  { id: 'B3-types', file: store + 'src/services.ts', mutate: (s) => s.replace('coordinationDirectory: string;', 'coordinationDirectory?: string;').replace('lock: FileMutationLock;', 'lock?: FileMutationLock;'), args: ['run', 'verify:pack', '--workspace=@kontourai/corpus-store'], reason: /Unused '@ts-expect-error' directive/ },
   { id: 'B4-packed-dependency', file: 'package.json', mutate: (s) => { const pkg = JSON.parse(s); delete pkg.dependencies['npm-package-arg']; return JSON.stringify(pkg, null, 2) + '\n'; }, args: ['run', 'verify:pack', '--workspace=@kontourai/corpus-store'], reason: /Cannot find package ['"]npm-package-arg/ },
 ];
 function run(label, args, success, command = 'npm') {
@@ -40,7 +41,8 @@ function run(label, args, success, command = 'npm') {
 }
 run('build-baseline', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
 const results = [];
-for (const control of controls) {
+const selected = process.argv.slice(3);
+for (const control of controls.filter((control) => !selected.length || selected.includes(control.id))) {
   const file = join(repo, control.file);
   const original = readFileSync(file, 'utf8');
   const baseline = run(control.id + '-baseline', control.args, true, control.command);
@@ -48,13 +50,14 @@ for (const control of controls) {
   try {
     const mutated = control.mutate(original); assert.notEqual(mutated, original);
     writeFileSync(file, mutated);
-    if (control.id === 'B4-packed-dependency') run('build-injected', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
+    if (control.id === 'B4-packed-dependency' || control.id === 'B3-types') run('build-injected', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
     injected = run(control.id + '-injected', control.args, false, control.command);
     assert.match(injected.log, control.reason, `${control.id}: wrong rejection reason`);
   } finally { writeFileSync(file, original); }
-  if (control.id === 'B4-packed-dependency') run('build-restored', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
+  if (control.id === 'B4-packed-dependency' || control.id === 'B3-types') run('build-restored', ['run', 'build', '--workspace=@kontourai/corpus-store'], true);
   const restored = run(control.id + '-restored', control.args, true, control.command);
   results.push({ id: control.id, baseline: baseline.exit, injected: injected.exit, restored: restored.exit });
+  writeFileSync(join(output, 'results.json'), JSON.stringify({ revision, node: process.version, results }, null, 2) + '\n');
   assert.equal(git('status', '--porcelain').stdout.trim(), '', `${control.id}: failed to restore baseline`);
 }
 writeFileSync(join(output, 'results.json'), JSON.stringify({ revision, node: process.version, results }, null, 2) + '\n');
