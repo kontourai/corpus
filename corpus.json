@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
-  "product": "docs-kit",
+  "schemaVersion": 2,
+  "product": "corpus",
   "title": "Corpus",
   "tagline": "Source-bound documentation checking, publishing, and retrieval",
-  "repo": "kontourai/docs-kit",
+  "repo": "kontourai/corpus",
   "landing": "README.md",
   "documents": [
     {
@@ -79,5 +79,7 @@
       "source": "README.md#known-limits"
     }
   ],
-  "exclude": []
+  "exclude": [],
+  "purpose": "Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly.",
+  "builtOn": []
 }
