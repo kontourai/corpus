@@ -2,6 +2,7 @@
 
 ## 0.7.0
 
+- Neutralise GitHub expressions and ignore untokenisable CLI commands; treat settings-only and empty pnpm workspace definitions as root-only repos.
 - Parse npm aliases and GitHub dependency forms; use YAML workspace/workflow evidence, reject empty pnpm workspaces and heredoc/nested run mentions, and support package-manager CLI forms, composite actions, and optional bin metadata.
 - Verify v2 builtOn per package against external runtime and workspace Kontour dependencies; exclude root/workspace package names, support declared product groupings through via arrays, and reject duplicate declarations, warn on dev-only use, and report explicit skips. Support reasoned CLI invocation evidence in manifests and bundles.
 

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "product": "sample",
+  "title": "Sample",
+  "repo": "example/sample",
+  "purpose": "Serve source-bound documentation.",
+  "builtOn": [
+    {
+      "product": "datum",
+      "via": "@kontourai/datum",
+      "for": "Read typed records"
+    }
+  ],
+  "documents": []
+}

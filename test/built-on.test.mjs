@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { FIXTURES, REPO_ROOT, scratch } from './helpers.mjs';
@@ -11,8 +11,11 @@ for (const [name, status, message] of [
   ['workspace-excluded', 1, /@kontourai\/component is missing/],
   ['pnpm-flow-workspaces', 0, /PASS builtOn/],
   ['pnpm-unindented', 1, /@kontourai\/knowledge is missing/],
+  ['pnpm-empty-packages', 0, /PASS builtOn/],
+  ['fieldwork-settings', 0, /PASS builtOn \(1 package.json/],
+  ['fieldwork-settings-missing', 1, /@kontourai\/datum is missing/],
   ['pnpm-no-members', 2, /no workspace members resolve/],
-  ['pnpm-no-packages', 2, /no workspace members resolve/],
+  ['pnpm-no-packages', 0, /PASS builtOn/],
   ['pnpm-malformed', 2, /cannot parse YAML evidence/],
   ['alias-declared', 0, /PASS builtOn/],
   ['alias-target-rejected', 1, /alias is missing from builtOn/],
@@ -95,6 +98,8 @@ for (const spec of [
 for (const command of [
   'npm exec veritas readiness', 'npm exec -- veritas readiness',
   'pnpm dlx veritas readiness', 'yarn dlx veritas readiness',
+  'pnpm dlx veritas@1.2.3 readiness', 'yarn exec veritas@1.2.3 readiness',
+  'npm exec -- veritas@1.2.3 readiness',
   'pnpm veritas readiness', 'yarn veritas readiness',
   'npx veritas@1.2.3 readiness', 'npx --no-install veritas readiness',
   './node_modules/.bin/veritas readiness', 'CI=true MODE=test veritas readiness',
@@ -107,6 +112,7 @@ for (const command of [
 }
 
 for (const command of [
+  'echo hi \\\nveritas readiness',
   'cat <<EOF\nveritas readiness\nEOF',
   'cat <<-EOF\n\tveritas readiness\n\tEOF',
   'cat <<FIRST <<"SECOND"\necho ignored\nFIRST\nveritas readiness\nSECOND',
@@ -114,6 +120,54 @@ for (const command of [
 ]) {
   test(`builtOn CLI non-command text: ${JSON.stringify(command)}`, (t) => {
     const result = runChangedFixture(t, 'cli-runners', 'package.json', () => ({ scripts: { check: command } }));
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /no matching dependency/);
+  });
+}
+
+function runEvidenceCommands(t, source, commands) {
+  const root = scratch(t, 'built-on-expressions-');
+  cpSync(path.join(FIXTURES, 'built-on', 'cli-runners'), root, { recursive: true });
+  const pkg = source === 'scripts' ? { scripts: Object.fromEntries(commands.map((command, index) => [`step${index}`, command])) } : {};
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify(pkg));
+  if (source === 'workflow') {
+    mkdirSync(path.join(root, '.github/workflows'), { recursive: true });
+    writeFileSync(path.join(root, '.github/workflows/check.yml'), `jobs:\n  check:\n    steps:\n${commands.map((command) => `      - run: ${JSON.stringify(command)}\n`).join('')}`);
+  }
+  return spawnSync(process.execPath, [path.join(REPO_ROOT, 'bin/corpus.mjs'), 'check', '--root', root], { encoding: 'utf8' });
+}
+for (const source of ['scripts', 'workflow']) {
+  for (const expression of ['${{ secrets.X }}', '"${{ secrets.X }}"']) {
+    test(`builtOn expression: ${source} ${expression}`, (t) => {
+      const result = runEvidenceCommands(t, source, [`echo ${expression} && veritas readiness`]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /PASS builtOn/);
+    });
+  }
+  test(`builtOn expression command order: ${source}`, (t) => {
+    for (const commands of [['echo ${{ x }}', 'veritas readiness'], ['veritas readiness', 'echo ${{ x }}']]) {
+      const result = runEvidenceCommands(t, source, commands);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stderr, /internal error/);
+    }
+  });
+  test(`builtOn untokenisable command: ${source}`, (t) => {
+    for (const commands of [['echo ${bad expression}'], ['echo ${bad expression}', 'veritas readiness'], ['veritas readiness', 'echo ${bad expression}']]) {
+      const result = runEvidenceCommands(t, source, commands);
+      assert.equal(result.status, commands.length === 1 ? 1 : 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stderr, /internal error/);
+    }
+  });
+  test(`builtOn dynamic expression is no evidence: ${source}`, (t) => {
+    const result = runEvidenceCommands(t, source, ['${{ matrix.command }} readiness']);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /no matching dependency/);
+  });
+}
+
+for (const command of ['npm run veritas readiness', 'npm install veritas readiness']) {
+  test(`builtOn npm non-exec is no evidence: ${command}`, (t) => {
+    const result = runEvidenceCommands(t, 'scripts', [command]);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /no matching dependency/);
   });

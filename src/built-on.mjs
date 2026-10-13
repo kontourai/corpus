@@ -56,7 +56,7 @@ export function deriveBuiltOn(root) {
   const exclude = picomatch(patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1).replace(/\/$/, '')));
   const matches = (directory) => include(directory) && !exclude(directory);
   const packages = [['package.json', pkg], ...files.filter((file) => file.endsWith('/package.json') && matches(path.posix.dirname(file))).map((file) => [file, readPackage(root, file)])];
-  if (pnpm && packages.length === 1) throw new UsageError('pnpm-workspace.yaml: no workspace members resolve; fix packages globs or remove the workspace file');
+  if (pnpm && patterns.length > 0 && packages.length === 1) throw new UsageError('pnpm-workspace.yaml: no workspace members resolve; fix the non-empty packages globs');
   const ownPackages = new Set(packages.map(([, data]) => data.name).filter((name) => typeof name === 'string'));
   const dependencies = [];
   const excluded = [];
@@ -82,6 +82,7 @@ function workflowCommands(root, file) {
 }
 
 function shellCommands(command) {
+  command = command.replace(/\$\{\{[\s\S]*?\}\}/g, '__CORPUS_GITHUB_EXPRESSION__');
   const commands = [];
   const heredocs = [];
   let quote = null;
@@ -102,7 +103,10 @@ function shellCommands(command) {
     }
     logical += line;
     if (quote) { logical += '\n'; continue; }
-    const tokens = parseShell(logical, (name) => `$${name}`);
+    let tokens;
+    try { tokens = parseShell(logical, (name) => `$${name}`); } catch {
+      return []; // Untokenisable commands cannot supply CLI evidence.
+    }
     logical = '';
     for (let index = 0; index < tokens.length; index++) {
       if (['<<', '<<-'].includes(tokens[index]?.op) && typeof tokens[index + 1] === 'string') heredocs.push({ delimiter: tokens[index + 1], tabs: tokens[index].op === '<<-' });
