@@ -1864,7 +1864,8 @@
               "category": "engineering",
               "provenance": {
                 "agent": "creator"
-              }
+              },
+              "id": "wikilink-target"
             }
           ],
           "save": "b"
@@ -1875,7 +1876,7 @@
             {
               "type": "raw",
               "title": "a",
-              "body": "text [[$b]]",
+              "body": "text [[wikilink-target]]",
               "category": "engineering",
               "provenance": {
                 "agent": "creator"
@@ -4877,7 +4878,7 @@
         },
         {
           "ref": "cleared.expires_at",
-          "equals": null
+          "absent": true
         }
       ],
       "source": [

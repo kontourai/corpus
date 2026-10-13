@@ -1,0 +1,342 @@
+import { standaloneFileMutationLock } from '../src/index.js';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { KitDefaultStoreAdapter as SourceAdapter } from '../src/default-store.js';
+import { runAdapterContractSuite } from './contract-suite.js';
+
+const loggerWarnSpy = vi.fn();
+class KitDefaultStoreAdapter extends SourceAdapter {
+  constructor(options: Omit<ConstructorParameters<typeof SourceAdapter>[0], "lock" | "coordinationDirectory" | "coordinationIdentity">) {
+    super({ ...options, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, coordinationDirectory: join(options.storeRoot, "coordination"), diagnostics: { warn: loggerWarnSpy } });
+  }
+}
+
+// The adapter-agnostic behavioral contract (create/update/link/propose/apply/reject/
+// supersede/retire round-trips, MISSING_EVIDENCE/NOT_FOUND/AMBIGUOUS_ID/SLUG_CONFLICT,
+// Addendum H identity resolution) is shared with `kit-obsidian-store` — see
+// `contract-suite.ts`. This file keeps only what is genuinely specific to the
+// `records/<id>.md` + `graph-index.json` + `alias-index.json` flat layout: on-disk
+// fixture proof, `reindex()`, and corrupt-index self-heal/logging.
+runAdapterContractSuite({
+  label: 'kit-default-store',
+  createAdapter: (storeRoot) => new KitDefaultStoreAdapter({ storeRoot }),
+  findRecordFilePath: (dir, id) => join(dir, 'records', `${id}.md`),
+  loggerWarnSpy,
+});
+
+describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §9 / §5.1 / Addendum H.5)', () => {
+  let dir: string;
+  let adapter: KitDefaultStoreAdapter;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'kit-default-store-fixture-'));
+    adapter = new KitDefaultStoreAdapter({ storeRoot: dir });
+    loggerWarnSpy.mockClear();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test.each([
+    '../escaped',
+    'nested/record',
+    'nested\\record',
+    '.',
+    '..',
+    '/absolute',
+    'bad\0id',
+  ])(
+    'rejects path-shaped record id %j without changing records or indexes',
+    async (id) => {
+      const input = {
+        type: 'raw' as const,
+        title: 'Record',
+        body: 'Body',
+        category: 'engineering',
+        provenance: { agent: 'test' },
+      };
+      const acceptedId = await adapter.create({ ...input, id: 'Record_01.v1' });
+      const before = readdirSync(dir, { recursive: true }).map((path) =>
+        String(path),
+      );
+      const graph = readFileSync(join(dir, 'graph-index.json'), 'utf8');
+      const aliases = readFileSync(join(dir, 'alias-index.json'), 'utf8');
+
+      await expect(adapter.create({ ...input, id })).rejects.toMatchObject({
+        code: 'MISSING_EVIDENCE',
+        message: 'create: record id must be a safe single path segment',
+      });
+
+      expect(
+        readdirSync(dir, { recursive: true }).map((path) => String(path)),
+      ).toEqual(before);
+      expect(readFileSync(join(dir, 'graph-index.json'), 'utf8')).toBe(graph);
+      expect(readFileSync(join(dir, 'alias-index.json'), 'utf8')).toBe(aliases);
+      expect((await adapter.get(acceptedId))?.id).toBe(acceptedId);
+      expect(
+        (await adapter.listByType('raw')).map((record) => record.id),
+      ).toEqual([acceptedId]);
+    },
+  );
+
+  test.each([201, 300])(
+    'accepts a 200-character record ID and rejects a %i-character ID on create',
+    async (length) => {
+      const input = {
+        type: 'raw' as const,
+        title: 'Record',
+        body: 'Body',
+        category: 'engineering',
+        provenance: { agent: 'test' },
+      };
+      const boundaryId = 'a'.repeat(200);
+      await expect(adapter.create({ ...input, id: boundaryId })).resolves.toBe(
+        boundaryId,
+      );
+      await expect(
+        adapter.create({ ...input, id: 'b'.repeat(length) }),
+      ).rejects.toMatchObject({
+        code: 'MISSING_EVIDENCE',
+        message: 'create: record id must be at most 200 characters',
+      });
+      expect((await adapter.get(boundaryId))?.id).toBe(boundaryId);
+      expect(
+        (await adapter.listByType('raw')).map((record) => record.id),
+      ).toEqual([boundaryId]);
+    },
+  );
+
+  test('record files are literal YAML-frontmatter + markdown, parseable by a plain YAML reader', async () => {
+    const id = await adapter.create({
+      type: 'compiled',
+      title: 'Fixture record',
+      body: 'Body text with a [[wikilink-target]] reference.',
+      category: 'engineering.fixtures',
+      tags: ['fixture', 'proof'],
+      aliases: ['engineering.fixtures/proof-record'],
+      provenance: { agent: 'fixture-agent', note: 'contract fixture' },
+    });
+
+    const filePath = join(dir, 'records', `${id}.md`);
+    expect(existsSync(filePath)).toBe(true);
+    const raw = readFileSync(filePath, 'utf-8');
+
+    expect(raw.startsWith('---\n')).toBe(true);
+    const end = raw.indexOf('\n---\n', 4);
+    expect(end).toBeGreaterThan(0);
+    const frontmatterText = raw.slice(4, end);
+    const body = raw.slice(end + 5).replace(/^\n+/, '');
+
+    const frontmatter = yaml.load(frontmatterText) as Record<string, unknown>;
+
+    expect(frontmatter).toMatchObject({
+      id,
+      type: 'compiled',
+      title: 'Fixture record',
+      category: 'engineering.fixtures',
+      tags: ['fixture', 'proof'],
+      aliases: ['engineering.fixtures/proof-record'],
+      status: 'active',
+      provenance: { agent: 'fixture-agent', note: 'contract fixture' },
+    });
+    expect(typeof frontmatter.created_at).toBe('string');
+    expect(typeof frontmatter.updated_at).toBe('string');
+    expect(Array.isArray(frontmatter.links)).toBe(true);
+    expect(Array.isArray(frontmatter.mutation_log)).toBe(true);
+    expect(body).toBe('Body text with a [[wikilink-target]] reference.');
+
+    expect(frontmatter.links).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target_id: 'wikilink-target',
+          kind: 'related',
+        }),
+      ]),
+    );
+  });
+
+  test('graph-index.json matches the §5.1 schema shape on disk', async () => {
+    const a = await adapter.create({
+      type: 'raw',
+      title: 'A',
+      body: 'a',
+      category: 'engineering',
+      provenance: { agent: 'agent-1' },
+    });
+    const b = await adapter.create({
+      type: 'compiled',
+      title: 'B',
+      body: 'b',
+      category: 'engineering',
+      links: [{ target_id: a, kind: 'source' }],
+      provenance: { agent: 'agent-1', source_ids: [a] },
+    });
+
+    const graphPath = join(dir, 'graph-index.json');
+    expect(existsSync(graphPath)).toBe(true);
+    const graph = JSON.parse(readFileSync(graphPath, 'utf-8'));
+
+    expect(graph).toMatchObject({
+      schema_version: '1.0',
+      forward: { [b]: [{ target_id: a, kind: 'source' }] },
+      reverse: { [a]: [{ source_id: b, kind: 'source' }] },
+    });
+  });
+
+  test('alias-index.json matches the Addendum H.5 schema shape on disk', async () => {
+    const id = await adapter.create({
+      type: 'concept',
+      title: 'Aliased',
+      body: 'b',
+      category: 'engineering',
+      aliases: ['engineering/aliased-concept'],
+      provenance: { agent: 'agent-1' },
+    });
+
+    const aliasPath = join(dir, 'alias-index.json');
+    expect(existsSync(aliasPath)).toBe(true);
+    const index = JSON.parse(readFileSync(aliasPath, 'utf-8'));
+
+    expect(index).toEqual({
+      schema_version: '1.0',
+      by_slug: { 'engineering/aliased-concept': id },
+    });
+  });
+
+  test('reindex() rebuilds both indexes from records when they are deleted', async () => {
+    const a = await adapter.create({
+      type: 'raw',
+      title: 'A',
+      body: 'a',
+      category: 'engineering',
+      aliases: ['engineering/a-record'],
+      provenance: { agent: 'agent-1' },
+    });
+    const b = await adapter.create({
+      type: 'compiled',
+      title: 'B',
+      body: 'b',
+      category: 'engineering',
+      links: [{ target_id: a, kind: 'source' }],
+      provenance: { agent: 'agent-1' },
+    });
+
+    rmSync(join(dir, 'graph-index.json'));
+    rmSync(join(dir, 'alias-index.json'));
+
+    const result = await adapter.reindex();
+    expect(result.records).toBe(2);
+    expect(result.links).toBe(1);
+
+    const links = await adapter.getLinks(b);
+    expect(links.forward).toEqual([{ target_id: a, kind: 'source' }]);
+    const bySlug = await adapter.get('engineering/a-record');
+    expect(bySlug?.id).toBe(a);
+  });
+
+  test('corrupt (unparsable) graph-index.json self-heals AND logs a warning breadcrumb', async () => {
+    const a = await adapter.create({
+      type: 'raw',
+      title: 'A',
+      body: 'a',
+      category: 'engineering',
+      provenance: { agent: 'agent-1' },
+    });
+    const b = await adapter.create({
+      type: 'compiled',
+      title: 'B',
+      body: 'b',
+      category: 'engineering',
+      links: [{ target_id: a, kind: 'source' }],
+      provenance: { agent: 'agent-1' },
+    });
+
+    writeFileSync(join(dir, 'graph-index.json'), '{ not valid json', 'utf-8');
+
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
+
+    const links = await adapter.getLinks(b);
+    expect(links.forward).toEqual([{ target_id: a, kind: 'source' }]);
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('graph-index.json failed to parse'),
+      expect.objectContaining({ path: join(dir, 'graph-index.json') }),
+    );
+
+    const healed = JSON.parse(
+      readFileSync(join(dir, 'graph-index.json'), 'utf-8'),
+    );
+    expect(healed.forward[b]).toEqual([{ target_id: a, kind: 'source' }]);
+  });
+
+  test('corrupt (unparsable) graph-index.json self-heals through a normal write op (link()) and logs exactly once — proves the log is wired to loadGraph() itself, not incidental to reindex()/rebuildIndexes() re-parsing the file a second time', async () => {
+    const a = await adapter.create({
+      type: 'raw',
+      title: 'A',
+      body: 'a',
+      category: 'engineering',
+      provenance: { agent: 'agent-1' },
+    });
+    const b = await adapter.create({
+      type: 'compiled',
+      title: 'B',
+      body: 'b',
+      category: 'engineering',
+      provenance: { agent: 'agent-1' },
+    });
+
+    writeFileSync(join(dir, 'graph-index.json'), '{ not valid json', 'utf-8');
+
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
+
+    await adapter.link(b, [{ target_id: a, kind: 'source' }], {
+      agent: 'agent-1',
+    });
+
+    const graphWarnCalls = loggerWarnSpy.mock.calls.filter(([message]) =>
+      String(message).includes('graph-index.json failed to parse'),
+    );
+    expect(graphWarnCalls).toHaveLength(1);
+    expect(graphWarnCalls[0][1]).toEqual(
+      expect.objectContaining({ path: join(dir, 'graph-index.json') }),
+    );
+
+    const healed = JSON.parse(
+      readFileSync(join(dir, 'graph-index.json'), 'utf-8'),
+    );
+    expect(healed.forward[b]).toEqual([{ target_id: a, kind: 'source' }]);
+  });
+
+  test('corrupt (unparsable) alias-index.json logs a warning breadcrumb and falls back safely', async () => {
+    const a = await adapter.create({
+      type: 'raw',
+      title: 'A',
+      body: 'a',
+      category: 'engineering',
+      provenance: { agent: 'agent-1' },
+    });
+
+    writeFileSync(join(dir, 'alias-index.json'), '{ not valid json', 'utf-8');
+
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
+
+    const record = await adapter.get(a);
+    expect(record?.id).toBe(a);
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('alias-index.json failed to parse'),
+      expect.objectContaining({ path: join(dir, 'alias-index.json') }),
+    );
+  });
+});

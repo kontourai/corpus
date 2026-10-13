@@ -19,6 +19,11 @@ function resolve(value, values) {
   return value;
 }
 
+function compare(actual, expected, ref, kind) {
+  try { assert.deepEqual(actual, expected); }
+  catch (error) { error.conformanceAssertion = { ref, kind, expected, actual }; throw error; }
+}
+
 async function special(harness, operation, values) {
   const adapter = harness.adapter;
   if (operation.special === 'ttl-anchor') {
@@ -27,8 +32,8 @@ async function special(harness, operation, values) {
     assert.ok(Number.isFinite(expiry), 'creation timestamp and TTL must define expiry');
     const before = await adapter.listByType('raw', { stale: true, now: expiry - 1 });
     const at = await adapter.listByType('raw', { stale: true, now: expiry });
-    assert.equal(before.length, 0);
-    assert.equal(at.length, 1);
+    compare(before.length, 0, 'ttl-anchor.before', 'length');
+    compare(at.length, 1, 'ttl-anchor.at', 'length');
     values.check = true;
     return;
   }
@@ -75,14 +80,23 @@ export async function runConformance(adapterFactory, { cases = vectors } = {}) {
         }
       }
       for (const expected of vector.expected) {
-        assert.ok(Object.hasOwn(expected, 'equals') || Object.hasOwn(expected, 'length'), 'malformed expected entry: requires equals or length');
+        assert.ok(Object.hasOwn(expected, 'equals') || Object.hasOwn(expected, 'length') || expected.absent === true, 'malformed expected entry: requires equals or length or absent:true');
+        if (expected.absent === true) {
+          const parts = expected.ref.split('.');
+          assert.ok(parts.length > 1, 'absence assertion requires a field reference');
+          const key = parts.pop();
+          const parent = reference(values, parts.join('.'));
+          assert.ok(parent && typeof parent === 'object', 'absence assertion requires an object');
+          assert.equal(Object.hasOwn(parent, key), false, `${expected.ref} must be absent`);
+          continue;
+        }
         const actual = reference(values, expected.ref);
-        if (Object.hasOwn(expected, 'equals')) assert.deepEqual(actual, resolve(expected.equals, values));
-        if (Object.hasOwn(expected, 'length')) assert.equal(actual?.length, expected.length);
+        if (Object.hasOwn(expected, 'equals')) compare(actual, resolve(expected.equals, values), expected.ref, 'equals');
+        if (Object.hasOwn(expected, 'length')) compare(actual?.length, expected.length, expected.ref, 'length');
       }
     } catch (error) { failure = error; }
     try { await harness?.dispose?.(); } catch (error) { failure ??= error; }
-    results.push({ id: vector.id, passed: !failure, ...(failure ? { error: failure.message } : {}) });
+    results.push({ id: vector.id, passed: !failure, ...(failure ? { error: failure.message, ...(failure.conformanceAssertion ? { assertion: failure.conformanceAssertion } : {}) } : {}) });
   }
   return { passed: results.every((result) => result.passed), results };
 }

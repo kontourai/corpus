@@ -35,3 +35,12 @@ jobs:
 
       - name: Docs gate (dogfood)
         run: node bin/docs-kit.mjs check
+
+      - name: Build store package
+        run: npm run build --workspace=@kontourai/corpus-store
+
+      - name: Store contracts and crash recovery
+        run: npm run test --workspace=@kontourai/corpus-store
+
+      - name: Packed JS and TS consumers, full conformance, build-free docs CLI
+        run: npm run verify:pack --workspace=@kontourai/corpus-store

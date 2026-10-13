@@ -1,0 +1,143 @@
+{
+  "stationRevision": "2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136",
+  "corpusRevision": "1ff4b262163edf3edf4c5481302300ce41f0733f",
+  "node": "v24.19.0",
+  "reports": [
+    {
+      "profile": "default",
+      "files": [
+        {
+          "file": "alias-index.json",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "2aa4ae6893286203d64319702e4ec0857439a7c8217df6dce56f64834f704d96",
+          "corpusSha256": "2aa4ae6893286203d64319702e4ec0857439a7c8217df6dce56f64834f704d96"
+        },
+        {
+          "file": "graph-index.json",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "ecd8dae2f297c2db2abd15c2d2a678142a94922e41b0ffdb6f80e53855a07f93",
+          "corpusSha256": "ecd8dae2f297c2db2abd15c2d2a678142a94922e41b0ffdb6f80e53855a07f93"
+        },
+        {
+          "file": "records/flow-stable.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "725829aed0c2f3eb0011f59c965cd21182cb567fb409c17edb35985434c68ea7",
+          "corpusSha256": "725829aed0c2f3eb0011f59c965cd21182cb567fb409c17edb35985434c68ea7"
+        },
+        {
+          "file": "records/flow.md",
+          "equal": false,
+          "reason": "decided unknown-text divergence: nested 1.10 remains a string in Corpus; Station reads/writes numeric 1.1",
+          "stationSha256": "f0f706e0143d96e73bb46f4f1ecd6d144a6903b983cb41900d313ca72e6f86f2",
+          "corpusSha256": "d2137c6a1adee75e3602905cdd5ed4532fed026e4aa89a5ffb4a5feb3112b61f"
+        },
+        {
+          "file": "records/folded.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "5319329b65c6876d4388dcfa9ed679f8a304faf20c44650d5178655cf4419205",
+          "corpusSha256": "5319329b65c6876d4388dcfa9ed679f8a304faf20c44650d5178655cf4419205"
+        },
+        {
+          "file": "records/kit-sequence.md",
+          "equal": false,
+          "reason": "decided unknown-text divergence: nested 1.10 remains a string in Corpus; Station reads/writes numeric 1.1",
+          "stationSha256": "267e1e873c3dbb2a29b4c614b3e614a2256c1b1b51b2fb76f67ac5daebd8f61a",
+          "corpusSha256": "ca5bdfddae1e2a2803afd035455c82f41e5e9e33b2e816841230b4115713c1d9"
+        },
+        {
+          "file": "records/literal.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "904ab77beb024f579e6e11bcc62573cd89a6e82bcd6c3e7ae798037146adecd1",
+          "corpusSha256": "904ab77beb024f579e6e11bcc62573cd89a6e82bcd6c3e7ae798037146adecd1"
+        },
+        {
+          "file": "records/sequence-stable.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "8703b2097f53a29ddc9f62bc3aa0014e3b98abbef36bd5b6149e6030aab2c2cc",
+          "corpusSha256": "8703b2097f53a29ddc9f62bc3aa0014e3b98abbef36bd5b6149e6030aab2c2cc"
+        },
+        {
+          "file": "records/strip.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "df08097d7b4796bad736959375701209ed62c8a8ec9b404f0f54acb696068542",
+          "corpusSha256": "df08097d7b4796bad736959375701209ed62c8a8ec9b404f0f54acb696068542"
+        }
+      ]
+    },
+    {
+      "profile": "vault",
+      "files": [
+        {
+          "file": "engineering/flow-stable-updated.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "5d2791e35943907064abb69a301abb4a3c31d940bf4adddde2cc572871b16713",
+          "corpusSha256": "5d2791e35943907064abb69a301abb4a3c31d940bf4adddde2cc572871b16713"
+        },
+        {
+          "file": "engineering/flow-updated.md",
+          "equal": false,
+          "reason": "decided unknown-text divergence: nested 1.10 remains a string in Corpus; Station reads/writes numeric 1.1",
+          "stationSha256": "188d6e287c4ebb38288d0ee376f4bd4cba68ffb66b314c5cd94e5f463eae524c",
+          "corpusSha256": "dc601dee29be3c5bb85a42fe8d9337e12b4355813314a5cf8d35b90c1dc957d7"
+        },
+        {
+          "file": "engineering/folded-updated.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "d2bcd8324bf8bfd7805984b444d90e1771e23213a92647dc4be012becdb689cc",
+          "corpusSha256": "d2bcd8324bf8bfd7805984b444d90e1771e23213a92647dc4be012becdb689cc"
+        },
+        {
+          "file": "engineering/kit-sequence-updated.md",
+          "equal": false,
+          "reason": "decided unknown-text divergence: nested 1.10 remains a string in Corpus; Station reads/writes numeric 1.1",
+          "stationSha256": "9cc323988a17e887fb35d39b8e19ce11cc23b1eb049b5853e406fc1be9a38c1a",
+          "corpusSha256": "31374cc23005a778e384b221762622ec692689cea7850c4f226d850ddbc510e7"
+        },
+        {
+          "file": "engineering/literal-updated.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "b462a8bc4f282c2ed2ce52443575ac77edddcc715ed55479f0aba31395a26fc4",
+          "corpusSha256": "b462a8bc4f282c2ed2ce52443575ac77edddcc715ed55479f0aba31395a26fc4"
+        },
+        {
+          "file": "engineering/sequence-stable-updated.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "e6d765393ab155e3981dc05d6a3e3295be5eb3149de528f3be5d40d02f357539",
+          "corpusSha256": "e6d765393ab155e3981dc05d6a3e3295be5eb3149de528f3be5d40d02f357539"
+        },
+        {
+          "file": "engineering/strip-updated.md",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "a34dc423f0b2c24f147381424c44894faea501de99edb410293560a96de2d5b1",
+          "corpusSha256": "a34dc423f0b2c24f147381424c44894faea501de99edb410293560a96de2d5b1"
+        },
+        {
+          "file": "graph-index.json",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "ecd8dae2f297c2db2abd15c2d2a678142a94922e41b0ffdb6f80e53855a07f93",
+          "corpusSha256": "ecd8dae2f297c2db2abd15c2d2a678142a94922e41b0ffdb6f80e53855a07f93"
+        },
+        {
+          "file": "path-index.json",
+          "equal": true,
+          "reason": "byte-identical after update",
+          "stationSha256": "34ea66e6d9ed20968883a40b25c185bf4b9bf288f9fe022dd913734ccfba513b",
+          "corpusSha256": "34ea66e6d9ed20968883a40b25c185bf4b9bf288f9fe022dd913734ccfba513b"
+        }
+      ]
+    }
+  ]
+}

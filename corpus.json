@@ -30,6 +30,24 @@
     {
       "source": "AGENTS.md",
       "section": "Contribute"
+    },
+    {
+      "source": "packages/store/README.md",
+      "section": "Reference",
+      "covers": [
+        "packages/store/src/**",
+        "packages/store/package.json",
+        "packages/store/tsconfig.json"
+      ]
+    },
+    {
+      "source": "docs/store-extraction.md",
+      "section": "Contribute",
+      "covers": [
+        "packages/store/test/**",
+        "packages/conformance/index.mjs",
+        "packages/conformance/vectors.json"
+      ]
     }
   ],
   "topics": [
@@ -77,9 +95,14 @@
       "id": "known-limits",
       "title": "Known limits",
       "source": "README.md#known-limits"
+    },
+    {
+      "id": "corpus-store",
+      "title": "Mutable record store",
+      "source": "packages/store/README.md"
     }
   ],
   "exclude": [],
-  "purpose": "Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly.",
+  "purpose": "Documentation stays bound to its source revision, while a separate mutable-record store gives hosts shared identity, links and recoverable file publication.",
   "builtOn": []
 }

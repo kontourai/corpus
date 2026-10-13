@@ -1,0 +1,240 @@
+{
+  "propose-target-raw": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^propose: concept_id .* is not of type \"concept\""
+  },
+  "propose-target-compiled": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^propose: concept_id .* is not of type \"concept\""
+  },
+  "propose-target-snapshot": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^propose: concept_id .* is not of type \"concept\""
+  },
+  "propose-target-person": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^propose: concept_id .* is not of type \"concept\""
+  },
+  "apply-target-raw": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^apply: concept_id .* is not of type \"concept\""
+  },
+  "apply-target-compiled": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^apply: concept_id .* is not of type \"concept\""
+  },
+  "apply-target-snapshot": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^apply: concept_id .* is not of type \"concept\""
+  },
+  "apply-target-person": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^apply: concept_id .* is not of type \"concept\""
+  },
+  "reject-target-raw": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^reject: concept_id .* is not of type \"concept\""
+  },
+  "reject-target-compiled": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^reject: concept_id .* is not of type \"concept\""
+  },
+  "reject-target-snapshot": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^reject: concept_id .* is not of type \"concept\""
+  },
+  "reject-target-person": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: proposals, application and rejection may target any record type; phase 3 step 5 package release and Station PR.",
+    "errorPattern": "^reject: concept_id .* is not of type \"concept\""
+  },
+  "retire-working-set": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      }
+    }
+  },
+  "supersede-listing": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "listed",
+        "kind": "length",
+        "expected": 1,
+        "actual": 2
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 2,
+        "actual": 1
+      }
+    }
+  },
+  "read-retired": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: working-set default and one includeHistory flag across adapters; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      },
+      "vault": {
+        "ref": "history",
+        "kind": "length",
+        "expected": 1,
+        "actual": 0
+      }
+    }
+  },
+  "read-stale-filter": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "list",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "list",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
+  },
+  "ttl-creation-anchor": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "ttl-anchor.before",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "ttl-anchor.before",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
+  },
+  "expiry-precedence": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: created_at + TTL expiry, explicit expires_at precedence and stale query; phase 3 step 5.",
+    "assertions": {
+      "default": {
+        "ref": "fresh",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      },
+      "vault": {
+        "ref": "fresh",
+        "kind": "length",
+        "expected": 0,
+        "actual": 1
+      }
+    }
+  },
+  "compiled-without-source": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: compiled create requires a link to a raw source; legacy records remain readable; phase 3 step 5.",
+    "errorPattern": "^create must reject$"
+  },
+  "search-working-set": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Owner decision: search defaults to working set. Retrieval is host-owned and outside corpus-store; qualify in Station/retrieval integration, not with a fabricated package search.",
+    "errorPattern": "^missing adapter method: search"
+  }
+}
