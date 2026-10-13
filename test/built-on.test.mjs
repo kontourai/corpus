@@ -6,6 +6,10 @@ import { test } from 'node:test';
 import { FIXTURES, REPO_ROOT, scratch } from './helpers.mjs';
 
 for (const [name, status, message] of [
+  ['pnpm-self-exclusion', 0, /PASS builtOn/],
+  ['pnpm-workspace-missing', 1, /packages\/worker\/package.json dependencies: @kontourai\/knowledge is missing/],
+  ['workspace-excluded', 1, /@kontourai\/component is missing/],
+  ['pnpm-invalid-workspaces', 2, /packages must use a block list/],
   ['grouped', 0, /PASS builtOn/],
   ['declared-id', 0, /PASS builtOn/],
   ['array-missing', 1, /@kontourai\/console-ui is missing from builtOn; add/],

@@ -12,13 +12,39 @@ function readPackage(root, file) {
   }
 }
 
+function workspacePatterns(root, pkg) {
+  const yaml = path.join(root, 'pnpm-workspace.yaml');
+  if (existsSync(yaml)) {
+    const lines = readFileSync(yaml, 'utf8').split('\n');
+    const start = lines.findIndex((line) => /^packages:/.test(line));
+    if (start !== -1) {
+      const header = lines[start].replace(/\s+#.*$/, '').trim();
+      if (header === 'packages: []') return [];
+      if (header !== 'packages:') throw new UsageError('pnpm-workspace.yaml: packages must use a block list of directory globs');
+      const patterns = [];
+      for (const line of lines.slice(start + 1)) {
+        if (!line.trim() || line.trimStart().startsWith('#')) continue;
+        if (/^\S/.test(line)) break;
+        const item = /^\s+-\s+(?:'([^']+)'|"([^"\\]+)"|([^\s#'"[\]{}]+))\s*(?:#.*)?$/.exec(line);
+        if (!item) throw new UsageError('pnpm-workspace.yaml: packages must use plain or quoted directory globs in a block list');
+        patterns.push(item[1] ?? item[2] ?? item[3]);
+      }
+      return patterns;
+    }
+  }
+  const patterns = pkg.workspaces?.packages ?? pkg.workspaces ?? [];
+  if (!Array.isArray(patterns) || patterns.some((value) => typeof value !== 'string')) throw new UsageError('package.json: workspaces must be an array of globs or { packages: [...] }');
+  return patterns;
+}
+
 export function deriveBuiltOn(root) {
   if (!existsSync(path.join(root, 'package.json'))) return { skipped: 'no package.json; Kontour dependency comparison was not verified' };
   const pkg = readPackage(root, 'package.json');
-  const patterns = pkg.workspaces?.packages ?? pkg.workspaces ?? [];
-  if (!Array.isArray(patterns) || patterns.some((value) => typeof value !== 'string')) throw new UsageError('package.json: workspaces must be an array of globs or { packages: [...] }');
+  const patterns = workspacePatterns(root, pkg);
   const files = listFiles(root);
-  const matches = picomatch(patterns.map((pattern) => pattern.replace(/\/$/, '')));
+  const include = picomatch(patterns.filter((pattern) => !pattern.startsWith('!')).map((pattern) => pattern.replace(/\/$/, '')));
+  const exclude = picomatch(patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1).replace(/\/$/, '')));
+  const matches = (directory) => include(directory) && !exclude(directory);
   const packages = [['package.json', pkg], ...files.filter((file) => file.endsWith('/package.json') && matches(path.posix.dirname(file))).map((file) => [file, readPackage(root, file)])];
   const ownPackages = new Set(packages.map(([, data]) => data.name).filter((name) => typeof name === 'string'));
   const dependencies = [];
