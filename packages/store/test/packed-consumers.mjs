@@ -53,13 +53,18 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 const lock: FileMutationLock = async (_path) => () => {};
-const options: StoreOptions = { storeRoot: '/consumer', coordinationDirectory: '/coordination', lock, clock: () => 0, ids: () => 'id', diagnostics: { warn() {} }, transactionObserver(_operation, _outcome) {} };
+const options: StoreOptions = { storeRoot: resolve('typed-store'), coordinationDirectory: resolve('typed-coordination'), lock, clock: () => 0, ids: () => 'id', diagnostics: { warn() {} }, transactionObserver(_operation, _outcome) {} };
 const stores: KnowledgeStoreAdapter[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
 async function read(): Promise<KitRecord | null> { return stores[0].get('id'); }
+const id = await stores[0].create({ type: 'raw', title: 'Typed consumer', body: 'Typed body', category: 'testing', provenance: { agent: 'consumer' } });
+assert.equal((await stores[0].get(id))?.body, 'Typed body');
 void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
 `);
-  run(process.execPath, [join(ts, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--target', 'ES2022', 'probe.ts'], ts);
+  run(process.execPath, [join(ts, 'node_modules/typescript/bin/tsc'), '--outDir', 'compiled', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--target', 'ES2022', 'probe.ts'], ts);
+  run(process.execPath, ['compiled/probe.js'], ts);
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', docs], docsConsumer));
   // Run the installed, unbuilt docs CLI on this actual repository, not a self-authored fixture.
   console.log(run(process.execPath, [join(docsConsumer, 'node_modules/@kontourai/corpus/bin/corpus.mjs'), 'check'], repo));
