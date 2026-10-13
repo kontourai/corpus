@@ -30,7 +30,7 @@ test('mcp --repo serves list_topics, get_topic, get_document and search with the
   const sha = git(repo, ['rev-parse', 'HEAD']);
   const client = await connect(t, ['--repo', repo]);
 
-  assert.deepEqual(client.getServerVersion(), { name: 'docs-kit', version: VERSION });
+  assert.deepEqual(client.getServerVersion(), { name: 'corpus', version: VERSION });
   const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
   assert.deepEqual(tools, ['get_document', 'get_topic', 'list_products', 'list_topics', 'locate', 'search']);
 
@@ -108,7 +108,7 @@ test('mcp --workspace serves every subdirectory with docs-kit.json and reports b
   assert.equal(byProduct.second.status, 'available');
   assert.equal(byProduct['schema-v2'].status, 'unavailable', 'keyed by the manifest product, not the directory');
   assert.equal(byProduct['schema-v2'].directory, 'broken');
-  assert.match(byProduct['schema-v2'].error, /schemaVersion must be exactly 1/);
+  assert.match(byProduct['schema-v2'].error, /missing required key "purpose"/);
 
   const search = await call(client, 'search', { query: 'quokka' });
   assert.equal(search.data.results[0].product, 'second');
@@ -192,7 +192,7 @@ test('mcp refuses more than one source and an invalid --repo (exit 2)', async (t
   assert.match(both.stderr, /exactly one source/);
   const invalid = await runCli(['mcp', '--repo', fixtureRepo(t, 'schema-v2')]);
   assert.equal(invalid.status, 2, invalid.output);
-  assert.match(invalid.stderr, /schemaVersion must be exactly 1/);
+  assert.match(invalid.stderr, /missing required key "purpose"/);
   const empty = await runCli(['mcp', '--workspace', scratch(t)]);
   assert.equal(empty.status, 2, empty.output);
   assert.match(empty.stderr, /no immediate subdirectory contains docs-kit\.json/);
@@ -319,4 +319,19 @@ test('checkout cache keys before building, so an edit during a build is picked u
   const second = cache(repo);
   assert.ok(second.documents.some((document) => document.markdown.includes('okapi')), 'the mid-build edit is not hidden by a post-edit cache key');
   assert.equal(cache(repo), second, 'and the rebuilt bundle is then cached');
+});
+
+ test('mcp serves v2 purpose and building blocks through list_products', async (t) => {
+  const repo = fixtureRepo(t, 'corpus-v2');
+  const client = await connect(t, ['--repo', repo]);
+  const first = await call(client, 'list_products');
+  assert.equal(first.isError, false);
+  assert.equal(first.data.products[0].purpose, 'Serve source-bound documentation.');
+  assert.deepEqual(first.data.products[0].builtOn, []);
+  const file = path.join(repo, 'corpus.json');
+  const raw = JSON.parse(readFileSync(file));
+  raw.builtOn = [{ product: 'knowledge', via: '@example/knowledge', for: 'Read source records' }];
+  writeFileSync(file, JSON.stringify(raw));
+  const changed = await call(client, 'list_products');
+  assert.deepEqual(changed.data.products[0].builtOn, raw.builtOn);
 });

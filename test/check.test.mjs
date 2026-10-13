@@ -49,10 +49,10 @@ test('check refuses unknown manifest keys at every level (exit 2)', async () => 
   assert.match(result.stderr, /SKIP links \(docs-kit\.json is invalid\)/);
 });
 
-test('check refuses schemaVersion 2 (exit 2)', async () => {
+test('check refuses v2 without required purpose (exit 2)', async () => {
   const result = await runCli(['check', '--root', fixture('schema-v2')]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /schemaVersion must be exactly 1 \(got 2\)/);
+  assert.match(result.stderr, /missing required key "purpose"/);
 });
 
 test('check refuses source paths that escape the root (exit 2)', async () => {

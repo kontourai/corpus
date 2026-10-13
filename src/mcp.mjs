@@ -8,7 +8,7 @@ import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
 import { locateInBundle } from './locate.mjs';
-import { MANIFEST_FILE, loadManifest, validateProducts } from './manifest.mjs';
+import { MANIFEST_FILE, MANIFEST_FILES, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
@@ -27,7 +27,14 @@ const isString = (value) => typeof value === 'string';
  */
 export function bundleShapeError(bundle, product) {
   if (bundle === null || typeof bundle !== 'object' || Array.isArray(bundle)) return 'bundle is not a JSON object';
-  if (bundle.schemaVersion !== 1) return `unsupported bundle schemaVersion ${JSON.stringify(bundle.schemaVersion)}`;
+  if (![1, 2].includes(bundle.schemaVersion)) return `unsupported bundle schemaVersion ${JSON.stringify(bundle.schemaVersion)}`;
+  if (bundle.schemaVersion === 2) {
+    if (!isString(bundle.purpose) || !bundle.purpose.trim()) return 'bundle purpose must be a non-empty string';
+    if (!Array.isArray(bundle.builtOn)) return 'bundle builtOn must be an array';
+    for (const entry of bundle.builtOn) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some((key) => !['product', 'via', 'for'].includes(key)) || ['product', 'via', 'for'].some((key) => !isString(entry[key]) || !entry[key].trim())) return 'bundle builtOn entries must contain product, via, and for strings';
+    }
+  }
   if (product && bundle.product !== product) return `bundle is for product "${bundle.product}", expected "${product}"`;
   for (const key of ['product', 'title', 'tagline', 'repo', 'builtAt', 'siteUrl', 'digest'])
     if (!isString(bundle[key])) return `bundle field "${key}" must be a string`;
@@ -82,7 +89,7 @@ export function createCheckoutCache(build = bundleFromCheckout) {
         [
           headShaOrNull(root) ?? 'no-git',
           gitStatusPorcelain(root),
-          statKey(path.join(root, MANIFEST_FILE)),
+          ...MANIFEST_FILES.map((name) => statKey(path.join(root, name))),
           ...sources.map((source) => `${source}=${statKey(toFsPath(root, source))}`),
         ].join('\n'),
       )
@@ -125,7 +132,7 @@ export function repoSource(dir) {
 
 function manifestProduct(dir, fallback) {
   try {
-    const raw = JSON.parse(readFileSync(path.join(dir, MANIFEST_FILE), 'utf8'));
+    const raw = JSON.parse(readFileSync(path.join(dir, manifestFile(dir)), 'utf8'));
     return typeof raw?.product === 'string' && raw.product.trim() ? raw.product : fallback;
   } catch {
     return fallback;
@@ -135,7 +142,7 @@ function manifestProduct(dir, fallback) {
 function scanWorkspace(root) {
   const entries = readdirSync(root, { withFileTypes: true });
   return entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && existsSync(path.join(root, entry.name, MANIFEST_FILE)))
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && MANIFEST_FILES.some((name) => existsSync(path.join(root, entry.name, name))))
     .map((entry) => entry.name)
     .sort();
 }
@@ -345,7 +352,7 @@ function pickBundle(loaded, product) {
 }
 
 export function createDocsServer(source) {
-  const server = new McpServer({ name: 'docs-kit', version: PACKAGE_VERSION });
+  const server = new McpServer({ name: 'corpus', version: PACKAGE_VERSION });
   const readOnly = { readOnlyHint: true };
   // A tool never throws: anything unexpected (a malformed bundle that slipped
   // past validation, a filesystem race) becomes an isError result.
@@ -361,7 +368,7 @@ export function createDocsServer(source) {
   tool(
     'list_products',
     {
-      description: 'List the Kontour products whose published documentation this server can answer from, with each bundle\'s source commit (sha), build time, site URL, and topic/document counts. Products whose docs could not be loaded are listed as unavailable.',
+      description: 'List the products whose published documentation this server can answer from, with each bundle\'s source commit (sha), build time, site URL, and topic/document counts. Products whose docs could not be loaded are listed as unavailable.',
       inputSchema: z.object({}),
       annotations: readOnly,
     },
@@ -373,6 +380,7 @@ export function createDocsServer(source) {
             product: bundle.product,
             title: bundle.title,
             tagline: bundle.tagline,
+            ...(bundle.schemaVersion === 2 ? { purpose: bundle.purpose, builtOn: bundle.builtOn } : {}),
             ...stamp(bundle),
             builtAt: bundle.builtAt,
             siteUrl: bundle.siteUrl,

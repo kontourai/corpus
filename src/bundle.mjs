@@ -120,7 +120,8 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
     }),
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: manifest.schemaVersion === 2 ? 2 : 1,
+    ...(manifest.schemaVersion === 2 ? { purpose: manifest.purpose, builtOn: manifest.builtOn } : {}),
     product: manifest.product,
     title: manifest.title,
     tagline: manifest.tagline,

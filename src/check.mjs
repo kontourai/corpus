@@ -3,7 +3,7 @@ import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
-import { MANIFEST_FILE, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
+import { MANIFEST_FILE, manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
@@ -255,7 +255,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     exitCode = Math.max(exitCode, code);
   };
 
-  const { manifest, errors } = validateManifest(readManifestJson(root), root);
+  const { manifest, errors } = validateManifest(readManifestJson(root), root, manifestFile(root));
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);

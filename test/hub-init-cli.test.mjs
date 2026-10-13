@@ -23,8 +23,8 @@ test('hub writes index.html and a byte-identical copy of products.json', async (
   assert.match(html, /https:\/\/api\.github\.com\/repos\/' \+ repo \+ '\/commits\/HEAD/);
   assert.match(html, /localStorage/);
   assert.match(html, /prefers-color-scheme: dark/);
-  assert.ok(html.includes('npx -y github:kontourai/docs-kit#&lt;sha&gt; docs-kit mcp'));
-  assert.ok(html.includes('claude mcp add kontour-docs -- npx -y github:kontourai/docs-kit#&lt;sha&gt; docs-kit mcp'));
+  assert.ok(html.includes('npx -y github:kontourai/corpus#&lt;sha&gt; corpus mcp'));
+  assert.ok(html.includes('claude mcp add kontour-docs -- npx -y github:kontourai/corpus#&lt;sha&gt; corpus mcp'));
   assert.doesNotMatch(html, /<link rel="stylesheet"|<script src=/, 'self-contained');
 });
 
@@ -137,7 +137,7 @@ test('init scaffolds a manifest that passes check, then refuses to overwrite it'
 test('cli: help, version, unknown command and the npx leading program name', async () => {
   const help = await runCli(['--help']);
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /^docs-kit \d+\.\d+\.\d+: /);
+  assert.match(help.stdout, /^Corpus \d+\.\d+\.\d+: /);
   for (const command of ['check', 'build', 'mcp', 'hub', 'init']) assert.match(help.stdout, new RegExp(`\\n  ${command} `));
 
   const version = await runCli(['--version']);

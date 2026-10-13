@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
-  "product": "docs-kit",
-  "title": "docs-kit",
-  "tagline": "Docs gate, GitHub Pages site, and docs MCP server for Kontour products",
-  "repo": "kontourai/docs-kit",
+  "schemaVersion": 2,
+  "product": "corpus",
+  "title": "Corpus",
+  "tagline": "Source-bound documentation checking, publishing, and retrieval",
+  "repo": "kontourai/corpus",
   "landing": "README.md",
   "documents": [
     {
@@ -35,17 +35,17 @@
   "topics": [
     {
       "id": "manifest",
-      "title": "docs-kit.json manifest reference",
+      "title": "Corpus.json manifest reference",
       "source": "README.md#manifest-reference"
     },
     {
       "id": "check",
-      "title": "docs-kit check and its gates",
+      "title": "Corpus check and its gates",
       "source": "README.md#check"
     },
     {
       "id": "build",
-      "title": "docs-kit build",
+      "title": "Corpus build",
       "source": "README.md#build"
     },
     {
@@ -60,8 +60,8 @@
     },
     {
       "id": "adoption",
-      "title": "Adopting docs-kit in a repo",
-      "source": "README.md#adopting-docs-kit-in-a-repo"
+      "title": "Adopting Corpus in a repo",
+      "source": "README.md#adopting-corpus-in-a-repo"
     },
     {
       "id": "bundle-format",
@@ -79,5 +79,7 @@
       "source": "README.md#known-limits"
     }
   ],
-  "exclude": []
+  "exclude": [],
+  "purpose": "Check, publish, and retrieve source-bound content for repositories and product suites.",
+  "builtOn": []
 }

@@ -1,0 +1,3 @@
+# Sample
+
+Source-bound documentation.

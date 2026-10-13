@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { originRepo } from './git.mjs';
-import { DEFAULT_LANDING, MANIFEST_FILE } from './manifest.mjs';
+import { DEFAULT_LANDING, MANIFEST_FILE, manifestFile } from './manifest.mjs';
 import { isRepoFile, listMarkdownFiles } from './paths.mjs';
 
 function titleCase(value) {
@@ -26,7 +26,8 @@ function slugify(value) {
 /** `docs-kit init`: write a starter docs-kit.json; never overwrite one. */
 export function runInit({ root }) {
   const target = path.join(root, MANIFEST_FILE);
-  if (existsSync(target)) throw new UsageError(`${target} already exists; refusing to overwrite it`);
+  const existing = path.join(root, manifestFile(root));
+  if (existsSync(existing)) throw new UsageError(`${existing} already exists; refusing to overwrite it`);
 
   const repo = originRepo(root) ?? `kontourai/${slugify(path.basename(path.resolve(root)))}`;
   const product = repo.split('/')[1];

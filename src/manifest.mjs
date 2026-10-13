@@ -1,10 +1,19 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import picomatch from 'picomatch';
 import { UsageError } from './errors.mjs';
 import { isRepoFile, repoGlobError, repoPathError, statInRepo } from './paths.mjs';
 
 export const MANIFEST_FILE = 'docs-kit.json';
+export const PREFERRED_MANIFEST_FILE = 'corpus.json';
+export const MANIFEST_FILES = [PREFERRED_MANIFEST_FILE, MANIFEST_FILE];
+
+export function manifestFile(root) {
+  const found = MANIFEST_FILES.filter((name) => existsSync(path.join(root, name)));
+  if (found.length === 2) throw new UsageError('both corpus.json and docs-kit.json exist; delete docs-kit.json to use corpus.json, or delete corpus.json to keep docs-kit.json');
+  return found[0] ?? MANIFEST_FILE;
+}
+
 export const DEFAULT_LANDING = 'README.md';
 
 const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
@@ -159,13 +168,24 @@ export function globMatcher(globs = []) {
  * normalized (landing defaulted, optional arrays defaulted) and only
  * meaningful when `errors` is empty.
  */
-export function validateManifest(raw, root) {
+export function validateManifest(raw, root, where = MANIFEST_FILE) {
   const errors = [];
-  const where = MANIFEST_FILE;
-  if (!checkKeys(raw, where, MANIFEST_KEYS, MANIFEST_REQUIRED, errors)) return { manifest: null, errors };
+  const v2 = raw?.schemaVersion === 2;
+  if (!checkKeys(raw, where, v2 ? [...MANIFEST_KEYS, 'purpose', 'builtOn'] : MANIFEST_KEYS, v2 ? [...MANIFEST_REQUIRED, 'purpose', 'builtOn'] : MANIFEST_REQUIRED, errors)) return { manifest: null, errors };
 
-  if (Object.hasOwn(raw, 'schemaVersion') && raw.schemaVersion !== 1)
-    errors.push(`${where}: schemaVersion must be exactly 1 (got ${JSON.stringify(raw.schemaVersion)})`);
+  if (Object.hasOwn(raw, 'schemaVersion') && ![1, 2].includes(raw.schemaVersion))
+    errors.push(`${where}: schemaVersion must be 1 or 2 (got ${JSON.stringify(raw.schemaVersion)})`);
+
+  if (v2) {
+    checkString(raw.purpose, `${where}: purpose`, errors);
+    if (!Array.isArray(raw.builtOn)) errors.push(`${where}: builtOn must be an array`);
+    else raw.builtOn.forEach((entry, index) => {
+      const at = `${where}: builtOn[${index}]`;
+      if (!checkKeys(entry, at, ['product', 'via', 'for'], ['product', 'via', 'for'], errors)) return;
+      for (const key of ['product', 'via', 'for']) checkString(entry[key], `${at}.${key}`, errors);
+      if (typeof entry.product === 'string' && !PRODUCT_SLUG.test(entry.product)) errors.push(`${at}.product must be a lowercase slug`);
+    });
+  }
 
   if (Object.hasOwn(raw, 'product') && checkString(raw.product, `${where}: product`, errors) && !PRODUCT_SLUG.test(raw.product))
     errors.push(`${where}: product must be a lowercase slug matching ${PRODUCT_SLUG}`);
@@ -310,7 +330,8 @@ export function validateManifest(raw, root) {
 
   return {
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: raw.schemaVersion,
+      ...(v2 ? { purpose: raw.purpose, builtOn: raw.builtOn } : {}),
       product: raw.product,
       title: raw.title,
       tagline: raw.tagline ?? '',
@@ -395,7 +416,7 @@ export function duplicateRedirectKeys(text) {
 
 /** Read and parse docs-kit.json. A missing or unparseable file is a usage error. */
 export function readManifestJson(root) {
-  const file = path.join(root, MANIFEST_FILE);
+  const file = path.join(root, manifestFile(root));
   let text;
   try {
     text = readFileSync(file, 'utf8');
@@ -405,7 +426,9 @@ export function readManifestJson(root) {
     throw new UsageError(`cannot read ${file}: ${error.message}`);
   }
   try {
-    return JSON.parse(text);
+    const raw = JSON.parse(text);
+    if (raw?.schemaVersion === 1) process.stderr.write('Corpus: manifest schema v1 is deprecated; migrate to v2 with purpose and builtOn.\n');
+    return raw;
   } catch (error) {
     throw new UsageError(`${file} is not valid JSON: ${error.message}`);
   }
@@ -413,9 +436,9 @@ export function readManifestJson(root) {
 
 /** Load and validate; throws UsageError listing every manifest problem. */
 export function loadManifest(root) {
-  const { manifest, errors } = validateManifest(readManifestJson(root), root);
+  const { manifest, errors } = validateManifest(readManifestJson(root), root, manifestFile(root));
   if (errors.length > 0)
-    throw new UsageError(`${MANIFEST_FILE} is invalid:\n${errors.map((error) => `  - ${error}`).join('\n')}`);
+    throw new UsageError(`${manifestFile(root)} is invalid:\n${errors.map((error) => `  - ${error}`).join('\n')}`);
   return manifest;
 }
 

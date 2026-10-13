@@ -256,7 +256,7 @@ function assertSafeOut(root, out) {
   let listed;
   try {
     const marker = JSON.parse(readFileSync(path.join(resolvedOut, BUILD_MARKER), 'utf8'));
-    if (marker?.generator !== '@kontourai/docs-kit' || !Array.isArray(marker.files)) throw new Error('not a docs-kit marker');
+    if (!['@kontourai/docs-kit', '@kontourai/corpus'].includes(marker?.generator) || !Array.isArray(marker.files)) throw new Error('not a docs-kit marker');
     listed = new Set(marker.files);
   } catch {
     throw new UsageError(
@@ -319,7 +319,7 @@ export function redirectStub({ href, canonical }) {
 <meta http-equiv="refresh" content="0; url=${url}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <meta name="robots" content="noindex">
-<meta name="generator" content="@kontourai/docs-kit">
+<meta name="generator" content="@kontourai/corpus">
 </head>
 <body>
 <p>This page has moved to <a href="${url}">${url}</a>.</p>
@@ -518,7 +518,7 @@ export function runBuild({ root, out, baseUrl }) {
   // the directory only if nothing else has appeared in it.
   writeFileSync(
     path.join(out, BUILD_MARKER),
-    `${JSON.stringify({ generator: '@kontourai/docs-kit', note: 'Written by docs-kit build; the directory is replaced on the next build only if it holds exactly these files.', files: filesUnder(out) }, null, 2)}\n`,
+    `${JSON.stringify({ generator: '@kontourai/corpus', note: 'Written by Corpus build; the directory is replaced on the next build only if it holds exactly these files.', files: filesUnder(out) }, null, 2)}\n`,
   );
   const generated = checkGeneratedSite(out);
   if (generated.failures.length > 0)

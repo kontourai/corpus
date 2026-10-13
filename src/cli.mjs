@@ -5,9 +5,9 @@ import { DocsKitError, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-export const HELP = `docs-kit ${VERSION}: docs gate, GitHub Pages site, and docs MCP server for Kontour products
+export const HELP = `Corpus ${VERSION}: check, build, locate, and retrieve source-bound docs over MCP
 
-Usage: docs-kit <command> [options]
+Usage: corpus <command> [options]
 
 Commands:
   check   Run the docs gates: manifest, links, reachability, topics, redirects,
@@ -20,9 +20,13 @@ Commands:
             --root <dir>        repository root (default: .)
             --out <dir>         output directory, replaced on each build (default: dist-pages)
             --base-url <url>    published site URL (default: https://kontourai.github.io/<product>/)
+  locate  Locate a quote in source-bound docs
+            --root <dir>        repository root (default: .)
+            --quote <text>      passage to locate
+            --source <path>     optionally restrict to one document
   mcp     Serve docs bundles over stdio to MCP clients; at most one source
             --repo <dir>        build one bundle in memory from a checkout
-            --workspace <dir>   serve every immediate subdirectory that has docs-kit.json
+            --workspace <dir>   serve every immediate subdirectory that has corpus.json or docs-kit.json
             --hub <url>         fetch <url>/products.json and each bundle (default: https://kontourai.github.io/)
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
@@ -35,11 +39,12 @@ Options:
   -v, --version    print the version
 
 Exit codes: 0 ok, 1 gate failure, 2 usage or configuration error.
-Manifest reference: https://github.com/kontourai/docs-kit#manifest-reference`;
+Manifest reference: https://github.com/kontourai/corpus#manifest-reference`;
 
 const COMMAND_OPTIONS = {
   check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' } },
   build: { root: { type: 'string' }, out: { type: 'string' }, 'base-url': { type: 'string' } },
+  locate: { root: { type: 'string' }, quote: { type: 'string' }, source: { type: 'string' } },
   mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' } },
   hub: { products: { type: 'string' }, out: { type: 'string' } },
   init: { root: { type: 'string' } },
@@ -67,9 +72,9 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   const say = (text) => stdout.write(`${text}\n`);
   const warn = (text) => stderr.write(`${text}\n`);
   let args = argv;
-  // `npx -y github:kontourai/docs-kit#<sha> docs-kit <cmd>` runs this bin with
+  // `npx -y github:kontourai/corpus#<sha> corpus <cmd>` runs this bin with
   // "docs-kit" as its first argument, so tolerate one leading program name.
-  if (args[0] === 'docs-kit') args = args.slice(1);
+  if (args[0] === 'docs-kit' || args[0] === 'corpus') args = args.slice(1);
   const [command, ...rest] = args;
 
   if (command === undefined) {
@@ -108,6 +113,14 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
         const result = runBuild({ root, out: path.resolve(values.out ?? 'dist-pages'), baseUrl: values['base-url'] });
         (result.exitCode === EXIT_OK ? say : warn)(result.report);
         return result.exitCode;
+      }
+      case 'locate': {
+        if (!values.quote) throw new UsageError('locate requires --quote <text>');
+        const { bundleFromCheckout } = await import('./bundle.mjs');
+        const { locateInBundle } = await import('./locate.mjs');
+        const result = locateInBundle(bundleFromCheckout(root), values.quote, { source: values.source });
+        say(JSON.stringify(result, null, 2));
+        return result.error ? 1 : EXIT_OK;
       }
       case 'mcp': {
         const { runMcp } = await import('./mcp.mjs');

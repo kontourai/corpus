@@ -1,16 +1,17 @@
 {
-  "name": "@kontourai/docs-kit",
+  "name": "@kontourai/corpus",
   "version": "0.6.0",
-  "description": "Shared docs gate, GitHub Pages site builder, and aggregate docs MCP server for Kontour products.",
+  "description": "Source-bound documentation: check, build, locate, and MCP retrieval.",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kontourai/docs-kit.git"
+    "url": "git+https://github.com/kontourai/corpus.git"
   },
-  "homepage": "https://kontourai.github.io/docs-kit/",
-  "bugs": "https://github.com/kontourai/docs-kit/issues",
+  "homepage": "https://kontourai.github.io/corpus/",
+  "bugs": "https://github.com/kontourai/corpus/issues",
   "bin": {
+    "corpus": "bin/corpus.mjs",
     "docs-kit": "bin/docs-kit.mjs"
   },
   "exports": {
@@ -43,5 +44,8 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
     "playwright-core": "1.64.0"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
