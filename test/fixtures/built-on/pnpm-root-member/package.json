@@ -1,0 +1,6 @@
+{
+  "name": "@kontourai/sample",
+  "dependencies": {
+    "@kontourai/datum": "^1"
+  }
+}
