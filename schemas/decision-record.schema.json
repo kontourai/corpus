@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/kontourai/corpus/main/schemas/decision-record.schema.json",
+  "title": "Corpus decision record",
+  "description": "YAML frontmatter of a topic-keyed living decision record at <decisions.dir>/<topic-slug>.md, enforced by `corpus check` and `corpus decisions check` when corpus.json declares `decisions`. One file per decision subject; supersession is an edit to the file, and a tombstone (superseded_by or merged_into) names the slug that now carries the answer. Frontmatter is read as YAML with every scalar a string. Rules a JSON Schema cannot state are enforced by Corpus too: the filename is a kebab-case slug, relation targets name existing records other than this one, and the generated index is fresh. Numbered ADRs are frozen history and are never validated by this schema. See https://github.com/kontourai/corpus/blob/main/docs/decisions.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "subject", "decided", "evidence"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["current", "superseded", "merged", "needs-decision"],
+      "description": "current: this file holds the live answer for its subject. superseded: the subject moved to another topic slug (see superseded_by); this file is a tombstone. merged: the subject was folded into another topic slug (see merged_into); this file is a tombstone. needs-decision: a stub that names an open subject with no ratified answer yet; it carries provenance evidence but no live decision."
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F]*$",
+      "description": "The decision subject: a noun phrase, ideally from the repository's domain vocabulary (not enforced). A single line with a non-whitespace character and no control characters, because it is a cell of the generated index table."
+    },
+    "decided": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "ISO date (YYYY-MM-DD) the current decision was ratified; for needs-decision stubs, the date the stub was recorded."
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Provenance is linked here, never inlined. Secret-shaped literals are refused.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["issue", "pr", "commit", "session-archive", "adr", "doc", "url"],
+            "description": "issue/pr/commit: a GitHub reference (number, URL, or SHA). session-archive: a path to an archived session artifact. adr: a frozen numbered ADR. doc: a repository document path. url: an external permalink."
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "The reference literal. Must not contain secret-shaped material (access keys, tokens, private keys, JWTs, or a quoted secret/password/token/api key assignment).",
+            "not": {
+              "pattern": "(AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9_]{36,}|BEGIN[A-Z ]*PRIVATE KEY|eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}|([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])\\s*[:=]\\s*[\"'][^\"']{8,})"
+            }
+          }
+        }
+      }
+    },
+    "supersedes": {
+      "type": "array",
+      "description": "Optional. Topic slugs whose subjects this record absorbed. Each must name an existing record.",
+      "items": { "$ref": "#/$defs/slug" }
+    },
+    "superseded_by": {
+      "allOf": [{ "$ref": "#/$defs/slug" }],
+      "description": "Present only when status is superseded: the existing topic slug, other than this record's own, that now carries the answer."
+    },
+    "merged_into": {
+      "allOf": [{ "$ref": "#/$defs/slug" }],
+      "description": "Present only when status is merged: the existing topic slug, other than this record's own, this subject was folded into."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["current", "needs-decision"] } }, "required": ["status"] },
+      "then": { "not": { "anyOf": [{ "required": ["superseded_by"] }, { "required": ["merged_into"] }] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+      "then": { "required": ["superseded_by"], "not": { "required": ["merged_into"] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "merged" } }, "required": ["status"] },
+      "then": { "required": ["merged_into"], "not": { "required": ["superseded_by"] } }
+    }
+  ],
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "A topic slug: lowercase kebab-case. Resolves to <decisions.dir>/<slug>.md."
+    }
+  }
+}

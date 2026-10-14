@@ -1,0 +1,327 @@
+---
+status: current
+subject: Extraction proposals
+decided: 2026-07-04
+evidence:
+  - kind: adr
+    ref: docs/adr/0001-proposals-only.md
+  - kind: doc
+    ref: .kontourai/flow-agents/inference-type/inference-type--deliver-plan.md
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/170
+  - kind: doc
+    ref: src/evidence-match.ts
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/199
+  - kind: doc
+    ref: src/value-normalization.ts
+---
+
+# Extraction proposals
+
+This subject previously had provenance only in frozen ADR history
+([0001-proposals-only.md](../adr/0001-proposals-only.md)) with no living
+decision ratified under the topic-keyed decision registry. This update
+ratifies the first living decision for the subject: `inferenceType`, a
+per-field grounding-honesty classification that refines what an
+`ExtractionProposal`'s provenance means, without changing ADR 0001's
+proposals-only identity or its `chars:<start>-<end>` provenance contract.
+
+## Decision
+
+- **`TargetFieldSchema.inferenceType?: "explicit" | "inferred"`** (caller-set,
+  100% optional). `"explicit"` — the value should appear verbatim in the
+  source text; offset-verification of the VALUE itself (not just the
+  excerpt) is meaningful, and adapters may instruct the provider to copy it
+  verbatim rather than paraphrase/reformat it. `"inferred"` — the value is
+  derived/normalized/classified from the source (e.g. computed, reworded, or
+  categorized); the excerpt still grounds the proposal, but the value itself
+  can never be offset-verified against the source text. Absent means
+  unspecified — today's behavior, no classification implied either way.
+- **Carry-through onto `ExtractionProposal.inferenceType`.** `extract()`'s
+  `normalizeChunkProposals` attaches `inferenceType` from the MATCHED
+  (post-normalization) `targetSchema` entry — looked up by the declared path,
+  the same lookup `pathIndices`'s indexed-path recovery already uses, so an
+  indexed-array proposal (e.g. provider-emitted `"schedules[0].startDate"`
+  recovered against a declared `"schedules[].startDate"`) still resolves the
+  tag correctly — ONLY when that entry declares it; the key is entirely
+  absent (`"inferenceType" in proposal === false`) otherwise. This mirrors
+  the existing `pathIndices` conditional-attach idiom exactly.
+- **Anthropic adapter prompt guidance, `description`-string only.**
+  `buildExtractionTool`'s per-field line gains one extra sentence sourced
+  from `f.inferenceType`: `"explicit"` appends a verbatim-copy instruction;
+  `"inferred"` appends a derived/normalized-value instruction that still
+  requires a grounding excerpt; `undefined` appends nothing. `input_schema`
+  (the `fieldPath`/`value`/`confidence`/`excerpt`/`locator` shape and
+  `required` list) is byte-identical before and after — this is prompt
+  guidance, not a schema change, so no client-side parsing of tool output
+  changes.
+- **Carry-through + prompt guidance ONLY — no stricter verification this
+  slice.** `extract()` gains zero new drop/warning/clamp logic tied to
+  `inferenceType`. An `"explicit"`-tagged field whose provider-returned
+  `candidateValue` does not literally match the excerpt is proposed exactly
+  as it would be today — reviewed by the caller, not gated by Traverse (see
+  "Out of scope" below for why).
+
+**Enumerated observable deltas** (everything a consumer could notice,
+positive or negative):
+
+1. `TargetFieldSchema` gains one new optional key. A schema object that
+   never sets it is unaffected — no default value materializes, the key is
+   simply absent, same as today.
+2. `ExtractionProposal` gains one new optional key, populated ONLY when the
+   proposal's matched schema field declared `inferenceType`. For every
+   existing caller/schema (untagged), no proposal ever gains this key —
+   `"inferenceType" in proposal` is `false`, `JSON.stringify(proposal)`
+   output is unchanged, `Object.keys(proposal)` is unchanged.
+3. `buildExtractionTool()`'s returned `AnthropicTool.description` string
+   gains one extra sentence per field ONLY for fields that declare
+   `inferenceType`; an untagged field's rendered line is byte-identical to
+   today. `input_schema` is completely unchanged.
+4. No change to `extract()`'s drop/warning/clamp semantics for ANY field,
+   tagged or not (no new warning strings, no new drop conditions). A tagged
+   `"explicit"` field whose provider-returned value doesn't verbatim-match
+   the excerpt is proposed exactly as it would be today.
+5. No change to `ExtractionResult`'s shape, `warnings` content/count, or
+   `providerCalls`/`totalTokensUsed` accounting for any existing caller.
+6. No change to the Survey compat fixture's typecheck status (optional
+   field; existing `toExtraction()` mapping remains valid).
+7. Downstream: a caller who reads `proposal.inferenceType` can now render an
+   honest "offset-grounded value" vs. "derived value, excerpt-grounded only"
+   badge; a caller who does not read it observes nothing different at all.
+
+## Evidence annotations (`evidenceMatch`)
+
+`extract()` sets `evidenceMatch` on every proposal it returns: deterministic,
+versioned facts computed from the proposal's own value, schema entry and
+excerpt. It is an annotation, not a verdict. No proposal is dropped, warned
+about, clamped or reordered because of it, the `[AC6]` test above is
+unchanged, and a provider-supplied `evidenceMatch` is ignored. Traverse
+computes only these deterministic checks; checking a value with a model is
+not Traverse's job, and no Traverse confidence is derived from them.
+
+```ts
+evidenceMatch: {
+  checkerVersion: "evidence-match-v4";
+  schema: "ok" | "type-mismatch" | "enum-mismatch" | "format-invalid";
+  valueInExcerpt: "match" | "mismatch" | "not-evaluated" | "not-applicable";
+  tokenBoundary?: boolean;
+}
+```
+
+- **`schema`** is exact. The value's JSON type must be the declared `type`
+  (the same predicate task examples use); an `enum` string outside
+  `enumValues` is `enum-mismatch`; a `date` string that is not an ISO-8601
+  calendar date in extended format (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`,
+  optionally `THH:MM[:SS[.fff]]` and `Z` or `±HH:MM`, each component
+  range-checked) is `format-invalid`. An `enum` that declares no
+  `enumValues` has no set to be outside of and is checked as a string.
+- **`valueInExcerpt`** runs only for fields declared
+  `inferenceType: "explicit"` with a scalar type. Inferred and unclassified
+  fields, and `array`/`object` fields, are `not-applicable`: only an explicit
+  value is meant to appear in the source. The rule for every type is
+  containment on token boundaries after a fixed normalization; equality is
+  not required, so `"open"` matches `"Status: Open"`.
+
+  **`match` means the value was found in the excerpt, not that the excerpt
+  supports it.** The checks are built so that a doubtful case is
+  `not-evaluated` rather than a false `match`:
+
+  - `string`/`enum`: NFKC and lower case. Whitespace and punctuation fold
+    away, except for punctuation that can change meaning: `+ - # %` attached
+    to a word or digit, and `. ,` between two of them. `match` needs the
+    value, with that punctuation, as a whole run of the excerpt (`"open"`
+    does not match `"Reopened"`; `"C++"` matches `"C++."`). When only the
+    words agree and that punctuation or a sign differs (`"A+"` vs
+    `"Grade: A-"`, `"C++"` vs `"C#"`, `"-5"` vs `"5"`, `"1.5"` vs `"1,5"`),
+    the result is `not-evaluated`. One exception: a phone-style value (only
+    digits, spaces and `( ) . - /`, at least seven digits in at least three
+    groups, no leading `-`) compares by its digit groups, so
+    `"303.555.1234"` matches `"(303) 555-1234"`. A signed value or one with
+    a single decimal separator (`"-1234567"`, `"1234567.89"`) does not.
+  - Negation, for string, enum, number and boolean values: when a cue
+    (`not`, `no`, `never`, `without`, `cannot`, `nor`, or a word ending in
+    `n't`) is in the three words before an occurrence of the value, the
+    result is `not-evaluated` (`"open"` vs `"no longer open"`, `5` vs
+    `"not 5"`). `No.` or `No:` directly before a digit is read as the
+    abbreviation for number, not as the word no (`"Ticket No. 5"`); plain
+    `no` before a digit stays a negation (`3` vs
+    `"There are no 3-bedroom units"`). Dates are not checked for negation.
+  - `number`: written numbers in the excerpt, each optionally signed and led
+    by a currency symbol, with comma thousands separators and a point
+    decimal, not touching a letter or digit (`3` is not read from `2023`).
+    Dates, times and fractions written in digits (`2026-06-09`, `10:30`,
+    `1/2`) are skipped, so `6` is not read from a date, and a number is
+    `not-evaluated` rather than `match` when only such a form contains it.
+    `match` when a number equals the value.
+    A number written at another scale or sign convention (`45%`, accounting
+    `(5)`, `$4.2 million`) neither matches nor mismatches: when no plainly
+    written number equals the value and one of these is present, the result
+    is `not-evaluated`.
+  - `boolean`: the words yes/true and no/false. `match` only when the
+    excerpt has the value's word, not negated, and no word of the other
+    polarity; `mismatch` only in the reverse case. `"This is not true"`,
+    `"no longer yes"` and `"Yes, no refunds"` are `not-evaluated`.
+  - `date`: the value must be `YYYY-MM-DD`; the excerpt is read for
+    `2026-06-09`, `June 9, 2026` and `9 June 2026` (English month names, full
+    or abbreviated, optional ordinal and comma). Numeric forms like
+    `06/09/2026` are ambiguous between day-first and month-first and are not
+    read.
+  - A value or excerpt the normalizer cannot read (a number written in
+    words, no yes/no word, no readable date, a value with no word
+    characters, a value of the wrong type) is `not-evaluated`, never
+    `mismatch`.
+- **`tokenBoundary`** is false when the excerpt starts or ends inside a word
+  of the prepared text (the excerpt `"3"` located inside `"2023"`).
+
+**Known false matches that remain.** The checks are lexical, so `match` can
+still appear where the excerpt does not support the value:
+
+- a negation more than three words before the value, or after it
+  (`"open, but not this week"`);
+- contrastive or hypothetical wording (`"formerly open"`, `"if open"`);
+- exclusion wording (`"excludes C"` matches `"C"`);
+- enum members that differ only in case (`"Open"` and `"open"` fold together);
+- a number in a different currency (`45` matches `"€45"` when the value
+  meant dollars);
+- digit groups read with different separators (`"1.234.567"` matches
+  `"Total 1,234.567"`);
+- a sign on the excerpt side of a phone-style value: the sign check covers
+  only the value (`"303-555-1234"` matches `"-303-555-1234"`).
+
+Changing any rule so that some input gets a different result changes
+`checkerVersion`, released or not. `evidence-match-v1` to
+`evidence-match-v3` were never released; `evidence-match-v4` is the first
+released version.
+
+**Recommended consumer policy.** A `schema` result other than `ok` can block
+by default, because it is exact. `valueInExcerpt` and `tokenBoundary` are
+annotations until the value-in-excerpt check's false-mismatch rate has been
+measured on a labelled set; after that a consumer may choose to block on
+`mismatch`. Do not read `match` as support: it says only that the value is
+written in the excerpt. `not-evaluated` and `not-applicable` say nothing about the value.
+The consumer decides what blocks; Traverse does not.
+
+The portable envelope carries `evidenceMatch` as an optional proposal key
+(see `portable-extraction-result-envelope.md`).
+
+## Value typing, value normalization and several values per field
+
+Found by running a real model end to end (issue #199).
+
+**The tool schema types each value by its own field.** Every bundled adapter
+sends an item schema with one variant per distinct value type, each naming the
+field paths that take it: `number` and `boolean` as those JSON types, `enum`
+as a string restricted to its `enumValues`, `date` as a string described as
+ISO 8601, `array`/`object` as those JSON types. A `number` field therefore
+cannot be answered with a string where the provider enforces the schema. The
+Relay and OpenAI adapters send the strict structured-output dialect (every key
+required, optional ones nullable, no additional properties); OpenAI falls back
+to a non-strict tool, and Relay refuses, when a target is `array` or `object`,
+whose nested shape `TargetFieldSchema` does not declare. Outside strict mode a
+variant holding an array path (`schedules[].startDate`) leaves `fieldPath`
+open, so an indexed answer stays possible.
+
+Each variant repeats the item schema (about 0.75 KB), and every distinct enum
+value set needs its own. At most `MAX_ENUM_VALUE_VARIANTS` (8) distinct enum
+sets, in schema order, get a variant. Enum fields past the cap are typed as a
+plain string: their values stay in the tool description and
+`evidenceMatch.schema` still checks them. The adapter then returns the warning
+`provider tool schema left enum values unrestricted for N field(s) …` naming
+them (envelope code `provider`/`provider-warning`), which `extract()` keeps
+once per run. The schema is therefore at most 8 enum variants plus one per
+other value type, whatever the number of fields.
+
+**`extract()` rewrites a value into its declared type in two lossless cases,
+and records each one.** Not every provider enforces a schema, and a custom
+provider has none, so the core also normalizes:
+
+- `string-to-number`: a `number` field answered with the canonical decimal
+  spelling of a number (`"2.1"` becomes `2.1`). The trimmed string must match
+  an optional `-`, digits and at most one point, and `String(Number(s))` must
+  equal it. So a trailing zero in the fraction is refused (`"1.000"` may be a
+  grouped 1000, `"2.10"` a version), as are `"1,234"`, `"007"`, `"2.1 kg"`,
+  `"$5"`, `"1e3"`, `"-0"` and a number too long for a double. A refused string
+  keeps `type-mismatch`.
+- `date-to-iso`: a `date` field answered with a written English date, the
+  whole value being `21 March 2013` or `March 21, 2013` (full or abbreviated
+  month, optional ordinal and comma), becomes `2013-03-21`. Numeric forms
+  (`03/04/2013`) are day/month ambiguous and are left as written, as are a
+  partial (`March 2013`) or impossible date and a year outside 1000 to 2999.
+
+A rewritten proposal carries `valueNormalization: { kind, from }` in process,
+where `from` is the string the provider returned, and the run gets one warning
+per rewrite naming the field and the original
+(`coerced string value "2.1" to number for "<field>"`,
+`normalized date value "21 March 2013" to ISO 8601 for "<field>"`).
+`candidateValue` is the rewritten value and `evidenceMatch` describes it. A
+proposal without `valueNormalization` carries exactly what the provider
+returned. Anything not rewritten is left for `evidenceMatch.schema` to report
+as `type-mismatch` or `format-invalid`.
+
+**The portable envelope does not carry `valueNormalization`.** Released
+readers (Survey 8.0.0, Fieldwork 0.13.0, Traverse 4.0.0) reject an unknown
+proposal key, so adding one would break every one of them. In the envelope a
+rewrite appears only as the warning's existing classification,
+`normalization`/`proposal-normalization`; the field and original are in
+`ExtractionResult.warnings` and on the in-process proposal. A per-proposal
+envelope key is deferred until readers accept it. A test imports such an
+envelope under the published Survey reader.
+
+The rewrite runs before occurrence resolution and dedup, so `"2.1"` and `2.1`
+for one span are one proposal. Which duplicate survives does not depend on
+provider order: a proposal whose value came back in its declared type wins
+over a rewritten one, and between two rewritten ones the smaller original (by
+code unit) wins. Rewrite warnings are written after dedup, for returned
+proposals only, so there is never a warning for a record no proposal carries.
+
+**`checkerVersion` stays `evidence-match-v4`.** The checker's rules are
+unchanged: `schemaMatch("21 March 2013", date)` is still `format-invalid` and
+`schemaMatch("2.1", number)` still `type-mismatch`. What changed is the value
+`extract()` hands the checker. The envelope validator recomputes
+`evidenceMatch` from the stored `candidateValue`, `valueType` and excerpt, so
+an envelope written before this change and one written after it are both
+consistent under v4. A bump would name a rule change that did not happen and
+would make every stored v4 envelope fail validation.
+
+An `explicit` `date` field's prompt line asks for the stated date in ISO form
+rather than verbatim; the two could not both be asked for. The excerpt keeps
+the source wording.
+
+**One proposal per distinct value.** The prompt asks for one proposal per
+distinct value the content states for a field, not one per field: two
+different values for one field are two proposals, so a reviewer sees the
+conflict, and a value stated more than once is one proposal. The rule is
+written in the tool description, in the `proposals` array's schema description
+and in the message, because a runtime that projects the tool as a
+structured-output schema never shows the model the tool description. Dedup is
+unchanged: it collapses only the same field, value and span, so distinct
+values always survive it. Traverse does not pick between them.
+
+## Out of scope
+
+- **A stricter, `inferenceType === "explicit"`-gated "candidateValue must be
+  groundable in the excerpt" check that drops proposals.** The annotation
+  above records the comparison without dropping anything ("Evidence
+  annotations", issue #170); a gate remains the consumer's choice. The
+  original reasons for not building a dropping check here still hold:
+  - Format-aware equivalence is heuristic. The normalizers above cover a
+    fixed set of forms and report anything else as `not-evaluated`; their
+    false-mismatch rate on real pages has not been measured, so dropping on
+    `mismatch` could remove well-grounded values.
+  - The fields most likely to be tagged `"explicit"` in practice (address/
+    zip/contact fields, money amounts) are exactly the ones most prone to
+    formatting drift between a provider's returned value and the raw
+    excerpt text. A naive strict check would produce new, silent-seeming
+    false-positive drops for genuinely well-grounded explicit values whose
+    provider-returned form merely differs in punctuation/format from the
+    raw excerpt — regressing real extractions rather than only "being
+    stricter where it's supposed to be." (See the regression test in
+    `tests/extract.test.ts`'s `"inferenceType carry-through"` suite,
+    `"[AC6] adds no new drop/warning/clamp condition..."`, which pins this
+    exact no-op behavior for a reformatted phone number.)
+  - A gate needs a labelled evaluation set first; until one exists, blocking
+    on `valueInExcerpt` would turn an annotation into a value-dropping gate
+    with unmeasured error.
+  - Downstream rendering of the explicit/inferred distinction in a review UI
+    (e.g. Survey-side) is separate work, not attempted here.

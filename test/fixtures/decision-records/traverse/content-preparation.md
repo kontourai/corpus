@@ -1,0 +1,190 @@
+---
+status: current
+subject: Content preparation
+decided: 2026-07-03
+evidence:
+  - kind: adr
+    ref: docs/adr/0004-large-page-chunking.md
+  - kind: adr
+    ref: docs/adr/0005-embedded-state-sidecar.md
+  - kind: doc
+    ref: docs/parity-methodology.md
+  - kind: doc
+    ref: .kontourai/flow-agents/pdf-content-prep/pdf-content-prep--deliver-plan.md
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/25
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/33
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/167
+  - kind: issue
+    ref: https://github.com/kontourai/traverse/issues/179
+---
+
+# Content preparation
+
+This subject previously had provenance only in frozen ADR history
+([0004-large-page-chunking.md](../adr/0004-large-page-chunking.md),
+[0005-embedded-state-sidecar.md](../adr/0005-embedded-state-sidecar.md)) with
+no living decision ratified under the topic-keyed decision registry. This
+update ratifies the first living decision for the subject: PDF content
+preparation, shipped as an **opt-in injected seam**, not a bundled parser.
+
+## Decision
+
+- `ExtractInput.pdfTextExtractor?: PdfTextExtractor` is the seam. A
+  `PdfTextExtractor` is a caller-supplied `{ extract(bytes) => { text,
+  pageOffsets?, layout?, warnings? } }` implementation (sync or async, per
+  `src/types.ts`). With this **unset**, `contentType: "pdf"` keeps returning
+  the pre-existing typed not-implemented error (`PDF_PREP_ERROR`, unchanged
+  since `0.1.0`) — every existing caller's behavior is unaffected by this
+  option's mere existence.
+- **No default PDF implementation, no additional PDF dependency.** Traverse
+  takes on no PDF parsing library (`pdfjs-dist`, `pdf-parse`, `unpdf`, or any
+  other) as a hard or optional peer dependency for this slice. That is separate
+  from the package's declared content-preparation runtime dependencies:
+  `linkedom` and `turndown` implement the default HTML-to-Markdown path. The
+  core bundles no AI-provider SDK; provider adapters use optional peer SDKs
+  behind provider-specific subpaths. PDF, OCR, and browser/render
+  implementations remain caller-injected seams and are not bundled. A caller
+  that needs PDF parsing supplies the parser it already owns, so this slice
+  adds neither a parser implementation nor a PDF dependency.
+- **Composition, not new chunking logic.** With an extractor supplied,
+  `extract()` runs it via `preparePdfText()` (`src/content-prep.ts`) and
+  hands the resulting text into the EXISTING, unmodified character-window
+  chunker (`prepareAndChunk(text, "text", ...)`) — the same offset-correct
+  chunking and `chars:<start>-<end>` provenance-verification machinery
+  HTML/text already use. `chunk.ts` required zero changes.
+- **`pdfPageOffsets` sidecar, mirroring `embedded` (ADR 0005).**
+  `ExtractionResult.pdfPageOffsets` is an optional `number[]` of each page's
+  0-based start offset into the same prepared text every proposal's
+  `chars:<start>-<end>` locator is anchored to. `resolvePdfPage(pageOffsets,
+  charOffset)` (`src/content-prep.ts`) resolves a verified locator start
+  offset to a 1-based page number. This is deliberately NOT a new locator
+  scheme (e.g. not `"pdf:page:3:chars:120-140"`) — the `chars:<start>-<end>`
+  contract (ADR 0001 §4) is unchanged for every content type, including pdf;
+  `pdfPageOffsets` is a structured sidecar alongside it, matching how
+  `embedded` sits alongside proposals rather than inside them.
+  `pageOffsets` is **trust-not-verify**: unlike `excerpt`, Traverse cannot
+  independently confirm page numbers against real PDF structure. It is
+  shape-validated (finite, non-decreasing, in-range) and dropped, with a
+  warning, if malformed — never silently trusted. A caller with a buggy
+  extractor can still get structurally-valid but semantically-wrong page
+  numbers; this mirrors the pre-existing `embedded` sidecar's
+  un-verified-content precedent.
+- **Optional PDF layout remains a sidecar, not a new proposal locator.**
+  `PdfExtractedText.layout` can carry page geometry, typed text elements, and
+  structured tables. Every element and table cell includes an exact UTF-16
+  range into the extractor's `text`; `preparePdfText()` validates those ranges,
+  page references, boxes, spans, and cell identities, normalizes arrays into
+  deterministic source order, and defensively copies the result. One malformed
+  member drops the whole sidecar with a warning. The validated value is exposed
+  as `ExtractionResult.pdfLayout` and in the portable result envelope. Review
+  UIs intersect a proposal's `chars:<start>-<end>` range with these ranges for
+  two-way field/source highlighting. `resolvePdfLayoutSpan()` owns the
+  exclusive-end overlap and typed invalid-locator behavior so consumers do not
+  reimplement it. Traverse does not infer a box from text or trust a
+  provider-supplied proposal locator.
+- **Coordinate systems are explicit.** Each page declares points, pixels, or
+  normalized coordinates plus its dimensions and optional rotation. Bounds
+  must fit that page. Parser-native element labels can survive as
+  `providerType`, while the small portable `kind` vocabulary describes only
+  layout role. Tables stay as row/column cells with ranges and optional spans;
+  they are never flattened into plausible prose.
+- **Never-throw preserved.** `preparePdfText()` wraps the extractor call in
+  try/catch (mirroring `htmlToMarkdown`'s degrade-via-try/catch discipline);
+  a synchronous throw or a rejected Promise from `PdfTextExtractor.extract()`
+  surfaces as `ExtractionResult.error`, never propagated. `extract()`'s
+  existing top-level try/catch is an unconditional second safety net.
+- **Cost guards compose unchanged.** `maxProviderCalls`/`maxTotalTokens`
+  (see `extraction-cost-guard.md`) run in the per-chunk provider loop, which
+  the pdf pre-step feeds into identically to html/text — no changes to that
+  loop were needed.
+- **`prepareContent()`'s sync signature does not gain PDF support.** Only
+  `extract()` and the new standalone `preparePdfText()` support the
+  extractor seam; `prepareContent(bytes, "pdf")` still always returns
+  `PDF_PREP_ERROR`, even with an extractor available elsewhere in a caller's
+  code — `prepareContent` was deliberately not given a `pdfTextExtractor`
+  parameter, to avoid a sync-to-async breaking change to a widely-called
+  function. This is a documented asymmetry, not a bug.
+
+## Structural HTML keeps content outside the card container
+
+Structural chunking (ADR 0004 §D2) changes where chunk boundaries fall; it
+should not silently remove a page's own text, and it must not let that text
+crowd out the cards. The page text outside the detected card container is
+converted with the same Turndown configuration as the whole-page path, after a
+second chrome pass that the element-name pruning misses: ARIA `navigation`,
+`banner`, and `contentinfo` landmarks, blocks with at least three links whose
+link text is at least half their text (div navbars, mega-menus, pagination),
+and the short label remnants those leave behind. Blocks are judged innermost
+first, so a wrapper that mixes a menu with real text keeps the text. A landmark
+role inside `article` or `main` (or `role="main"`) is scoped to that content and
+kept, and `tel:`/`mailto:`/`sms:` links are contact values, not navigation, so
+they never make a block link-dense. Every block the pass removes is quoted in a
+`structural prep pruned …` warning (at most five blocks, 60 characters each,
+with the total character count), classified on the envelope as
+`preparation`/`navigation-pruned`.
+
+The element-name pruning before it follows the same rule for all Markdown
+prep, structural or whole-page: `header`, `footer` and `aside` inside an
+`article` belong to that article and are kept (and Turndown keeps them too,
+even when a card is converted on its own). Everywhere else, including inside
+`main` outside any article, they are page chrome (breadcrumbs, related-item
+footers, newsletter asides) and are removed, as are every `nav`, `form` and
+`noscript`; each removal is quoted in a `markdown prep pruned …` warning with
+the same bound and classification.
+Scripts, styles and other elements without page text are removed without a
+warning. Markdown prep therefore never drops page text silently; the legacy
+`prep: "text"` regex strip is unchanged.
+
+What remains is a leading and a trailing segment. A segment of at most a
+quarter of `chunkSize` rides along with the first or last card batch without
+changing card boundaries, as the page title always did. A longer segment gets
+its own chunks (character window when longer than one chunk), and every card
+chunk is emitted, and dispatched, before any outside chunk, so `maxChunks`,
+`maxProviderCalls`, and `maxTotalTokens` reach the cards first. Outside chunks
+left out by `maxChunks` produce a warning naming the chunk and character
+counts. Chunks are therefore ordered cards first, not by offset. A cards-only
+page keeps its chunk boundaries. Pages with text outside the container get
+different prepared text, a different digest, and a new preparation version.
+
+## Out of scope
+
+- **A page/region proposal locator.** Geometry enriches an exact prepared-text
+  locator through `pdfLayout`; it does not replace it with a second locator
+  scheme or claim raw-PDF byte offsets.
+- **Page-boundary-preferred chunk splitting.** PDF-aware chunking that never
+  lets a chunk boundary fall mid-page (mirroring how structural HTML
+  chunking never splits a card) is a real potential future improvement,
+  explicitly deferred. The character-window fallback's existing overlap
+  (`chunkOverlap`, default 200 chars) already gives reasonable robustness
+  against a value straddling a chunk boundary, same as it does for HTML
+  today.
+- **The fetch-layer binary-body gap (pre-existing, not fixed here).**
+  `src/fetch/fetch-source.ts` calls `response.text()` unconditionally for
+  every content type, and `Snapshot.body` is UTF-8-decoded — fetching a real
+  PDF over HTTP via `fetchSource`/`fetchAndExtract` today silently corrupts
+  the binary bytes before content-prep ever runs. This decision does not
+  touch the fetch layer; the seam is designed for uploaded-file bytes passed
+  directly to `extract()`, not URL-fetched PDFs. A follow-up issue for
+  `fetchSource` binary/`Uint8Array` body support is recommended before
+  anyone relies on `fetchAndExtract` for a PDF URL.
+- **Whether Traverse should ever ship a bundled, optional default PDF
+  parser** (dynamic-import, subpath-gated, e.g. behind
+  `@kontourai/traverse/pdf`) once a second PDF-consuming application exists.
+  Left explicitly open, not decided, not silently foreclosed.
+- **No real-parser parity proof in this repo.** The end-to-end test coverage
+  for this decision uses a hand-crafted minimal PDF fixture
+  (`tests/fixtures/minimal-two-page.pdf`) and a test-only, regex-based
+  "naive" extractor (`tests/fixtures/naive-pdf-text-extractor.ts`) — neither
+  is `pdfjs-dist` or any production parser. This proves the SEAM composes
+  correctly; it does not prove a specific downstream consumer's real parser
+  drops in cleanly. See `docs/parity-methodology.md` for how a downstream
+  adoption slice should prove that.
+- **Very large PDFs (accepted gap).** `preparePdfText`'s internal full-text
+  cap mirrors the existing `SAFETY_CAP`/`SHELL_INSPECT_CAP` (5,000,000
+  chars); a pathological multi-thousand-page PDF whose extracted text
+  exceeds that cap could have trailing `pageOffsets` entries pointing past
+  the truncated text. Accepted, matching the existing `SAFETY_CAP` framing
+  elsewhere in this package.

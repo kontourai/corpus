@@ -11,7 +11,8 @@ Usage: corpus <command> [options]
 
 Commands:
   check   Run the docs gates: manifest, purpose, links, reachability, topics,
-          redirects, paths, builtOn, covers, and freshness with --base
+          redirects, paths, builtOn, covers, decisions (when declared), and with
+          --base freshness and the ADR freeze
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
@@ -31,6 +32,12 @@ Commands:
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
+  decisions check   Run only the decisions gates (records, index, and with --base
+                    the ADR freeze); needs a "decisions" block in corpus.json
+            --root <dir>        repository root (default: .)
+            --base <git-ref>    also refuse files added under decisions.adr.dir since <git-ref>
+  decisions index   Write the decisions index file, and nothing else
+            --root <dir>        repository root (default: .)
   init    Scaffold a v2 corpus.json from README.md and docs/**/*.md; never overwrites a
           corpus.json, and refuses while a retired v1 docs-kit.json is present
             --root <dir>        repository root (default: .)
@@ -49,7 +56,10 @@ const COMMAND_OPTIONS = {
   mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' } },
   hub: { products: { type: 'string' }, out: { type: 'string' } },
   init: { root: { type: 'string' } },
+  'decisions check': { root: { type: 'string' }, base: { type: 'string' } },
+  'decisions index': { root: { type: 'string' } },
 };
+const DECISIONS_SUBCOMMANDS = ['check', 'index'];
 
 function parse(command, args) {
   try {
@@ -76,7 +86,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   // `npx -y github:kontourai/corpus#<sha> corpus <cmd>` runs this bin with
   // "docs-kit" as its first argument, so tolerate one leading program name.
   if (args[0] === 'docs-kit' || args[0] === 'corpus') args = args.slice(1);
-  const [command, ...rest] = args;
+  let [command, ...rest] = args;
 
   if (command === undefined) {
     warn(HELP);
@@ -92,6 +102,17 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   }
 
   try {
+    if (command === 'decisions') {
+      const [sub, ...subArgs] = rest;
+      if (sub === '-h' || sub === '--help') {
+        say(HELP);
+        return EXIT_OK;
+      }
+      if (!DECISIONS_SUBCOMMANDS.includes(sub))
+        throw new UsageError(`decisions needs a subcommand: ${DECISIONS_SUBCOMMANDS.join(' or ')}${sub === undefined ? '' : ` (got "${sub}")`}`);
+      command = `decisions ${sub}`;
+      rest = subArgs;
+    }
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw new UsageError(`unknown command "${command}"\n\n${HELP}`);
     const values = parse(command, rest);
     if (values.help) {
@@ -131,6 +152,21 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       case 'hub': {
         const { runHub } = await import('./hub.mjs');
         say(runHub({ products: path.resolve(values.products ?? 'products.json'), out: path.resolve(values.out ?? 'dist-hub') }));
+        return EXIT_OK;
+      }
+      case 'decisions check': {
+        const { runDecisionChecks, formatCheckReport } = await import('./check.mjs');
+        const result = runDecisionChecks({ root, base: values.base ?? null });
+        (result.exitCode === EXIT_OK ? say : warn)(formatCheckReport(result, root, { title: 'corpus decisions check' }));
+        return result.exitCode;
+      }
+      case 'decisions index': {
+        const { loadManifest, manifestFile } = await import('./manifest.mjs');
+        const { writeDecisionIndex } = await import('./decisions.mjs');
+        const manifest = loadManifest(root);
+        if (!manifest.decisions)
+          throw new UsageError(`${manifestFile(root)} has no "decisions" block; add "decisions": {} to enable the decisions gate`);
+        say(writeDecisionIndex(root, manifest.decisions));
         return EXIT_OK;
       }
       case 'init': {

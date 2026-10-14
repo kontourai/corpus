@@ -1,8 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import picomatch from 'picomatch';
 import { UsageError } from './errors.mjs';
-import { isRepoFile, repoGlobError, repoPathError, statInRepo } from './paths.mjs';
+import { isRepoFile, repoGlobError, repoPathError, statInRepo, toFsPath } from './paths.mjs';
 
 export const MANIFEST_FILE = 'corpus.json';
 /** The v1 manifest name. Corpus no longer reads it; its presence alone is a usage error. */
@@ -41,7 +41,7 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths', 'purpose', 'builtOn'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths', 'purpose', 'builtOn', 'decisions'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents', 'purpose', 'builtOn'];
 const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers', 'publish'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
@@ -355,6 +355,8 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
       });
   }
 
+  const decisions = Object.hasOwn(raw, 'decisions') ? validateDecisionsBlock(raw.decisions, root, `${where}: decisions`, errors) : null;
+
   return {
     manifest: {
       schemaVersion: raw.schemaVersion,
@@ -372,9 +374,61 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
       exclude: Array.isArray(exclude) ? exclude : [],
       redirects,
       allowLocalPaths,
+      decisions,
     },
     errors,
   };
+}
+
+export const DEFAULT_DECISIONS_DIR = 'docs/decisions';
+export const DEFAULT_ADR_DIR = 'docs/adr';
+
+/** null when nothing is at the repo-relative path; otherwise whether it is a real directory inside the repository. */
+function directoryState(root, repoPath) {
+  let stat;
+  try {
+    stat = lstatSync(toFsPath(root, repoPath));
+  } catch {
+    return null;
+  }
+  return stat.isDirectory() && statInRepo(root, repoPath)?.kind === 'dir' ? 'dir' : 'other';
+}
+
+/**
+ * The optional v2 `decisions` block: `{ dir?, index?, adr?: { dir? } }`.
+ * `dir` defaults to docs/decisions and need not exist yet (`corpus decisions
+ * index` creates it); `index` defaults to `<dir>/index.md` and must sit
+ * directly in `dir`. Declaring `adr` freezes `adr.dir`, which must exist.
+ */
+function validateDecisionsBlock(value, root, at, errors) {
+  const before = errors.length;
+  if (!checkKeys(value, at, ['dir', 'index', 'adr'], [], errors)) return null;
+  const pathOk = (repoPath, where) => {
+    const problem = repoPathError(repoPath);
+    if (problem) errors.push(`${where} ${problem}`);
+    return !problem;
+  };
+  const dir = Object.hasOwn(value, 'dir') ? value.dir : DEFAULT_DECISIONS_DIR;
+  const dirOk = pathOk(dir, `${at}.dir`);
+  if (dirOk && directoryState(root, dir) === 'other')
+    errors.push(`${at}.dir "${dir}" is not a directory inside the repository`);
+  const index = Object.hasOwn(value, 'index') ? value.index : `${dir}/index.md`;
+  if (pathOk(index, `${at}.index`) && dirOk) {
+    if (!index.endsWith('.md')) errors.push(`${at}.index must be a .md file, got "${index}"`);
+    else if (path.posix.dirname(index) !== dir) errors.push(`${at}.index "${index}" must be directly inside decisions.dir "${dir}"`);
+  }
+  let adr = null;
+  if (Object.hasOwn(value, 'adr') && checkKeys(value.adr, `${at}.adr`, ['dir'], [], errors)) {
+    const adrDir = Object.hasOwn(value.adr, 'dir') ? value.adr.dir : DEFAULT_ADR_DIR;
+    if (pathOk(adrDir, `${at}.adr.dir`)) {
+      // A frozen directory that does not exist would never refuse anything, so a typo must not pass.
+      if (directoryState(root, adrDir) !== 'dir') errors.push(`${at}.adr.dir "${adrDir}" is not an existing directory inside the repository`);
+      if (dirOk && (adrDir === dir || adrDir.startsWith(`${dir}/`) || dir.startsWith(`${adrDir}/`)))
+        errors.push(`${at}.adr.dir "${adrDir}" must not overlap decisions.dir "${dir}"`);
+    }
+    adr = { dir: adrDir };
+  }
+  return errors.length === before ? { dir, index, adr } : null;
 }
 
 /**

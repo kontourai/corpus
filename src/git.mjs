@@ -71,12 +71,8 @@ export function repoPrefix(root) {
   }
 }
 
-/**
- * Files changed between the merge base of `base` and HEAD, relative to `root`
- * (`--relative` also limits the diff to that subtree). A bad ref or a missing
- * repository is a usage error, never an empty change set.
- */
-export function changedFiles(root, base) {
+/** Throws UsageError unless `base` is a ref that resolves to a commit in `root`. */
+export function verifyBase(root, base) {
   if (typeof base !== 'string' || base.trim() === '' || base.startsWith('-'))
     throw new UsageError(`--base must be a git ref, got "${base}"`);
   try {
@@ -88,14 +84,35 @@ export function changedFiles(root, base) {
         '\n(in CI, fetch the base branch, e.g. actions/checkout with fetch-depth: 0)',
     );
   }
+}
+
+function diffNames(root, base, extra = []) {
+  verifyBase(root, base);
   try {
     // --no-renames lists a renamed file's old path too, so covers on it still match.
-    return git(root, ['diff', '--name-only', '--no-renames', '--relative', '-z', `${base}...HEAD`])
+    return git(root, ['diff', '--name-only', '--no-renames', ...extra, '--relative', '-z', `${base}...HEAD`])
       .split('\0')
       .filter(Boolean);
   } catch (error) {
     throw new UsageError(`git diff ${base}...HEAD failed: ${gitError(error)}`);
   }
+}
+
+/**
+ * Files changed between the merge base of `base` and HEAD, relative to `root`
+ * (`--relative` also limits the diff to that subtree). A bad ref or a missing
+ * repository is a usage error, never an empty change set.
+ */
+export function changedFiles(root, base) {
+  return diffNames(root, base);
+}
+
+/**
+ * Files added between the merge base of `base` and HEAD, relative to `root`.
+ * Without rename detection, a file renamed into place counts as added.
+ */
+export function addedFiles(root, base) {
+  return diffNames(root, base, ['--diff-filter=A']);
 }
 
 /**

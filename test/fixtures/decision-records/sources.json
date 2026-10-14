@@ -1,0 +1,40 @@
+{
+  "note": "Topic records and their generated index.md, copied unchanged from each repository's docs/decisions at origin/main. Used by test/decisions.test.mjs.",
+  "sources": {
+    "flow-agents": {
+      "repo": "kontourai/flow-agents",
+      "commit": "3e699f7fcb2bd8baa4c7767665663423a9036161",
+      "records": 32
+    },
+    "traverse": {
+      "repo": "kontourai/traverse",
+      "commit": "c7b67fd0be30378fc0b380181a4a3c1437858845",
+      "records": 20
+    },
+    "survey": {
+      "repo": "kontourai/survey",
+      "commit": "18972ca970c1ebafbed5219618957c158f47e493",
+      "records": 13
+    },
+    "datum": {
+      "repo": "kontourai/datum",
+      "commit": "7e1c143a889eb9d29ad9419800de0c574f9ee215",
+      "records": 11
+    },
+    "flow": {
+      "repo": "kontourai/flow",
+      "commit": "bf02da27ca42a32b1ff602ef40a9b4ef76422079",
+      "records": 7
+    },
+    "lookout": {
+      "repo": "kontourai/lookout",
+      "commit": "75dbdc85a6400e28269fcea629528fcaaca763df",
+      "records": 7
+    },
+    "surface": {
+      "repo": "kontourai/surface",
+      "commit": "fd0e7912e023e76c624103a3b0df1444270e9665",
+      "records": 7
+    }
+  }
+}
