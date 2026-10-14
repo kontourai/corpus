@@ -59,8 +59,8 @@ export class SlugConflictError extends Error {
 export class ReadOnlyStoreError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'READ_ONLY';
 
-  constructor(op: string) {
-    super(`${op} rejected: this store is a read-only projection.`);
+  constructor(op: string, reason = 'this store is a read-only projection.') {
+    super(`${op} rejected: ${reason}`);
     this.name = 'ReadOnlyStoreError';
   }
 }

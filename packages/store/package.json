@@ -17,6 +17,9 @@
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "corpus-store": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

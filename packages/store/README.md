@@ -84,8 +84,7 @@ working set; `includeHistory: true` adds retired and superseded records, and
 category lists also take `prefix` (see [Owner decisions](#owner-decisions)).
 Retired and superseded records are always gettable. Vault superseded files move
 to `archive/`. Lists also take an expiry filter, `{stale, now}`. No search,
-capabilities object, alternate vault index format or public storage API is
-claimed by this package.
+capabilities object or public storage API is claimed by this package.
 
 The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or
@@ -129,10 +128,54 @@ fixtures include all mutation evidence shapes and round-trip byte for byte.
 Default layout: `records/<id>.md`, `graph-index.json`, `alias-index.json`.
 Vault layout: category-routed notes, `people/`, archives, `path-index.json`,
 `graph-index.json`, `alias-index.json`, and collision-safe body sentinels.
-`path-index.json` is the sole vault index format. Kit vault migration and refusal
-of occupied unindexed vaults belong to the later adjusted programme step 6.
-Graph and alias indexes can be rebuilt; vault path mappings remain authoritative
-in this preserved implementation.
+Graph and alias indexes can be rebuilt; vault path mappings remain authoritative.
+
+## Vault index and migration
+
+`path-index.json` is the canonical vault path index. The vault adapter selects
+the index on every operation:
+
+- `path-index.json` alone: the vault is read and written normally.
+- `.graph-index.json` alone (`kit-v1`, written by the Knowledge Kit's vault
+  adapter, with the same payload): the vault opens **read-only**. Reads work;
+  every mutation, including `reindex`, throws `READ_ONLY` and names
+  `corpus-store migrate`.
+- Both files: refused as a conflict (`KnowledgeStoreCorruptionError`); the
+  package does not choose one.
+- Neither file: an empty root, or one with only plain notes, opens as a new
+  vault. A root that already holds store data (a `graph-index.json` or
+  `alias-index.json`, or a markdown note whose frontmatter has an `id` or a
+  `type`) is refused rather than read as empty. Unreadable frontmatter or an
+  exceeded scan bound also refuses.
+
+The package's `corpus-store` bin converts a `kit-v1` vault offline:
+
+```sh
+corpus-store migrate <vault-root> --check     # validate and report; changes no vault file
+corpus-store migrate <vault-root>             # convert, then verify
+corpus-store migrate <vault-root> --reverse   # restore the Kit index
+```
+
+Stop every writer first. The migration's lock (by default under
+`<vault-root>/.corpus-store-migration/coordination`, or
+`--coordination-directory <dir>`) only excludes other migration runs. `--check`
+creates only that lock directory. It
+validates the Kit index as exact mappings (consistent `by_id`/`by_path`,
+contained paths, `archived` matching an `archive/` location, every note present
+with that frontmatter `id`) and refuses with every problem listed if any check
+fails. In one journaled transaction of the store's own transaction engine it
+hashes every other file under the root, saves the original index as
+`.corpus-store-migration/kit-v1-path-index.json`, writes
+`.corpus-store-migration/manifest.json`, writes `path-index.json` with the same
+mappings, and removes `.graph-index.json`. It then re-hashes every file, opens
+every indexed record through the vault adapter, re-hashes again, and marks the
+manifest `verified`. Only the index file changes; markdown files the Kit index
+did not list (for example a default store's `records/` sharing the root) are
+listed in the manifest and left alone. `--reverse` restores the saved index only
+while `path-index.json` and every hashed file are byte-for-byte as the manifest
+recorded, so it never overwrites a later edit. stdout is one JSON result,
+including the manifest's sha256; exit 0 means success or nothing to do, 1 a
+refusal, 2 a usage error.
 
 ## Public exports
 
@@ -145,6 +188,8 @@ in this preserved implementation.
   It refuses journal/lock artifacts and returns a recheck; hosts must retain
   non-atomic/unknown-transaction semantics and enforce authorization separately.
 - `@kontourai/corpus-store/package.json`: metadata.
+- `corpus-store` bin: `migrate`, described in
+  [Vault index and migration](#vault-index-and-migration).
 
 Deep source/dist imports and `/storage` are not exports. ESM only, Node >=22.
 Runtime dependency: js-yaml, retained for Station-identical writing.

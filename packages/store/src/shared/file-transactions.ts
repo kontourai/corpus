@@ -329,6 +329,11 @@ export class KnowledgeFileTransactions {
     return buffer === null ? null : buffer.toString('utf8');
   }
 
+  /** Exact bytes, tracked in the read set like `readText`. */
+  readBytes(path: string, maxBytes?: number): Buffer | null {
+    return this.readBuffer(path, maxBytes);
+  }
+
   readExternalText(path: string): string | null {
     const context = this.storage.getStore();
     if (!context) {
@@ -388,6 +393,11 @@ export class KnowledgeFileTransactions {
 
   writeText(path: string, value: string): void {
     this.writeBuffer(path, Buffer.from(value, 'utf8'));
+  }
+
+  /** Exact bytes, staged and published like `writeText`. */
+  writeBytes(path: string, value: Buffer): void {
+    this.writeBuffer(path, Buffer.from(value));
   }
 
   remove(path: string): void {

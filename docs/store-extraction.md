@@ -374,3 +374,32 @@ now `{}`.
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, all 123
 passing, with no expected failure and no unexpected result, for both default
 and vault.
+
+## Canonical vault index and offline migration
+
+The vault adapter selects its path index on every operation: canonical
+`path-index.json`, or the Knowledge Kit's `.graph-index.json` (`kit-v1`), which
+opens read-only. Both at once is refused, and a root that holds store data
+without either index is refused instead of being read as empty. The
+`corpus-store migrate` bin converts a `kit-v1` vault through one journaled
+transaction of the store's transaction engine, which gains `readBytes` and
+`writeBytes` so the saved index keeps its exact bytes. It writes a hashed
+manifest and the original index, verifies every other file's sha256 and reads
+every record through the vault adapter, and reverses only while the bytes still
+match.
+
+Two committed fixtures were written by the Knowledge Kit's own adapters (see
+`packages/store/test/fixtures/README.md`): a vault with every record type,
+archive, retirement, alias and expiry, and a hybrid root that a Kit default
+store and a Kit vault share. `test/vault-index.test.ts` copies them and covers
+read-only `kit-v1` access, refusal of an occupied unindexed vault, plain-note
+and empty roots, the dual-index conflict, conversion of both fixtures with a
+byte-hash check before and after and identical reads through the package,
+reversal and its refusal after an edit or a move, refusal of inexact mappings,
+and CLI usage errors. Pack verification runs the installed bin on a copy of
+the Kit vault.
+
+The phase plan asked for the conformance vectors on "both vault formats".
+`kit-v1` is read-only by design, and the vectors write, so they run against the
+canonical format only; `kit-v1` is covered by the read and conversion tests
+above.
