@@ -164,11 +164,11 @@ export function globMatcher(globs = []) {
 }
 
 /**
- * Strict docs-kit.json validation. Returns { manifest, errors }; `manifest` is
+ * Strict manifest (corpus.json or legacy docs-kit.json) validation. Returns { manifest, errors }; `manifest` is
  * normalized (landing defaulted, optional arrays defaulted) and only
  * meaningful when `errors` is empty.
  */
-export function validateManifest(raw, root, where = MANIFEST_FILE) {
+export function validateManifest(raw, root, where = PREFERRED_MANIFEST_FILE) {
   const errors = [];
   const v2 = raw?.schemaVersion === 2;
   if (!checkKeys(raw, where, v2 ? [...MANIFEST_KEYS, 'purpose', 'builtOn'] : MANIFEST_KEYS, v2 ? [...MANIFEST_REQUIRED, 'purpose', 'builtOn'] : MANIFEST_REQUIRED, errors)) return { manifest: null, errors };
@@ -420,7 +420,7 @@ export function duplicateRedirectKeys(text) {
   return duplicates;
 }
 
-/** Read and parse docs-kit.json. A missing or unparseable file is a usage error. */
+/** Read and parse the manifest (corpus.json, else legacy docs-kit.json). A missing or unparseable file is a usage error. */
 export function readManifestJson(root) {
   const file = path.join(root, manifestFile(root));
   let text;
@@ -428,7 +428,7 @@ export function readManifestJson(root) {
     text = readFileSync(file, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT')
-      throw new UsageError(`no ${MANIFEST_FILE} in ${root} (run "docs-kit init" to scaffold one)`);
+      throw new UsageError(`no ${PREFERRED_MANIFEST_FILE} (or legacy ${MANIFEST_FILE}) in ${root} (run "docs-kit init" to scaffold one)`);
     throw new UsageError(`cannot read ${file}: ${error.message}`);
   }
   try {

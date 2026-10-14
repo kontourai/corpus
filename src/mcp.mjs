@@ -8,7 +8,7 @@ import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
 import { locateInBundle } from './locate.mjs';
-import { MANIFEST_FILE, MANIFEST_FILES, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
+import { MANIFEST_FILE, MANIFEST_FILES, PREFERRED_MANIFEST_FILE, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
@@ -174,7 +174,7 @@ export function loadWorkspace(root, build = bundleFromCheckout) {
   return snapshot(bundles, unavailable);
 }
 
-/** Every immediate subdirectory with docs-kit.json, rescanned on every call; each product rebuilt only when its key changes. */
+/** Every immediate subdirectory with corpus.json or legacy docs-kit.json, rescanned on every call; each product rebuilt only when its key changes. */
 export function workspaceSource(dir) {
   const root = path.resolve(dir);
   let candidates;
@@ -183,7 +183,7 @@ export function workspaceSource(dir) {
   } catch (error) {
     throw new UsageError(`--workspace ${dir}: ${error.message}`);
   }
-  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${MANIFEST_FILE}`);
+  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${PREFERRED_MANIFEST_FILE} or legacy ${MANIFEST_FILE}`);
   const build = createCheckoutCache();
   return {
     describe: `workspace ${root}`,

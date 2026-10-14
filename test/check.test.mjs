@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { validateManifest } from '../src/manifest.mjs';
 import { FIXTURES, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
 
 const fixture = (name) => path.join(FIXTURES, name);
@@ -88,10 +89,22 @@ test('check reports every failing gate, not only the first', async (t) => {
   assert.match(result.stderr, /check failed: 2 failures/);
 });
 
-test('check without docs-kit.json is a usage error (exit 2)', async (t) => {
+test('check without a manifest is a usage error (exit 2) that names corpus.json', async (t) => {
   const result = await runCli(['check', '--root', scratch(t)]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /no docs-kit\.json/);
+  assert.match(result.stderr, /no corpus\.json \(or legacy docs-kit\.json\) in /);
+});
+
+test('validateManifest without a file name labels problems with corpus.json, not the legacy name', () => {
+  const { errors } = validateManifest({ schemaVersion: 2 }, FIXTURES);
+  assert.ok(errors.length > 0);
+  for (const error of errors) assert.match(error, /^corpus\.json: /);
+});
+
+test('mcp --repo without a manifest names corpus.json as the expected file (exit 2)', async (t) => {
+  const result = await runCli(['mcp', '--repo', scratch(t)]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /no corpus\.json \(or legacy docs-kit\.json\) in /);
 });
 
 test('freshness: a covered change without a doc change is stale (exit 1); --advisory warns (exit 0)', async (t) => {

@@ -39,7 +39,7 @@ The content digest algorithm remains unchanged; it identifies document content, 
 - `digest` is the SHA-256 (hex) of `JSON.stringify({documents, topics})`. Documents are reduced to `{source, section, title, landing, markdown}` and topics to `{id, title, source, markdown}`, in manifest order, with `markdown` as written (before bundle-only link rewriting, which embeds the sha and site URL). URLs, `sha`, and `builtAt` are left out, so the digest identifies the content alone.
 - The hub's `thin` state and the MCP `docCount` count only documents with `landing: false`.
 
-`mcp --repo` and `mcp --workspace` build the same object in memory on every tool call. Outside a git checkout, their `sha` is `null`. They add `dirty: true` when the working tree has uncommitted changes. The MCP server validates every bundle down to each document and topic; a malformed one is reported as unavailable.
+`mcp --repo` and `mcp --workspace` build the same object in memory on every tool call. They read `corpus.json`, or the legacy `docs-kit.json` when that is the only manifest; `--workspace` serves each immediate subdirectory that has either, and reports a directory that has both as unavailable. Outside a git checkout, their `sha` is `null`. They add `dirty: true` when the working tree has uncommitted changes. The MCP server validates every bundle down to each document and topic; a malformed one is reported as unavailable.
 
 ## products.json
 

@@ -195,7 +195,7 @@ test('mcp refuses more than one source and an invalid --repo (exit 2)', async (t
   assert.match(invalid.stderr, /missing required key "purpose"/);
   const empty = await runCli(['mcp', '--workspace', scratch(t)]);
   assert.equal(empty.status, 2, empty.output);
-  assert.match(empty.stderr, /no immediate subdirectory contains docs-kit\.json/);
+  assert.match(empty.stderr, /no immediate subdirectory contains corpus\.json or legacy docs-kit\.json/);
 });
 
 test('mcp --repo includes the landing page, rebuilds on every call, and flags a dirty tree', async (t) => {
