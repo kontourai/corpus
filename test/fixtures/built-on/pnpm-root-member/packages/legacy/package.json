@@ -1,0 +1,6 @@
+{
+  "name": "@kontourai/legacy",
+  "dependencies": {
+    "@kontourai/knowledge": "^1"
+  }
+}
