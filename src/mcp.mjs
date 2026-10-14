@@ -53,8 +53,41 @@ export function bundleShapeError(bundle, product) {
   for (const [index, topic] of bundle.topics.entries()) {
     if (topic === null || typeof topic !== 'object') return `topics[${index}] is not an object`;
     for (const key of ['id', 'title', 'source', 'url', 'markdown']) if (!isString(topic[key])) return `topics[${index}].${key} must be a string`;
+    // Hierarchy fields: optional, so bundles without them stay readable.
+    if (topic.summary !== undefined && !isString(topic.summary)) return `topics[${index}].summary must be a string`;
+    if (topic.tags !== undefined && !(Array.isArray(topic.tags) && topic.tags.every((tag) => isString(tag) && tag.trim())))
+      return `topics[${index}].tags must be an array of non-empty strings`;
+    if (topic.parentId !== undefined && !(isString(topic.parentId) && topic.parentId.trim())) return `topics[${index}].parentId must be a non-empty string`;
+  }
+  return topicTreeError(bundle.topics);
+}
+
+/**
+ * A `parentId` must name another topic in the same bundle, and following
+ * parents must end at a root. A dangling parent would be a branch no tool can
+ * list or read, so it is refused rather than served.
+ */
+function topicTreeError(topics) {
+  const parentOf = new Map(topics.map((topic) => [topic.id, topic.parentId]));
+  for (const [index, topic] of topics.entries()) {
+    if (topic.parentId === undefined) continue;
+    if (!parentOf.has(topic.parentId)) return `topics[${index}].parentId "${topic.parentId}" is not a topic id in this bundle`;
+    const seen = new Set([topic.id]);
+    for (let at = topic.parentId; at !== undefined; at = parentOf.get(at)) {
+      if (seen.has(at)) return `topics[${index}].parentId "${topic.parentId}" makes a cycle through "${at}"`;
+      seen.add(at);
+    }
   }
   return null;
+}
+
+/** The optional hierarchy fields a topic carries, for list and search results. */
+function hierarchyFields(topic) {
+  return {
+    ...(topic.parentId !== undefined ? { parentId: topic.parentId } : {}),
+    ...(topic.tags !== undefined ? { tags: topic.tags } : {}),
+    ...(topic.summary !== undefined ? { summary: topic.summary } : {}),
+  };
 }
 
 /** A loaded snapshot: available bundles by product plus the products that failed. */
@@ -291,6 +324,53 @@ export function hubSource(hub, { fetchImpl = fetch, now = Date.now, ttlMs = HUB_
   };
 }
 
+/**
+ * Prebuilt bundles held in memory for the life of the server: nothing is
+ * rebuilt, refetched, or reread. Every bundle is validated up front, so a
+ * malformed one or two bundles for one product is a usage error at startup
+ * instead of an unavailable product later. `label(index)` names a bundle in
+ * those errors.
+ */
+export function staticSource(bundles, { describe = 'static bundles', label = (index) => `bundles[${index}]` } = {}) {
+  if (!Array.isArray(bundles) || bundles.length === 0) throw new UsageError(`${describe}: at least one bundle is required`);
+  const seen = new Map();
+  // Serve private copies, so what was validated is what is served even if the caller later mutates its objects.
+  const copies = bundles.map((bundle, index) => {
+    let copy;
+    try {
+      copy = structuredClone(bundle);
+    } catch (error) {
+      throw new UsageError(`${label(index)}: bundle is not plain data: ${error.message}`);
+    }
+    const problem = bundleShapeError(copy);
+    if (problem) throw new UsageError(`${label(index)}: ${problem}`);
+    if (seen.has(copy.product)) throw new UsageError(`${label(index)}: product "${copy.product}" is already served by ${label(seen.get(copy.product))}`);
+    seen.set(copy.product, index);
+    return copy;
+  });
+  const loaded = snapshot(copies, []);
+  return { describe, load: async () => loaded };
+}
+
+/** `mcp --bundle <file>...`: read each docs-bundle.json once, then serve it as a static source. */
+export function bundleFileSource(files) {
+  const resolved = files.map((file) => path.resolve(file));
+  const bundles = resolved.map((file, index) => {
+    let text;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch (error) {
+      throw new UsageError(`--bundle ${files[index]}: ${error.message}`);
+    }
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new UsageError(`--bundle ${files[index]}: invalid JSON: ${error.message}`);
+    }
+  });
+  return staticSource(bundles, { describe: `bundle ${resolved.join(', ')}`, label: (index) => `--bundle ${files[index]}` });
+}
+
 function words(text) {
   return [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter(Boolean))];
 }
@@ -311,9 +391,9 @@ function snippetFor(markdown, terms, width = 220) {
 }
 
 /**
- * Ranked term matching: title hits weigh 5, id/source hits 3, body hits 1
- * (capped at 10 per term), scaled by the share of query terms matched.
- * Ties rank topics before documents.
+ * Ranked term matching: title hits weigh 5, id/source/tag hits 3, summary
+ * hits 2, body hits 1 (capped at 10 per term), scaled by the share of query
+ * terms matched. Ties rank topics before documents.
  */
 export function searchBundles(bundles, query, limit = 10) {
   const terms = words(query);
@@ -321,17 +401,19 @@ export function searchBundles(bundles, query, limit = 10) {
   const results = [];
   for (const bundle of bundles) {
     const items = [
-      ...bundle.topics.map((topic) => ({ kind: 'topic', id: topic.id, meta: `${topic.id} ${topic.source}`, ...topic })),
+      ...bundle.topics.map((topic) => ({ kind: 'topic', id: topic.id, meta: [topic.id, topic.source, ...(topic.tags ?? [])].join(' '), ...topic })),
       ...bundle.documents.map((document) => ({ kind: 'document', meta: document.source, ...document })),
     ];
     for (const item of items) {
       const title = item.title.toLowerCase();
       const meta = item.meta.toLowerCase();
       const body = item.markdown.toLowerCase();
+      const summary = (item.kind === 'topic' ? item.summary ?? '' : '').toLowerCase();
       let score = 0;
       let matched = 0;
       for (const term of terms) {
-        const termScore = countOccurrences(title, term) * 5 + countOccurrences(meta, term) * 3 + Math.min(countOccurrences(body, term), 10);
+        const termScore =
+          countOccurrences(title, term) * 5 + countOccurrences(meta, term) * 3 + countOccurrences(summary, term) * 2 + Math.min(countOccurrences(body, term), 10);
         if (termScore > 0) matched++;
         score += termScore;
       }
@@ -339,7 +421,7 @@ export function searchBundles(bundles, query, limit = 10) {
       results.push({
         product: bundle.product,
         kind: item.kind,
-        ...(item.kind === 'topic' ? { id: item.id } : {}),
+        ...(item.kind === 'topic' ? { id: item.id, ...hierarchyFields(item) } : {}),
         title: item.title,
         source: item.source,
         url: item.url,
@@ -423,11 +505,15 @@ export function createDocsServer(source) {
   tool(
     'list_topics',
     {
-      description: 'List curated documentation topics (id, title, source, url) for one product or all products. Use get_topic to read one.',
-      inputSchema: z.object({ product: z.string().optional().describe('Product slug, e.g. "flow". Omit for all products.') }),
+      description:
+        'List curated documentation topics (id, title, source, url, and parentId, tags, summary where the bundle has them) for one product or all products. Pass parentId to list one topic\'s children. Use get_topic to read one.',
+      inputSchema: z.object({
+        product: z.string().optional().describe('Product slug, e.g. "flow". Omit for all products.'),
+        parentId: z.string().optional().describe('Only the topics whose parentId is this topic id.'),
+      }),
       annotations: readOnly,
     },
-    async ({ product }) => {
+    async ({ product, parentId }) => {
       const loaded = await source.load();
       let bundles = [...loaded.bundles.values()];
       if (product !== undefined) {
@@ -435,9 +521,13 @@ export function createDocsServer(source) {
         if (picked.error) return picked.error;
         bundles = [picked.bundle];
       }
+      if (parentId !== undefined && !bundles.some((bundle) => bundle.topics.some((topic) => topic.id === parentId)))
+        return toolError(`unknown parent topic "${parentId}"${product === undefined ? '' : ` in ${product}`}`);
       return json({
         topics: bundles.flatMap((bundle) =>
-          bundle.topics.map(({ id, title, source: topicSource, url }) => ({ product: bundle.product, id, title, source: topicSource, url, ...stamp(bundle) })),
+          bundle.topics
+            .filter((topic) => parentId === undefined || topic.parentId === parentId)
+            .map((topic) => ({ product: bundle.product, id: topic.id, title: topic.title, source: topic.source, url: topic.url, ...hierarchyFields(topic), ...stamp(bundle) })),
         ),
         ...(product === undefined && loaded.unavailable.length > 0 ? { unavailable: loaded.unavailable } : {}),
       });
@@ -539,11 +629,17 @@ export function createDocsServer(source) {
   return server;
 }
 
-/** `docs-kit mcp`: choose exactly one source, then serve over stdio until stdin closes. */
-export async function runMcp({ repo, workspace, hub }) {
-  const chosen = [repo && 'repo', workspace && 'workspace', hub && 'hub'].filter(Boolean);
+/** `corpus mcp`: choose exactly one source, then serve over stdio until stdin closes. */
+export async function runMcp({ repo, workspace, hub, bundle = [] }) {
+  const chosen = [repo && 'repo', workspace && 'workspace', hub && 'hub', bundle.length > 0 && 'bundle'].filter(Boolean);
   if (chosen.length > 1) throw new UsageError(`mcp takes exactly one source; got --${chosen.join(' and --')}`);
-  const source = repo ? repoSource(repo) : workspace ? workspaceSource(workspace) : hubSource(hub ?? DEFAULT_HUB);
+  const source = repo
+    ? repoSource(repo)
+    : workspace
+      ? workspaceSource(workspace)
+      : bundle.length > 0
+        ? bundleFileSource(bundle)
+        : hubSource(hub ?? DEFAULT_HUB);
   const server = createDocsServer(source);
   await server.connect(new StdioServerTransport());
   process.stderr.write(`docs-kit ${PACKAGE_VERSION} MCP server ready (${source.describe})\n`);
