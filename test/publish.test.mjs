@@ -9,7 +9,7 @@ import { BIN, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs
 const SITE = 'https://kontourai.github.io/sample/';
 
 function editManifest(repo, edit) {
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   edit(manifest);
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);

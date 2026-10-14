@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -18,6 +18,19 @@ async function connect(t, args) {
   await client.connect(transport);
   t.after(() => client.close());
   return client;
+}
+
+/** connect(), plus everything the server has written to stderr so far. */
+async function connectCapturingStderr(t, args) {
+  const transport = new StdioClientTransport({ command: process.execPath, args: [BIN, 'mcp', ...args], stderr: 'pipe' });
+  let text = '';
+  transport.stderr.on('data', (chunk) => {
+    text += chunk;
+  });
+  const client = new Client({ name: 'docs-kit-test', version: '0.0.0' });
+  await client.connect(transport);
+  t.after(() => client.close());
+  return { client, stderr: () => text };
 }
 
 async function call(client, name, args = {}) {
@@ -40,6 +53,8 @@ test('mcp --repo serves list_topics, get_topic, get_document and search with the
       product: 'sample',
       title: 'Sample',
       tagline: 'A fixture product for docs-kit tests',
+      purpose: 'A fixture product for Corpus tests.',
+      builtOn: [],
       sha,
       builtAt: products.data.products[0].builtAt,
       siteUrl: 'https://kontourai.github.io/sample/',
@@ -95,7 +110,7 @@ test('mcp --repo serves list_topics, get_topic, get_document and search with the
   assert.match(unknownProduct.data.error, /unknown product "flow"/);
 });
 
-test('mcp --workspace serves every subdirectory with docs-kit.json and reports broken ones', async (t) => {
+test('mcp --workspace serves every subdirectory with corpus.json and reports broken ones', async (t) => {
   const workspace = scratch(t);
   fixtureRepo(t, 'valid', { into: workspace, as: 'sample' });
   fixtureRepo(t, 'second', { into: workspace });
@@ -195,7 +210,55 @@ test('mcp refuses more than one source and an invalid --repo (exit 2)', async (t
   assert.match(invalid.stderr, /missing required key "purpose"/);
   const empty = await runCli(['mcp', '--workspace', scratch(t)]);
   assert.equal(empty.status, 2, empty.output);
-  assert.match(empty.stderr, /no immediate subdirectory contains corpus\.json or legacy docs-kit\.json/);
+  assert.match(empty.stderr, /no immediate subdirectory contains corpus\.json$/m);
+});
+
+/** A checkout whose only manifest is the retired v1 docs-kit.json, as a v1 adopter wrote it. */
+function retiredRepo(t, options) {
+  const repo = fixtureRepo(t, 'second', options);
+  const manifest = JSON.parse(readFileSync(path.join(repo, 'corpus.json'), 'utf8'));
+  const { purpose, builtOn, ...v1 } = manifest;
+  writeFileSync(path.join(repo, 'docs-kit.json'), `${JSON.stringify({ ...v1, schemaVersion: 1 }, null, 2)}\n`);
+  rmSync(path.join(repo, 'corpus.json'));
+  commitAll(repo, 'v1 manifest');
+  return repo;
+}
+
+test('mcp --repo refuses a checkout whose only manifest is docs-kit.json (exit 2)', async (t) => {
+  const repo = retiredRepo(t);
+  const result = await runCli(['mcp', '--repo', repo]);
+  assert.equal(result.status, 2, result.output);
+  assert.equal(result.stdout, '', 'nothing reaches the protocol stream');
+  assert.match(result.stderr, /docs-kit\.json is a retired v1 manifest and Corpus no longer reads it; rename it to corpus\.json, set "schemaVersion": 2, and add "purpose"/);
+});
+
+test('mcp --repo refuses a docs-kit.json next to corpus.json (exit 2)', async (t) => {
+  const repo = fixtureRepo(t, 'second');
+  writeFileSync(path.join(repo, 'docs-kit.json'), readFileSync(path.join(repo, 'corpus.json')));
+  const result = await runCli(['mcp', '--repo', repo]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /docs-kit\.json is a retired v1 manifest .* sits next to corpus\.json; delete docs-kit\.json/);
+});
+
+test('mcp --workspace skips a docs-kit.json-only subdirectory with one stderr note and serves the rest', async (t) => {
+  const workspace = scratch(t);
+  fixtureRepo(t, 'valid', { into: workspace, as: 'sample' });
+  retiredRepo(t, { into: workspace, as: 'old' });
+  const { client, stderr } = await connectCapturingStderr(t, ['--workspace', workspace]);
+  const first = await call(client, 'list_products');
+  const second = await call(client, 'list_products');
+  for (const products of [first, second]) {
+    assert.deepEqual(products.data.products.map((entry) => [entry.product, entry.status]), [['sample', 'available']]);
+  }
+  const notes = stderr().match(/skipping .*old: it has a retired v1 docs-kit\.json and no corpus\.json/g) ?? [];
+  assert.equal(notes.length, 1, `one note per server, not one per rescan:\n${stderr()}`);
+
+  const onlyRetired = scratch(t);
+  retiredRepo(t, { into: onlyRetired, as: 'old' });
+  const refused = await runCli(['mcp', '--workspace', onlyRetired]);
+  assert.equal(refused.status, 2, refused.output);
+  assert.match(refused.stderr, /skipping .*old: it has a retired v1 docs-kit\.json/);
+  assert.match(refused.stderr, /no immediate subdirectory contains corpus\.json$/m);
 });
 
 test('mcp --repo includes the landing page, rebuilds on every call, and flags a dirty tree', async (t) => {

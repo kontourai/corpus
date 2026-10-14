@@ -297,7 +297,7 @@ test('without a decisions block, check is unchanged even with invalid records', 
   assert.doesNotMatch(result.output, /^  (PASS|FAIL|SKIP|ERROR) (decisions|adr-freeze)/m);
   const alone = await runCli(['decisions', 'check', '--root', repo]);
   assert.equal(alone.status, 2, alone.output);
-  assert.match(alone.stderr, /corpus\.json has no "decisions" block; add "decisions": \{\} \(schemaVersion 2\) to enable the decisions gate/);
+  assert.match(alone.stderr, /corpus\.json has no "decisions" block; add "decisions": \{\} to enable the decisions gate/);
   const write = await runCli(['decisions', 'index', '--root', repo]);
   assert.equal(write.status, 2, write.output);
   assert.equal(existsSync(path.join(repo, 'docs/decisions/index.md')), false);

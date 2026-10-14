@@ -120,7 +120,7 @@ test('init scaffolds a v2 corpus.json whose placeholder purpose fails check, the
 
   const result = await runCli(['init', '--root', root]);
   assert.equal(result.status, 0, result.output);
-  assert.ok(!existsSync(path.join(root, 'docs-kit.json')), 'init must not write the legacy manifest');
+  assert.ok(!existsSync(path.join(root, 'docs-kit.json')), 'init must not write the retired manifest');
   const manifest = JSON.parse(readFileSync(path.join(root, 'corpus.json'), 'utf8'));
   assert.equal(manifest.schemaVersion, 2);
   assert.equal(manifest.product, 'widget');
@@ -192,24 +192,14 @@ test('a purpose that merely starts with TODO is not the placeholder and passes c
   }
 });
 
-test('a v1 manifest skips the purpose gate without changing the exit code', async (t) => {
+test('init refuses while a retired docs-kit.json is present and does not add a second manifest', async (t) => {
   const root = scratch(t);
-  writeFileSync(path.join(root, 'README.md'), '# Sample\n');
-  writeFileSync(path.join(root, 'docs-kit.json'), JSON.stringify({ schemaVersion: 1, product: 'sample', title: 'Sample', repo: 'example/sample', documents: [] }));
-  const check = await runCli(['check', '--root', root]);
-  assert.equal(check.status, 0, check.output);
-  assert.match(check.stdout, /SKIP purpose \(v1 manifest has no purpose\)/);
-  assert.doesNotMatch(check.output, /FAIL/);
-});
-
-test('init refuses to overwrite a legacy docs-kit.json and does not add a second manifest', async (t) => {
-  const root = scratch(t);
-  const legacy = JSON.stringify({ schemaVersion: 1, product: 'old', title: 'Old', repo: 'example/old', documents: [] });
-  writeFileSync(path.join(root, 'docs-kit.json'), legacy);
+  const retired = JSON.stringify({ schemaVersion: 1, product: 'old', title: 'Old', repo: 'example/old', documents: [] });
+  writeFileSync(path.join(root, 'docs-kit.json'), retired);
   const result = await runCli(['init', '--root', root]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /docs-kit\.json already exists; refusing to overwrite it/);
-  assert.equal(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'), legacy);
+  assert.match(result.stderr, /docs-kit\.json is a retired v1 manifest and Corpus no longer reads it; rename it to corpus\.json/);
+  assert.equal(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'), retired);
   assert.ok(!existsSync(path.join(root, 'corpus.json')));
 });
 

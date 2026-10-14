@@ -272,7 +272,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   const purposeFailures = manifest.purpose === INIT_PURPOSE_PLACEHOLDER
     ? [`${manifestFile(root)}: purpose is still the init placeholder; replace it with one sentence saying what this product is for`]
     : [];
-  gates.push(manifest.purpose === undefined ? { name: 'purpose', skipped: 'v1 manifest has no purpose' } : { name: 'purpose', failures: purposeFailures });
+  gates.push({ name: 'purpose', failures: purposeFailures });
   if (purposeFailures.length > 0) raise(EXIT_GATE);
 
   const builtOn = checkBuiltOn(root, manifest);
@@ -359,7 +359,7 @@ export function runDecisionChecks({ root, base = null }) {
     return { exitCode: EXIT_USAGE, gates, manifest: null };
   }
   if (!manifest.decisions)
-    throw new UsageError(`${file} has no "decisions" block; add "decisions": {} (schemaVersion 2) to enable the decisions gate`);
+    throw new UsageError(`${file} has no "decisions" block; add "decisions": {} to enable the decisions gate`);
   runDecisionGates(root, manifest, base, gates, raise);
   return { exitCode, gates, manifest };
 }

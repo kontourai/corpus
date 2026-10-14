@@ -14,7 +14,7 @@ Corpus checks the registry when `corpus.json` (schema v2) declares it:
 | `index` | `<dir>/index.md` | The generated index. It must be a `.md` file directly inside `dir`. |
 | `adr` | absent | Optional. Declaring it freezes the numbered ADR directory `adr.dir` (default `docs/adr`), which must exist. See [Numbered ADRs](#numbered-adrs). |
 
-`"decisions": {}` uses every default and leaves the ADR freeze off. Paths follow the [manifest path rules](../README.md#manifest-reference): repository-relative, POSIX, normalized, and inside the repository. `adr.dir` must not overlap `dir`. Unknown keys are refused, as everywhere in the manifest. A v1 manifest cannot declare `decisions`.
+`"decisions": {}` uses every default and leaves the ADR freeze off. Paths follow the [manifest path rules](../README.md#manifest-reference): repository-relative, POSIX, normalized, and inside the repository. `adr.dir` must not overlap `dir`. Unknown keys are refused, as everywhere in the manifest.
 
 The gate reads `dir` directly. Whether the records are listed in `documents` or matched by `exclude` does not change what it checks; those keys only decide whether the records are published.
 

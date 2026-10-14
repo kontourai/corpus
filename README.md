@@ -85,7 +85,7 @@ The separate [`@kontourai/corpus-conformance`](packages/conformance/README.md) w
 
 ## Manifest reference
 
-Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json` is also read. If both exist, delete `docs-kit.json` to use `corpus.json`, or delete `corpus.json` to retain the legacy name.
+Each repository has a schema v2 `corpus.json` at its root. Corpus no longer reads the retired v1 `docs-kit.json`. If a `docs-kit.json` is present, alone or next to `corpus.json`, `check`, `build`, `locate`, `init`, and `mcp --repo` stop with exit `2` and say what to do: rename it to `corpus.json`, set `"schemaVersion": 2`, and add `purpose` and `builtOn`, or delete the leftover when a `corpus.json` already exists.
 
 ```json
 {
@@ -116,9 +116,9 @@ Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | yes | `2` for new manifests; `1` remains supported with a deprecation warning. |
-| `purpose` | v2 | Non-empty sentence describing the promise to users. The exact sentence `corpus init` writes is refused by `check`. |
-| `builtOn` | v2 | Public-contract building blocks: `{ "product": "id", "via": "package or CLI (or non-empty array)", "for": "use" }`; may be empty. Optional `"evidence": "cli"` and bare `bin` describe command evidence (see below). |
+| `schemaVersion` | yes | Exactly `2`. A manifest with `1` is refused (exit `2`). |
+| `purpose` | yes | Non-empty sentence describing the promise to users. The exact sentence `corpus init` writes is refused by `check`. |
+| `builtOn` | yes | Public-contract building blocks: `{ "product": "id", "via": "package or CLI (or non-empty array)", "for": "use" }`; may be empty. Optional `"evidence": "cli"` and bare `bin` describe command evidence (see below). |
 | `product` | yes | Lowercase slug. It must equal the repository name in `repo`, because the site lives at `https://kontourai.github.io/<product>/` and the hub fetches `/<product>/docs-bundle.json`. |
 | `title` | yes | Display name. |
 | `tagline` | no | One line shown in the site header and on the hub. |
@@ -130,7 +130,7 @@ Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json
 | `redirects` | no | Old page URLs that moved, mapped to their new place. Each key is a site-relative `.html` path; each value is a published source (`path` or `path#anchor`) or an absolute `https://` URL. See [Redirects](#redirects). |
 | `branch` | no | The default branch, for the site's **Edit** links (`https://github.com/<repo>/edit/<branch>/<path>`). Default `main`. It must be a valid git branch name (no whitespace, `..`, `~^:?*[\\`, leading `-` or `/`, or `.lock` component). |
 | `selectionActions` | no | The [selection toolbar](docs/site-output.md#selection-toolbar). Its only key, `primary` (required in the object), is `"ask"` (the default) or `"challenge-issue"`: the action that leads the toolbar. |
-| `decisions` | no (v2) | The [decision registry](docs/decisions.md): `{ "dir": "docs/decisions", "index": "<dir>/index.md", "adr": { "dir": "docs/adr" } }`, every key optional (`{}` uses the defaults). Present, it turns on the `decisions` gate; `adr` also freezes that numbered ADR directory against additions. |
+| `decisions` | no | The [decision registry](docs/decisions.md): `{ "dir": "docs/decisions", "index": "<dir>/index.md", "adr": { "dir": "docs/adr" } }`, every key optional (`{}` uses the defaults). Present, it turns on the `decisions` gate; `adr` also freezes that numbered ADR directory against additions. |
 | `allowLocalPaths` | no | Exact paths of documents (the landing page or `documents` sources) that may contain absolute home-directory paths, such as deliberate examples. The [paths gate](#check) skips them. No globs. |
 
 The validation rules:
@@ -202,13 +202,13 @@ Recognised shell forms are direct `<bin>`, `./node_modules/.bin/<bin>`, `npx [-y
 If a scoped package's executable differs, use a bare `bin` string: `{ "product": "veritas", "via": "@kontourai/governance", "bin": "veritas", "for": "Check governance readiness", "evidence": "cli" }`. `bin` applies to every name in that entry for CLI evidence; it does not change package dependency matching. The check verifies the declared executable is invoked, not that a package actually publishes that executable.
 
 
-1. **manifest:** `corpus.json` (or legacy `docs-kit.json`) is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
+1. **manifest:** `corpus.json` is valid, as described above. If it is invalid, the other gates are skipped and the exit code is `2`.
 2. **links:** every Markdown link and image, and every raw-HTML `href`, `src`, `srcset`, and `poster` (double-quoted, single-quoted, or unquoted), in the landing page and the listed documents (bundle-only ones included) resolves. A reference to a file under `.git/`, through a symlink, or to an untracked or git-ignored file (such as `.env`), is an unpublishable reference and fails. Raw HTML is tokenized with htmlparser2, so HTML comments are ignored, an empty raw `href=""` is allowed, and `srcset` is parsed per the HTML spec, so `data:` URIs stay whole. Relative files must exist, with exact case. A `#anchor` must match a heading slug, or an `id` or `name` attribute in raw HTML, in the target `.md`. External `http(s)` links are not fetched. A leading `/` resolves from `--root` (which is the repository root unless you point `--root` at a subdirectory).
 3. **reachability:** every `docs/**/*.md` is listed in `documents` (with or without `"publish": false`), is the landing page, or is matched by `exclude`.
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
 5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file corpus generates.
 6. **paths:** no absolute home-directory path appears in the landing page or any listed document, bundle-only ones included: `/Users/<name>/`, `/home/<name>/`, or `C:\Users\<name>\` (any drive letter, either slash). The whole Markdown body is scanned as text, so prose, code, links, and raw HTML all count; front matter is not, because it is never published. Each hit is reported as `file:line`. A path inside a URL such as `https://host/home/x/` does not match, and neither does a placeholder name such as `<name>`, `$USER`, or `{user}`. Two non-personal directories are exempt: `/Users/Shared/` (the macOS shared folder) and `/home/runner/` (the GitHub Actions runner home). List a document in `allowLocalPaths` when it needs real example paths.
-7. **purpose:** a v2 manifest's `purpose` is not the exact placeholder sentence that `corpus init` writes (a v1 manifest has no `purpose`, and the gate is reported as skipped). This gate fails with exit `1`, not `2`, so a new adopter still sees every other gate. It compares the whole sentence, not a `TODO` substring.
+7. **purpose:** the manifest's `purpose` is not the exact placeholder sentence that `corpus init` writes. This gate fails with exit `1`, not `2`, so a new adopter still sees every other gate. It compares the whole sentence, not a `TODO` substring.
 8. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
 9. **decisions:** only when the manifest declares `decisions`. Every record in `decisions.dir` is a valid [decision record](docs/decisions.md#record-format) and the index is what `corpus decisions index` would write. The directory is read directly, whatever `documents` and `exclude` say. Fails with exit `1`.
 10. **adr-freeze:** only when the manifest declares `decisions.adr`, and only with `--base`; otherwise it is reported as skipped. A file added under `decisions.adr.dir` since the merge base fails with exit `1`. See [Numbered ADRs](docs/decisions.md#numbered-adrs).
@@ -282,7 +282,7 @@ If more than one state applies, the first one in the table wins.
 corpus init [--root dir]
 ```
 
-`init` writes a schema v2 `corpus.json` with a `purpose` placeholder sentence and an empty `builtOn`. Until you replace the placeholder, `check` fails its `purpose` gate with exit `1` (every other gate still runs), and `build` refuses to build. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest, whether it is named `corpus.json` or the legacy `docs-kit.json`.
+`init` writes a schema v2 `corpus.json` with a `purpose` placeholder sentence and an empty `builtOn`. Until you replace the placeholder, `check` fails its `purpose` gate with exit `1` (every other gate still runs), and `build` refuses to build. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing `corpus.json`, and it refuses while a retired `docs-kit.json` is present.
 
 ## MCP server
 
@@ -302,7 +302,7 @@ The server exposes six read-only tools. Every result carries the source commit `
 The server has three sources:
 
 - `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds whenever the checkout changes, so a long session sees current docs. The cache key is HEAD, a hash of `git status --porcelain`, and the mtime and size of the manifest and each published source. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
-- `--workspace dir` does the same for every immediate subdirectory that contains `corpus.json` or `docs-kit.json`. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
+- `--workspace dir` does the same for every immediate subdirectory that contains `corpus.json`. A subdirectory with only a retired `docs-kit.json` is skipped, with one note on stderr per server, so a stale checkout neither stops the workspace nor disappears silently; one with both files is reported as unavailable. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
 - `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed or malformed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
 
 Claude Code:
