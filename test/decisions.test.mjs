@@ -451,6 +451,19 @@ test('decisions index refuses to overwrite a file that is not a generated index 
   assert.equal(readFileSync(path.join(repo, 'docs/decisions/notes.md'), 'utf8'), '# Notes\n\nHand-written.\n');
 });
 
+test('decisions index replaces a generated index that check calls stale, whatever its line endings', async (t) => {
+  const repo = registryRepo(t, { git: false });
+  await indexed(repo);
+  const file = path.join(repo, 'docs/decisions/index.md');
+  const fresh = readFileSync(file, 'utf8');
+  for (const damaged of [fresh.replace(/\n/g, '\r\n'), `\uFEFF${fresh}`, `<<<<<<< HEAD\n${fresh}=======\nother\n>>>>>>> branch\n`, '']) {
+    writeFileSync(file, damaged);
+    await checkFails(repo, /docs\/decisions\/index\.md is stale/);
+    await indexed(repo);
+    assert.equal(readFileSync(file, 'utf8'), fresh);
+  }
+});
+
 test('decisions index reports invalid records but still writes the index', async (t) => {
   const repo = registryRepo(t, { records: { broken: withStatus('accepted') }, git: false });
   const result = await indexed(repo);

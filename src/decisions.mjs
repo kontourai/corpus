@@ -273,12 +273,25 @@ function assertPlainPath(root, repoPath) {
   });
 }
 
+/**
+ * True for a file the generator may replace: empty, or starting with the
+ * generated frontmatter once a BOM, CRLF line endings, and leading merge
+ * conflict markers are allowed for, which are all states `check` calls stale.
+ */
+function isGeneratedIndex(text) {
+  if (text.trim() === '') return true;
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  while (lines.length > 0 && /^(<{7}|={7}|>{7}|\|{7})( |$)/.test(lines[0])) lines.shift();
+  const [open, title, close] = INDEX_PREFIX.split('\n');
+  return lines[0] === open && lines[1] === title && lines[2] === close;
+}
+
 /** `corpus decisions index`: write the index file, and nothing else. Returns a report line. */
 export function writeDecisionIndex(root, decisions) {
   assertPlainPath(root, decisions.index);
   const existing = readIndex(root, decisions);
   // decisions.index could name a record or any other file; only a previously generated index is replaced.
-  if (existing.state === 'present' && !existing.text.startsWith(INDEX_PREFIX))
+  if (existing.state === 'present' && !isGeneratedIndex(existing.text))
     throw new UsageError(`refusing to overwrite ${decisions.index}: it is not a generated decision index (it does not begin with the generated "title: Decision Index" frontmatter); move it or change decisions.index`);
   const records = readDecisionRecords(root, decisions);
   mkdirSync(toFsPath(root, decisions.dir), { recursive: true });

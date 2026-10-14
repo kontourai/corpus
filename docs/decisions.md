@@ -85,6 +85,7 @@ Now refused, where the earlier parser accepted the text literally:
 - a plain value that YAML cannot read as a plain scalar: one containing `: ` (`subject: Release: channels`), one starting with a reserved character (`` ` ``, `@`, `%`), or one starting with a quote but continuing past it (`subject: "a" and "b"`). Quote the whole value;
 - a value starting with `[` or `{` that is not a valid flow collection, or one that is a mapping where a string belongs (`subject: {x}`);
 - repeated keys (the earlier parser kept the last one), tab indentation, anchors, aliases, and explicit tags;
+- a tab or other control character inside a subject;
 - an empty `supersedes:` (the earlier parser read it as an empty list);
 - a subject with a line break, which double-quoted escapes (`"C:\new"`) and block scalars can now produce.
 
@@ -116,7 +117,7 @@ Numbered ADRs under `docs/adr/` are frozen history and are not listed here.
 | [release-channels](./release-channels.md) | current | Release channels |
 ```
 
-The ADR line appears only when `adr` is declared, with its directory. Rows are sorted by slug; the Decision column is the subject, with `|` escaped. Output is deterministic, so running the command twice changes nothing. The gate fails when the index is missing or differs from what the command would write. It refuses to write through a symlink anywhere on the index path, and it refuses to replace an existing file that does not begin with the generated `title: Decision Index` frontmatter, so a mistaken `index` setting cannot overwrite a record.
+The ADR line appears only when `adr` is declared, with its directory. Rows are sorted by slug; the Decision column is the subject, with `|` escaped. Output is deterministic, so running the command twice changes nothing. The gate fails when the index is missing or differs from what the command would write. It refuses to write through a symlink anywhere on the index path, and it refuses to replace an existing non-empty file that does not begin with the generated `title: Decision Index` frontmatter (a BOM, CRLF line endings, and leading merge-conflict markers are tolerated), so a mistaken `index` setting cannot overwrite a record.
 
 For the 97 existing records, the index is identical to the one the earlier per-repository generator wrote except for header lines 7 and 8, provided `adr` is declared. Without `adr`, line 9 (the ADR line, which the earlier generator always wrote) is also dropped.
 
