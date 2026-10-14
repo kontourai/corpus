@@ -188,8 +188,13 @@ export function globMatcher(globs = []) {
  * Strict corpus.json (schema v2) validation. Returns { manifest, errors }; `manifest` is
  * normalized (landing defaulted, optional arrays defaulted) and only
  * meaningful when `errors` is empty.
+ *
+ * `allowMissingDecisionIndex` is for `corpus decisions index` only: a
+ * `documents` entry naming the declared `decisions.index` may be absent,
+ * because writing that file is the command's job. Every other gate keeps
+ * refusing a missing index.
  */
-export function validateManifest(raw, root, where = MANIFEST_FILE) {
+export function validateManifest(raw, root, where = MANIFEST_FILE, { allowMissingDecisionIndex = false } = {}) {
   const errors = [];
   // First, so a v1 manifest leads with the reason instead of its missing v2 keys.
   if (raw?.schemaVersion === 1) errors.push(`${where}: schemaVersion 1 is no longer supported; ${V2_REMEDY}`);
@@ -250,6 +255,7 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
   if (Object.hasOwn(raw, 'exclude')) checkGlobs(raw.exclude, `${where}: exclude`, errors);
   const isExcluded = Array.isArray(exclude) && exclude.every((glob) => !repoGlobError(glob)) ? globMatcher(exclude) : () => false;
 
+  const pendingIndex = allowMissingDecisionIndex ? declaredDecisionIndex(raw.decisions) : null;
   const sources = new Set();
   const outputs = new Map([['index.html', landing]]);
   const documents = [];
@@ -279,7 +285,8 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
         if (source === landing)
           return errors.push(`${at}.source "${source}" is the landing page; it is already published as index.html`);
         if (isExcluded(source)) errors.push(`${at}.source "${source}" is listed but also matched by exclude`);
-        if (!isRepoFile(root, source)) errors.push(`${at}.source "${source}" does not exist (or is outside the repository)`);
+        if (!isRepoFile(root, source) && !(source === pendingIndex && isAbsent(root, source)))
+          errors.push(`${at}.source "${source}" does not exist (or is outside the repository)`);
         // A bundle-only document (publish: false) has no page, so it cannot collide with one.
         if (document.publish !== false) {
           const output = source.replace(/\.md$/, '.html');
@@ -382,6 +389,28 @@ export function validateManifest(raw, root, where = MANIFEST_FILE) {
 
 export const DEFAULT_DECISIONS_DIR = 'docs/decisions';
 export const DEFAULT_ADR_DIR = 'docs/adr';
+
+/**
+ * The index path a raw `decisions` block names, before validation (null when
+ * it names none). The block is still validated in full, so a malformed one
+ * fails the manifest either way.
+ */
+function declaredDecisionIndex(value) {
+  if (!isPlainObject(value)) return null;
+  const dir = Object.hasOwn(value, 'dir') ? value.dir : DEFAULT_DECISIONS_DIR;
+  const index = Object.hasOwn(value, 'index') ? value.index : `${dir}/index.md`;
+  return typeof index === 'string' ? index : null;
+}
+
+/** True only when nothing at all is at the repo-relative path: not a symlink, directory, or other file. */
+function isAbsent(root, repoPath) {
+  try {
+    lstatSync(toFsPath(root, repoPath));
+    return false;
+  } catch (error) {
+    return error.code === 'ENOENT' || error.code === 'ENOTDIR';
+  }
+}
 
 /** null when nothing is at the repo-relative path; otherwise whether it is a real directory inside the repository. */
 function directoryState(root, repoPath) {
@@ -515,8 +544,8 @@ export function readManifestJson(root) {
 }
 
 /** Load and validate; throws UsageError listing every manifest problem. */
-export function loadManifest(root) {
-  const { manifest, errors } = validateManifest(readManifestJson(root), root, manifestFile(root));
+export function loadManifest(root, options = {}) {
+  const { manifest, errors } = validateManifest(readManifestJson(root), root, manifestFile(root), options);
   if (errors.length > 0)
     throw new UsageError(`${manifestFile(root)} is invalid:\n${errors.map((error) => `  - ${error}`).join('\n')}`);
   return manifest;
