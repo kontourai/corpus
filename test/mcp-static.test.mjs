@@ -142,9 +142,13 @@ test('mcp --bundle refuses a malformed, dangling, cyclic, unreadable, or combine
     [variant((topics) => (topics[1].tags = ['ok', ''])), /topics\[1\]\.tags must be an array of non-empty strings/],
     [variant((topics) => (topics[1].summary = 7)), /topics\[1\]\.summary must be a string/],
     [variant((topics) => (topics[1].parentId = '')), /topics\[1\]\.parentId must be a non-empty string/],
-    // [a<-b, b<-a, a, b]: a later duplicate must not paper over the cycle the first two make.
+    // [a<-b, b<-a, a, b] with the later a and b roots: if the later duplicates won, the cycle the first two make would pass.
     [
-      variant((topics) => topics.splice(0, topics.length, { ...topics[0], parentId: 'evidence-gates' }, { ...topics[1], parentId: 'workflows' }, { ...topics[0] }, { ...topics[1] })),
+      variant((topics) => {
+        const root = ({ parentId, ...topic }) => topic;
+        const [a, b] = [root(topics[0]), root(topics[1])];
+        topics.splice(0, topics.length, { ...a, parentId: b.id }, { ...b, parentId: a.id }, a, b);
+      }),
       /topics\[2\]\.id "workflows" is used more than once/,
     ],
   ];
