@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "sample",
   "title": "Sample",
   "tagline": "A fixture product with a bundle-only manual",
   "repo": "kontourai/sample",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "landing": "README.md",
   "documents": [
     { "source": "docs/guide.md", "section": "Guides" },

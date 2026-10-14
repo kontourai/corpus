@@ -45,9 +45,9 @@ test('check rejects a topic whose anchor does not resolve (exit 1)', async () =>
 test('check refuses unknown manifest keys at every level (exit 2)', async () => {
   const result = await runCli(['check', '--root', fixture('unknown-key')]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /docs-kit\.json: unknown key "sections"/);
+  assert.match(result.stderr, /corpus\.json: unknown key "sections"/);
   assert.match(result.stderr, /documents\[0\]: unknown key "order"/);
-  assert.match(result.stderr, /SKIP links \(docs-kit\.json is invalid\)/);
+  assert.match(result.stderr, /SKIP links \(corpus\.json is invalid\)/);
 });
 
 test('check refuses v2 without required purpose (exit 2)', async () => {
@@ -71,8 +71,8 @@ test('check refuses a listed document that is a symlink out of the repository (e
   writeFileSync(path.join(repo, 'README.md'), '# Repo\n');
   symlinkSync(path.join(dir, 'outside.md'), path.join(repo, 'docs', 'escape.md'));
   writeFileSync(
-    path.join(repo, 'docs-kit.json'),
-    JSON.stringify({ schemaVersion: 1, product: 'repo', title: 'Repo', repo: 'kontourai/repo', documents: [{ source: 'docs/escape.md', section: 'Guide' }] }),
+    path.join(repo, 'corpus.json'),
+    JSON.stringify({ schemaVersion: 2, product: 'repo', title: 'Repo', repo: 'kontourai/repo', purpose: 'A fixture.', builtOn: [], documents: [{ source: 'docs/escape.md', section: 'Guide' }] }),
   );
   const result = await runCli(['check', '--root', repo]);
   assert.equal(result.status, 2, result.output);
@@ -92,10 +92,11 @@ test('check reports every failing gate, not only the first', async (t) => {
 test('check without a manifest is a usage error (exit 2) that names corpus.json', async (t) => {
   const result = await runCli(['check', '--root', scratch(t)]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /no corpus\.json \(or legacy docs-kit\.json\) in /);
+  assert.match(result.stderr, /no corpus\.json in .*\(run "corpus init" to scaffold one\)/);
+  assert.doesNotMatch(result.stderr, /docs-kit\.json/);
 });
 
-test('validateManifest without a file name labels problems with corpus.json, not the legacy name', () => {
+test('validateManifest without a file name labels problems with corpus.json, not the retired name', () => {
   const { errors } = validateManifest({ schemaVersion: 2 }, FIXTURES);
   assert.ok(errors.length > 0);
   for (const error of errors) assert.match(error, /^corpus\.json: /);
@@ -104,7 +105,7 @@ test('validateManifest without a file name labels problems with corpus.json, not
 test('mcp --repo without a manifest names corpus.json as the expected file (exit 2)', async (t) => {
   const result = await runCli(['mcp', '--repo', scratch(t)]);
   assert.equal(result.status, 2, result.output);
-  assert.match(result.stderr, /no corpus\.json \(or legacy docs-kit\.json\) in /);
+  assert.match(result.stderr, /no corpus\.json in .*\(run "corpus init" to scaffold one\)/);
 });
 
 test('freshness: a covered change without a doc change is stale (exit 1); --advisory warns (exit 0)', async (t) => {
@@ -177,7 +178,7 @@ test('freshness uses the merge base, so main moving ahead does not mark docs sta
 });
 
 function editManifest(repo, edit) {
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   edit(manifest);
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);

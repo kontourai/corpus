@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { originRepo } from './git.mjs';
-import { DEFAULT_LANDING, INIT_PURPOSE_PLACEHOLDER, PREFERRED_MANIFEST_FILE, manifestFile } from './manifest.mjs';
+import { DEFAULT_LANDING, INIT_PURPOSE_PLACEHOLDER, manifestFile } from './manifest.mjs';
 import { isRepoFile, listMarkdownFiles } from './paths.mjs';
 
 function titleCase(value) {
@@ -23,11 +23,13 @@ function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '') || 'product';
 }
 
-/** `corpus init`: write a starter v2 corpus.json; never overwrite a manifest of either name. */
+/**
+ * `corpus init`: write a starter v2 corpus.json. Never overwrites one, and
+ * refuses while a retired docs-kit.json is present (manifestFile throws).
+ */
 export function runInit({ root }) {
-  const target = path.join(root, PREFERRED_MANIFEST_FILE);
-  const existing = path.join(root, manifestFile(root));
-  if (existsSync(existing)) throw new UsageError(`${existing} already exists; refusing to overwrite it`);
+  const target = path.join(root, manifestFile(root));
+  if (existsSync(target)) throw new UsageError(`${target} already exists; refusing to overwrite it`);
 
   const repo = originRepo(root) ?? `kontourai/${slugify(path.basename(path.resolve(root)))}`;
   const product = repo.split('/')[1];

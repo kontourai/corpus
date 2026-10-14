@@ -1,8 +1,10 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "missing-anchor",
   "title": "missing-anchor",
   "tagline": "Rejection fixture",
   "repo": "kontourai/missing-anchor",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "documents": [{ "source": "docs/a.md", "section": "Guide" }, { "source": "docs/b.md", "section": "Guide" }]
 }

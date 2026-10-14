@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "sample",
   "title": "Sample",
   "tagline": "A fixture for the selection toolbar",
   "repo": "kontourai/sample",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "landing": "README.md",
   "branch": "trunk",
   "documents": [

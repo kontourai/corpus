@@ -56,8 +56,10 @@ test('build rewrites links between published docs and sends unpublished files to
 test('build writes docs-bundle.json with the contract fields', async (t) => {
   const { read, sha } = await buildValid(t);
   const bundle = JSON.parse(read('docs-bundle.json'));
-  assert.deepEqual(Object.keys(bundle), ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'sha', 'builtAt', 'siteUrl', 'digest', 'documents', 'topics']);
-  assert.equal(bundle.schemaVersion, 1);
+  assert.deepEqual(Object.keys(bundle), ['schemaVersion', 'purpose', 'builtOn', 'product', 'title', 'tagline', 'repo', 'sha', 'builtAt', 'siteUrl', 'digest', 'documents', 'topics']);
+  assert.equal(bundle.schemaVersion, 2);
+  assert.equal(bundle.purpose, 'A fixture product for Corpus tests.');
+  assert.deepEqual(bundle.builtOn, []);
   assert.equal(bundle.product, 'sample');
   assert.equal(bundle.tagline, 'A fixture product for docs-kit tests');
   assert.equal(bundle.repo, 'kontourai/sample');

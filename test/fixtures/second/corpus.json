@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "second",
   "title": "Second",
   "tagline": "Another fixture product",
   "repo": "kontourai/second",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "documents": [
     { "source": "docs/one.md", "section": "Guide" },
     { "source": "docs/two.md", "section": "Guide" }

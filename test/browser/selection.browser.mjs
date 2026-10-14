@@ -34,7 +34,7 @@ before(async () => {
   sha = commitAll(repo, 'fixture');
   await buildSite(repo, path.join(work, 'site', 'sample'));
   // The same docs with the challenge-issue primary action, served at /challenge/.
-  const manifestFile = path.join(repo, 'docs-kit.json');
+  const manifestFile = path.join(repo, 'corpus.json');
   writeFileSync(manifestFile, JSON.stringify({ ...JSON.parse(readFileSync(manifestFile, 'utf8')), selectionActions: { primary: 'challenge-issue' } }));
   commitAll(repo, 'challenge primary');
   await buildSite(repo, path.join(work, 'site', 'challenge'));

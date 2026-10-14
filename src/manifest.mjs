@@ -4,17 +4,35 @@ import picomatch from 'picomatch';
 import { UsageError } from './errors.mjs';
 import { isRepoFile, repoGlobError, repoPathError, statInRepo } from './paths.mjs';
 
-export const MANIFEST_FILE = 'docs-kit.json';
-export const PREFERRED_MANIFEST_FILE = 'corpus.json';
-export const MANIFEST_FILES = [PREFERRED_MANIFEST_FILE, MANIFEST_FILE];
+export const MANIFEST_FILE = 'corpus.json';
+/** The v1 manifest name. Corpus no longer reads it; its presence alone is a usage error. */
+export const RETIRED_MANIFEST_FILE = 'docs-kit.json';
+
+/** What a v1 manifest needs to become a v2 corpus.json; shared by every refusal. */
+const V2_REMEDY = 'set "schemaVersion": 2, and add "purpose" (one sentence on what the product is for) and "builtOn" (the Kontour products it builds on, or [])';
 
 /** The `purpose` that `corpus init` writes. `check` refuses a manifest whose purpose is exactly this text. */
 export const INIT_PURPOSE_PLACEHOLDER = 'TODO: replace with one sentence on the promise this product makes to its users.';
 
+/**
+ * The manifest file name for `root`: always corpus.json. A docs-kit.json is
+ * refused even next to a corpus.json, so a leftover v1 file can never be read
+ * by mistake or disagree silently with the manifest that is.
+ */
 export function manifestFile(root) {
-  const found = MANIFEST_FILES.filter((name) => existsSync(path.join(root, name)));
-  if (found.length === 2) throw new UsageError('both corpus.json and docs-kit.json exist; delete docs-kit.json to use corpus.json, or delete corpus.json to keep docs-kit.json');
-  return found[0] ?? MANIFEST_FILE;
+  const retired = path.join(root, RETIRED_MANIFEST_FILE);
+  if (existsSync(retired)) {
+    if (existsSync(path.join(root, MANIFEST_FILE)))
+      throw new UsageError(
+        `${retired} is a retired v1 manifest and Corpus no longer reads it, but it sits next to ${MANIFEST_FILE}; ` +
+          `delete ${RETIRED_MANIFEST_FILE} (move anything still needed into ${MANIFEST_FILE} first)`,
+      );
+    throw new UsageError(
+      `${retired} is a retired v1 manifest and Corpus no longer reads it; rename it to ${MANIFEST_FILE}, ${V2_REMEDY}. ` +
+        `Or move it aside and run "corpus init" to scaffold a v2 ${MANIFEST_FILE}`,
+    );
+  }
+  return MANIFEST_FILE;
 }
 
 export const DEFAULT_LANDING = 'README.md';
@@ -23,8 +41,8 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths'];
-const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths', 'purpose', 'builtOn'];
+const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents', 'purpose', 'builtOn'];
 const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers', 'publish'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
 const TOPIC_KEYS = ['id', 'title', 'source'];
@@ -167,20 +185,20 @@ export function globMatcher(globs = []) {
 }
 
 /**
- * Strict manifest (corpus.json or legacy docs-kit.json) validation. Returns { manifest, errors }; `manifest` is
+ * Strict corpus.json (schema v2) validation. Returns { manifest, errors }; `manifest` is
  * normalized (landing defaulted, optional arrays defaulted) and only
  * meaningful when `errors` is empty.
  */
-export function validateManifest(raw, root, where = PREFERRED_MANIFEST_FILE) {
+export function validateManifest(raw, root, where = MANIFEST_FILE) {
   const errors = [];
-  const v2 = raw?.schemaVersion === 2;
-  if (!checkKeys(raw, where, v2 ? [...MANIFEST_KEYS, 'purpose', 'builtOn'] : MANIFEST_KEYS, v2 ? [...MANIFEST_REQUIRED, 'purpose', 'builtOn'] : MANIFEST_REQUIRED, errors)) return { manifest: null, errors };
+  // First, so a v1 manifest leads with the reason instead of its missing v2 keys.
+  if (raw?.schemaVersion === 1) errors.push(`${where}: schemaVersion 1 is no longer supported; ${V2_REMEDY}`);
+  else if (isPlainObject(raw) && Object.hasOwn(raw, 'schemaVersion') && raw.schemaVersion !== 2)
+    errors.push(`${where}: schemaVersion must be 2 (got ${JSON.stringify(raw.schemaVersion)})`);
+  if (!checkKeys(raw, where, MANIFEST_KEYS, MANIFEST_REQUIRED, errors)) return { manifest: null, errors };
 
-  if (Object.hasOwn(raw, 'schemaVersion') && ![1, 2].includes(raw.schemaVersion))
-    errors.push(`${where}: schemaVersion must be 1 or 2 (got ${JSON.stringify(raw.schemaVersion)})`);
-
-  if (v2) {
-    checkString(raw.purpose, `${where}: purpose`, errors);
+  if (Object.hasOwn(raw, 'purpose')) checkString(raw.purpose, `${where}: purpose`, errors);
+  if (Object.hasOwn(raw, 'builtOn')) {
     if (!Array.isArray(raw.builtOn)) errors.push(`${where}: builtOn must be an array`);
     else raw.builtOn.forEach((entry, index) => {
       const at = `${where}: builtOn[${index}]`;
@@ -340,7 +358,8 @@ export function validateManifest(raw, root, where = PREFERRED_MANIFEST_FILE) {
   return {
     manifest: {
       schemaVersion: raw.schemaVersion,
-      ...(v2 ? { purpose: raw.purpose, builtOn: raw.builtOn } : {}),
+      purpose: raw.purpose,
+      builtOn: raw.builtOn,
       product: raw.product,
       title: raw.title,
       tagline: raw.tagline ?? '',
@@ -423,7 +442,7 @@ export function duplicateRedirectKeys(text) {
   return duplicates;
 }
 
-/** Read and parse the manifest (corpus.json, else legacy docs-kit.json). A missing or unparseable file is a usage error. */
+/** Read and parse corpus.json. A missing, unparseable, or retired (docs-kit.json) manifest is a usage error. */
 export function readManifestJson(root) {
   const file = path.join(root, manifestFile(root));
   let text;
@@ -431,13 +450,11 @@ export function readManifestJson(root) {
     text = readFileSync(file, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT')
-      throw new UsageError(`no ${PREFERRED_MANIFEST_FILE} (or legacy ${MANIFEST_FILE}) in ${root} (run "corpus init" to scaffold one)`);
+      throw new UsageError(`no ${MANIFEST_FILE} in ${root} (run "corpus init" to scaffold one)`);
     throw new UsageError(`cannot read ${file}: ${error.message}`);
   }
   try {
-    const raw = JSON.parse(text);
-    if (raw?.schemaVersion === 1) process.stderr.write('Corpus: manifest schema v1 is deprecated; migrate to v2 with purpose and builtOn.\n');
-    return raw;
+    return JSON.parse(text);
   } catch (error) {
     throw new UsageError(`${file} is not valid JSON: ${error.message}`);
   }

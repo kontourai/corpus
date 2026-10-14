@@ -1,8 +1,10 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "broken-generated-link",
   "title": "broken-generated-link",
   "tagline": "Rejection fixture",
   "repo": "kontourai/broken-generated-link",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "documents": [{ "source": "docs/a.md", "section": "Guide" }]
 }

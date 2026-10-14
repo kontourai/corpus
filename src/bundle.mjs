@@ -120,8 +120,10 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
     }),
   };
   return {
-    schemaVersion: manifest.schemaVersion === 2 ? 2 : 1,
-    ...(manifest.schemaVersion === 2 ? { purpose: manifest.purpose, builtOn: manifest.builtOn } : {}),
+    // Only v2 manifests load, so build writes only v2 bundles; readers still accept published v1 bundles.
+    schemaVersion: 2,
+    purpose: manifest.purpose,
+    builtOn: manifest.builtOn,
     product: manifest.product,
     title: manifest.title,
     tagline: manifest.tagline,
