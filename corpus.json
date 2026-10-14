@@ -28,6 +28,15 @@
       ]
     },
     {
+      "source": "docs/decisions.md",
+      "section": "Reference",
+      "covers": [
+        "src/decisions.mjs",
+        "schemas/decision-record.schema.json",
+        "packages/conformance/decision-records.json"
+      ]
+    },
+    {
       "source": "AGENTS.md",
       "section": "Contribute"
     },
@@ -80,6 +89,11 @@
       "id": "adoption",
       "title": "Adopting Corpus in a repo",
       "source": "README.md#adopting-corpus-in-a-repo"
+    },
+    {
+      "id": "decisions",
+      "title": "Decision records and the ADR freeze",
+      "source": "docs/decisions.md"
     },
     {
       "id": "bundle-format",

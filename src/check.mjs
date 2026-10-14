@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
+import { checkAdrFreeze, validateDecisions } from './decisions.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
 import { INIT_PURPOSE_PLACEHOLDER, manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
@@ -293,6 +294,8 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     if (failures.length > 0) raise(EXIT_GATE);
   }
 
+  if (manifest.decisions) runDecisionGates(root, manifest, freshness ? base : undefined, gates, raise);
+
   if (freshness && base !== null) {
     try {
       const { failures, changedCount } = checkFreshness(root, manifest, base);
@@ -311,8 +314,58 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   return { exitCode, gates, manifest, read };
 }
 
-export function formatCheckReport({ gates, exitCode }, root) {
-  const lines = [`docs-kit check ${root}`];
+/**
+ * Gate 9 (`decisions`): every decision record is valid and the index is
+ * fresh. Gate 10 (`adr-freeze`, when `decisions.adr` is declared): no file was
+ * added under the frozen ADR directory since `base`. With base === null the
+ * freeze is reported as skipped; with base === undefined (build) it is omitted.
+ */
+function runDecisionGates(root, manifest, base, gates, raise) {
+  const { records, failures } = validateDecisions(root, manifest.decisions);
+  gates.push({ name: 'decisions', failures, note: `${records.length} record${records.length === 1 ? '' : 's'} in ${manifest.decisions.dir}` });
+  if (failures.length > 0) raise(EXIT_GATE);
+  if (!manifest.decisions.adr || base === undefined) return;
+  if (base === null) {
+    gates.push({ name: 'adr-freeze', skipped: `pass --base <git-ref> to refuse ADRs added under ${manifest.decisions.adr.dir}` });
+    return;
+  }
+  try {
+    const frozen = checkAdrFreeze(root, manifest.decisions, base);
+    gates.push({ name: 'adr-freeze', failures: frozen, note: `${manifest.decisions.adr.dir} against ${base}` });
+    if (frozen.length > 0) raise(EXIT_GATE);
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error;
+    gates.push({ name: 'adr-freeze', error: error.message });
+    raise(EXIT_USAGE);
+  }
+}
+
+/**
+ * `corpus decisions check`: the manifest, then only the decisions gates.
+ * Exit codes match `check`. A manifest without a `decisions` block is a
+ * configuration error, so a required lane never passes by checking nothing.
+ */
+export function runDecisionChecks({ root, base = null }) {
+  const gates = [];
+  let exitCode = EXIT_OK;
+  const raise = (code) => {
+    exitCode = Math.max(exitCode, code);
+  };
+  const file = manifestFile(root);
+  const { manifest, errors } = validateManifest(readManifestJson(root), root, file);
+  gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
+  if (errors.length > 0) {
+    gates.push({ name: 'decisions', skipped: `${file} is invalid` });
+    return { exitCode: EXIT_USAGE, gates, manifest: null };
+  }
+  if (!manifest.decisions)
+    throw new UsageError(`${file} has no "decisions" block; add "decisions": {} (schemaVersion 2) to enable the decisions gate`);
+  runDecisionGates(root, manifest, base, gates, raise);
+  return { exitCode, gates, manifest };
+}
+
+export function formatCheckReport({ gates, exitCode }, root, { title = 'docs-kit check' } = {}) {
+  const lines = [`${title} ${root}`];
   for (const gate of gates) {
     if (gate.skipped) {
       lines.push(`  SKIP ${gate.name} (${gate.skipped})`);
@@ -329,8 +382,8 @@ export function formatCheckReport({ gates, exitCode }, root) {
     for (const warning of gate.warnings ?? []) lines.push(`    warning: ${warning}`);
   }
   const failed = gates.reduce((sum, gate) => sum + (gate.failures?.length ?? 0) + (gate.error ? 1 : 0), 0);
-  if (exitCode === EXIT_OK) lines.push('docs-kit check passed');
-  else if (exitCode === EXIT_USAGE) lines.push(`docs-kit check: configuration error (${failed} problem${failed === 1 ? '' : 's'})`);
-  else lines.push(`docs-kit check failed: ${failed} failure${failed === 1 ? '' : 's'}`);
+  if (exitCode === EXIT_OK) lines.push(`${title} passed`);
+  else if (exitCode === EXIT_USAGE) lines.push(`${title}: configuration error (${failed} problem${failed === 1 ? '' : 's'})`);
+  else lines.push(`${title} failed: ${failed} failure${failed === 1 ? '' : 's'}`);
   return lines.join('\n');
 }

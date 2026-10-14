@@ -1,0 +1,202 @@
+---
+status: current
+subject: Trust-reconcile and delivery reconciliation
+decided: 2026-10-11
+evidence:
+  - kind: issue
+    ref: https://github.com/kontourai/flow-agents/issues/1094
+  - kind: adr
+    ref: docs/adr/0020-trust-reconcile-manifest-and-claim-classification.md
+  - kind: adr
+    ref: docs/adr/0022-fail-closed-delivery-reconciliation-with-governed-exemptions.md
+  - kind: doc
+    ref: docs/coordination-guide.md
+  - kind: doc
+    ref: docs/verifiable-trust.md
+---
+# Trust-reconcile and delivery reconciliation
+
+## Retired as a CI check (2026-10-11)
+
+**Decision.** The CI trust anchor is retired. The Trust Reconcile workflow, the `trust-verify`
+composite action, CI attestation minting (`scripts/ci/mint-attestation.js`), the `flow-agents
+verify` subcommand, the `delivery/DECLARED` exemption marker, and the unstarted-delivery Stop
+advisory are removed. Agents are no longer asked to keep a delivery bundle or an exemption entry
+current so that a CI reconcile step passes. A repository's own required checks, re-run on the
+exact pull request head, are the external boundary.
+
+**Rationale.** In the owner's measurement across the 16 repositories that ran the anchor, it
+consumed roughly 90 runner-hours per ~100 runs per repository with 30–83% failure rates, and those
+failures were overwhelmingly exemption-scope bookkeeping or verify failures the required lanes
+already caught. In about 200 sampled failures exactly one was a claimed-versus-observed
+divergence, and it was a flake. No consuming repository's default-branch protection listed it as
+a required check (checked against each repository's branch protection on 2026-10-11). Its only
+unique step reconciled claims that the required lanes re-run anyway.
+
+**What stays, and why.** The Hachure `trust.bundle` format, the session writer, the Stop gate's
+local evidence checks, checkpoint sealing, and `flow-agents workflow publish-delivery` remain:
+`flow-agents merge-change` still requires the delivering session's terminal companions committed
+at the exact head. `scripts/ci/trust-reconcile.js` remains as the home of the manifest helpers the
+runtime loads for evidence admission and the local `reconcile-preflight`. Retiring the
+delivery-commit step from the Builder lifecycle (and with it the remaining reconcile helpers and
+the provisional-delivery verbs) is a separate lifecycle decision, not made here.
+
+Everything below records the decision as it stood before the retirement.
+
+## Before 2026-10-11
+
+**Decision.** Delivery is **fail-closed with governed exemptions**. `publishDelivery()` passes a
+bundle through three distinct, type-discriminated tiers — fail-soft (absent bundle tolerated) →
+shape gate (`InvalidBundleShapeError`, #356) → hold gate (`NotFreshHolderError`, #293) — and CI's
+reconcile is fail-closed by default (`onUnderivable: 'fail'`). A local `reconcile-preflight`
+mirrors CI's shape check via the *shared* `scripts/lib/reconcile-shape.js` so the two cannot
+drift. Concurrent deliveries are isolated by **per-session paths** (`delivery/<slug>/`, #379), and
+a checkpoint's `commit_sha` must be an ancestor of HEAD (seal-at-parent) so a stale bundle can't be
+replayed onto a moved branch. See the [coordination guide](../coordination-guide.md#how-delivery-itself-is-made-tamper-resistant).
+
+**Rationale.** The default must be safe: an underivable status fails the run rather than passing
+it, and a hard block on the shared publish path is applied only on high-confidence signals so it
+never false-blocks legitimate work. The frozen ADRs ([0020](../adr/0020-trust-reconcile-manifest-and-claim-classification.md),
+[0022](../adr/0022-fail-closed-delivery-reconciliation-with-governed-exemptions.md)) hold the
+immutable rationale.
+
+## Delivery provenance is an attestation, not a claim (2026-07-29, #1094)
+
+**Decision.** A delivery's provenance is established by a **signed attestation whose subject digest
+matches this commit's trust bundle and whose predicate records `reconciled`** — not by anyone
+saying the gate passed. The gate's own signature is the evidence.
+
+**Scope, deliberately.** This decides the *core* primitive: the attestation, the digest binding,
+and the tier below. It does **not** decide what any particular outcome means. "Merge-ready" is a
+**Builder Kit** notion — the composition of gates that kit considers sufficient to merge — not a
+generic Flow concept, and it is defined by the kit, in terms of these primitives. A different kit
+composes the same evidence into a different outcome. Core supplies provable provenance; kits
+interpret it. (The core-vs-kit boundary itself remains a `needs-decision` stub with provenance in
+frozen [ADR 0014](../adr/0014-core-vs-domain-kit-boundary.md); this record does not resolve it, and
+deliberately stays on the core side of it.)
+
+The machinery for this already existed and was going to waste. `scripts/ci/mint-attestation.js`
+signs an in-toto v1 statement over `delivery/trust.bundle`'s sha256 via Sigstore keyless (Fulcio +
+Rekor), with predicate `{commit_sha, canonical_commands, reconciled, built_at}` — then uploads it
+as a build artifact that **nothing consumes**. The unfakeable object expired while the fakeable one
+(a self-asserted claim) was what travelled onward. Making the attestation the gate's *output*
+rather than its byproduct closes that, and costs no new cryptography.
+
+**Provenance tiers.** Every delivery sits at exactly one, and the tier is a fact about evidence,
+never a description of intent:
+
+| tier | means | available |
+| --- | --- | --- |
+| `self-asserted` | a claim with no signature and no binding to content | always, and worth little |
+| `self-attested` | signed locally over the bundle digest, carrying `commit_sha` + `canonical_commands` | now, at zero cost — a local signing identity already exists |
+| `independently-verified` | a second party re-ran canonical verification and signed the result | wherever CI runs |
+
+`derive-claim-status.mjs` already refuses to trust a bundle's self-reported `claim.status` and
+re-derives it from the bundle's own evidence. The tiers extend that posture from a claim's *status*
+to a delivery's *provenance*: in both cases the assertion is not the evidence.
+
+**Exemptions become the explicitly-unattested path.** `delivery/DECLARED` stays — a fail-closed
+gate with no relief valve gets bypassed in worse ways — but an exemption is now understood as
+recording `self-asserted`, not as an equivalent to passing. It should be countable and visible
+after merge rather than invisible once merged, which is the property it lacks today.
+
+**Rationale.** A self-asserted approval is the same defect as a fabricated receipt, one layer up:
+unverifiable by anyone, indistinguishable from an earned one. The tier does not make dishonesty
+impossible — anyone holding a token can still assert — but it makes an assertion unable to wear an
+authority trace it did not earn.
+
+**Repo-dependent, deliberately.** Requiring a given tier is a kit/repo policy choice, not a core
+rule — requiring `independently-verified` everywhere would block private repos whose CI is off for
+cost reasons. The tier is the design that survives both states: a repo
+with free CI (public) can require the top tier today; one without sits at `self-attested` and its
+records say so. Nothing about the model changes when CI resumes — the top tier simply starts being
+reachable. Console renders the same tier the gate enforces, so the read surface is a view of the
+gate's evidence rather than a second, softer judgement
+(see [console-record-delivery](./console-record-delivery.md)).
+
+## Implementation note (#356, iteration 1)
+
+A local, pre-push `reconcile-preflight` now exists (`workflow-sidecar reconcile-preflight
+<artifact-dir>`), reusing — never forking — the shape-classification logic CI's
+`scripts/ci/trust-reconcile.js` enforces via the shared `scripts/lib/reconcile-shape.js`
+module. `publishDelivery()` is itself fail-closed on shape-invalidity: it calls the same
+preflight before copying anything into `delivery/`, and refuses to publish a bundle that
+fails the shape check.
+
+The reduced-coverage degradation (trusting a session-local claim's self-reported status when
+CI-side re-derivation is unavailable) is a **LOCAL-preflight-only** opt-in
+(`sessionLocalShapeIssues(..., { onUnderivable: 'reduce' })`). CI's `trust-reconcile.js`
+always calls the shared function with `{ onUnderivable: 'fail' }` (also the function's
+default when no mode is given) and remains fail-closed: when status re-derivation is
+unavailable, every session-local pass-asserting claim becomes a `status-underivable`
+divergence and the run fails, exactly as before the shape logic was extracted.
+
+## Implementation note (#379, per-session delivery paths)
+
+Concurrent deliveries no longer contend on a shared `delivery/trust.bundle`. Each session writes
+its bundle under `delivery/<slug>/`; CI selects prefer-newest. Publishing must **restore sibling
+`delivery/<slug>/` directories** from `origin/main` before committing — after a soft-reset,
+`git add -A` would otherwise stage the deletion of other sessions' delivery dirs that the branch
+predates. This is the standard step in the publish sequence documented in the coordination guide.
+
+## Command observation provenance is item-level (#1081)
+
+`commit_sha` on a delivery checkpoint or attestation is aggregate publication provenance: it binds
+the checkpoint/bundle transport as a whole at seal time. It is not a statement that any individual
+command ran at that commit, and it must not be used as one. Individual command provenance lives in
+the runtime-authoritative `trust.bundle`: a confirming command observation carries
+`observed_at_commit`, `worktree_clean`, and the exact observation-time
+`verification_workspace_snapshot`.
+
+At gate evaluation, every item offered as passing proof must have captured a well-formed commit,
+a `true` cleanliness value, and a clean Git-worktree snapshot. Trusted Git must resolve that
+commit and establish it as an ancestor of trusted current `HEAD`; then the item's snapshot must
+equal the current canonical snapshot. This is intentionally a conjunction: ancestry alone does
+not prove the bytes are unchanged, and exact snapshot comparison does not replace history
+ancestry. Dirty, missing, unavailable, malformed, unrelated, or unresolved/shallow provenance is
+`not_verified` and cannot be upgraded by a checkpoint, waiver, aggregate `commit_sha`, or a
+version 1 record. Version 1 records are rejected and require re-recording under v2.
+
+The `workflow-evidence` schema v2 projects the same per-command fields for
+consumers. It is not a runtime reconciliation authority. Version 1 is rejected; runtime decisions
+continue to derive from `trust.bundle`.
+
+## Implementation note (#1422, status function versions)
+
+Surface 5 moved the default status function from `"2"` to `"3"` (omission fails closed) and keeps
+`"2"` selectable for re-deriving records made under it. The writer stamps the version it derived
+with into every bundle's `source` (`flow-agents/workflow-sidecar;statusFunctionVersion=<v>`), and
+re-derivation of a stored bundle — `derive-claim-status.mjs` for CI and `reconcile-preflight`, and
+`workflow-sidecar claim` — uses that stamp, through the shared
+`scripts/lib/status-function-version.js`, so a committed delivery reconciles to the verdict it was
+written with.
+
+- **No stamp** derives under the installed Surface's current version. No flow-agents writer has
+  emitted an unstamped bundle, and leaving the stamp out must never select the more lenient rules.
+- **A stamp the installed Surface cannot evaluate**, or a malformed one (empty, repeated), is
+  refused: every claim is reported underivable and the reason goes to stderr. CI then refuses each
+  session-local claim that asserts a pass or a failure; command-reconciled claims do not consult the
+  derived status. A status derived with an algorithm the producer did not use is not that bundle's
+  status.
+- **`"1"` is the one exact exception.** Surface < 1.2.0 implemented status function `"1"`, and the
+  first writers stamped it for about a day; test fixtures still carry it. `"1"` and `"2"` differ in
+  three inputs only: a `revoked` event status, an `invalidation` event, and a claim-intrinsic
+  `expiresAt`/`ttlSeconds` window (compared on the Surface 1.1.0 and 1.2.0 sources). A `"1"` bundle
+  with none of them is re-derived under `"2"`, which is what every reader did before this change; one
+  with any of them is refused.
+- **Accepted residual.** The stamp is producer-written, so any bundle can claim `"2"`. Honouring it
+  is unavoidable while installed writers on Surface 2.x keep producing honest `"2"` bundles; a
+  floor on the accepted version is a separate, owner-level policy decision.
+
+- **Readers that stay on the installed default, deliberately.** The Stop hook's gate re-derivation
+  (`stop-goal-fit.js`), checkpoint sealing, `render-trust-panel` and gate-review inquiries read the
+  live session bundle, which the current writer rebuilds and restamps on every write; they are not
+  reconciling a past delivery. The hook acts only on `disputed`/`rejected`, which `"3"` reaches in
+  strictly more cases, never fewer.
+
+Critique claims carry the reviewer's verdict as `attestation` evidence, linked from the verdict
+event, and their policy requires it. Under `"3"` a policy that requires nothing cannot verify a
+claim, so this is what lets a passing review derive `verified` from the bundle's own data. One
+status changes already under `"2"`: a critique with no verdict event (`not_verified`) and
+superseded critique history now re-derive `unknown` rather than `proposed`, because their policy
+now requires evidence they do not have. Neither asserts a pass, so neither is reconciled or gated.

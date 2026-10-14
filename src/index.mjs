@@ -1,6 +1,7 @@
 // Library entry. The CLI (bin/docs-kit.mjs) is the supported interface; these
 // exports exist for tests and for tools that embed docs-kit.
-export { runChecks, formatCheckReport } from './check.mjs';
+export { runChecks, runDecisionChecks, formatCheckReport } from './check.mjs';
+export { parseDecisionRecord, validateDecisionRecord, validateDecisions, renderDecisionIndex, DECISION_STATUSES, EVIDENCE_KINDS } from './decisions.mjs';
 export { runBuild, checkGeneratedSite } from './build.mjs';
 export { assembleBundle, bundleDigest, bundleFromCheckout } from './bundle.mjs';
 export { validateManifest, validateProducts, loadManifest } from './manifest.mjs';

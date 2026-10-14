@@ -31,3 +31,7 @@ A factory may return the adapter directly, or `{adapter, dispose, specials}`. Sp
 Missing methods/probes, malformed expected entries (neither `equals`, `length`, nor `absent: true`), unresolved references, unexpected errors, incorrect results, and cleanup failures all fail the vector. No result from a missing prerequisite counts as success. Providing a probe that returns success without exercising and asserting its contract invalidates conformance evidence.
 
 Field-clearing assertions use `absent: true` to distinguish a removed field from a stored null. Embedded body text is literal; vector references are whole argument values only.
+
+## Decision-record vectors
+
+`decision-records.json` (exported as `@kontourai/corpus-conformance/decision-records`) holds vectors for the [decision record format](../../docs/decisions.md), independent of the store vectors and the runner. Each vector is a whole registry: `records` lists each file's `slug` (its name without `.md`), its `markdown` text, its `frontmatter` as JSON (`null` when the block cannot be read), and `expected`, the sorted rule codes it must fail (empty means valid). Relation rules resolve slugs within the vector. A validator that receives parsed fields rather than files can use `frontmatter` and skip the `frontmatter` rule. The rule codes are listed in `rules`; Corpus itself is tested against every vector, and every code has at least one rejecting vector. Index freshness and the ADR freeze depend on a repository and are not covered.

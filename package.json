@@ -16,11 +16,13 @@
   },
   "exports": {
     ".": "./src/index.mjs",
+    "./schemas/decision-record.schema.json": "./schemas/decision-record.schema.json",
     "./package.json": "./package.json"
   },
   "files": [
     "bin/",
     "src/",
+    "schemas/",
     "README.md",
     "LICENSE"
   ],

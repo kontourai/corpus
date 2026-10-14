@@ -5,18 +5,20 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./index.mjs",
-    "./vectors": "./vectors.json"
+    "./vectors": "./vectors.json",
+    "./decision-records": "./decision-records.json"
   },
   "files": [
     "index.mjs",
     "vectors.json",
+    "decision-records.json",
     "README.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=22"
   },
-  "description": "Public Knowledge store conformance vectors and an adapter-factory runner.",
+  "description": "Public Knowledge store conformance vectors with an adapter-factory runner, and decision-record vectors.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kontourai/corpus.git",
