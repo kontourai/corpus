@@ -18,6 +18,14 @@ Corpus checks the registry when `corpus.json` (schema v2) declares it:
 
 The gate reads `dir` directly. Whether the records are listed in `documents` or matched by `exclude` does not change what it checks; those keys only decide whether the records are published.
 
+### Reachability and publishing
+
+Once `decisions` is declared, every `*.md` directly in `dir`, records and index alike, counts as reachable for the [reachability gate](../README.md#check), so adding a record needs no `corpus.json` edit. A Markdown file in a subdirectory of `dir` is not a record and still has to be listed or excluded.
+
+Reachable is not published. A record or the index appears on the site and in `docs-bundle.json` only when `documents` lists it, as for any other document; listing it with `"publish": false` puts it in the bundle without a page. Records are not published automatically, because that would change the site and the bundle digest of every repository that declares `decisions`, and many keep their records as contributor-facing history rather than product documentation.
+
+A `documents` entry may name the index before it exists: `corpus decisions index` accepts that one missing file and writes it, so a repository can write its intended manifest first and generate the index second. Every other command, `corpus check` and `corpus decisions check` included, still fails on a listed index that does not exist (exit `2`), and `corpus decisions index` still refuses any other missing document.
+
 ## Record format
 
 A record is a Markdown file whose YAML frontmatter starts at byte 0:
@@ -87,13 +95,14 @@ Now refused, where the earlier parser accepted the text literally:
 - repeated keys (the earlier parser kept the last one), tab indentation, anchors, aliases, and explicit tags;
 - a tab or other control character inside a subject;
 - an empty `supersedes:` (the earlier parser read it as an empty list);
-- a subject with a line break, which double-quoted escapes (`"C:\new"`) and block scalars can now produce.
+- a subject whose value contains a line break: a double-quoted escape (`"C:\new"`), a literal block scalar (`|-` with two lines), or any block scalar that keeps its final line break (`>` or `|` without the `-` strip indicator). A subject merely written over several lines is different; see below.
 
 Now accepted, where the earlier parser refused the line:
 
 - a trailing comment (`status: current # note`), a space before the colon (`status : current`), and quoted keys (`"status": current`);
 - flow mappings (`- { kind: pr, ref: "#1" }`, or `evidence: [{ kind: pr, ref: "#1" }]`);
-- values continued over several lines, block scalars (`>` and `|`) outside `subject`, and a blank line inside an evidence item.
+- values continued over several lines, and a blank line inside an evidence item. A plain or quoted subject continued on an indented line, or a `>-` folded block without blank lines, is folded into one line (`First line second line`), so it is a valid single-line subject;
+- block scalars (`>` and `|`) in fields other than `subject`.
 
 Quoted strings are also unescaped (`"a \"b\""` is `a "b"`, and `'it''s'` is `it's`), so an index row can read differently from the earlier generator's output for a record written that way.
 
@@ -125,7 +134,9 @@ For the 97 existing records, the index is identical to the one the earlier per-r
 
 Numbered ADR directories are frozen history. New decisions go to the registry, where existing ADRs can be cited as `adr` evidence. ADR files are never validated as records, and their numbers stay as they are.
 
-With `adr` declared, `corpus check --base <ref>` and `corpus decisions check --base <ref>` run the **adr-freeze** gate. It lists the files added under `adr.dir` between the merge base of `<ref>` and `HEAD` (`git diff --diff-filter=A --no-renames <ref>...HEAD`) and fails, exit `1`, for each one, naming the registry path to use instead. Editing an existing ADR, for a typo or a link, passes, and so does deleting one. Renaming a file inside `adr.dir` adds a path, so it fails. Without `--base`, the gate is reported as `SKIP` with a note, because there is nothing to compare against. Uncommitted files are not seen; pull request CI, which passes `--base`, is where the freeze applies.
+With `adr` declared, `corpus check --base <ref>` and `corpus decisions check --base <ref>` run the **adr-freeze** gate. It lists the files added under `adr.dir` between the merge base of `<ref>` and `HEAD` (`git diff --diff-filter=A --no-renames <ref>...HEAD`) and fails, exit `1`, for each one, naming the registry path to use instead. Editing an existing ADR, for a typo or a link, passes, and so does deleting one. Renaming a file inside `adr.dir` adds a path, so it fails.
+
+Two names are exempt, so the directory can explain itself: `README.md` and `index.md`, directly in `adr.dir`, exactly as written. Any other added file fails, whatever its name or extension, including a `readme.md`, a `README.md` in a subdirectory, and a file renamed from an exempt name to an ADR name. The freeze uses this fixed list rather than freezing only files that look numbered (`NNNN-*.md`): a numbering pattern would let through every ADR added under another name (`adr-0005.md`, `0005_title.md`, a subdirectory), while the list admits two known names. An exempt file can still hold a decision, but there are two of them and both are visible in review. Renaming an existing ADR to an exempt name passes, because deleting an ADR passes; nothing new is admitted. Without `--base`, the gate is reported as `SKIP` with a note, because there is nothing to compare against. Uncommitted files are not seen; pull request CI, which passes `--base`, is where the freeze applies.
 
 ## Commands
 
@@ -142,6 +153,6 @@ The shared Docs gate runs `corpus check`, so it picks up the gate wherever the m
 
 [`schemas/decision-record.schema.json`](../schemas/decision-record.schema.json) is the JSON Schema for the frontmatter, shipped in the package as `@kontourai/corpus/schemas/decision-record.schema.json`. Corpus enforces it, plus what a schema cannot state: the filename slug, relations to other records, the index, and the freeze.
 
-[`@kontourai/corpus-conformance`](../packages/conformance/README.md#decision-record-vectors) ships `decision-records.json`, whole-registry vectors with the expected rule codes, so another validator can be tested against the same cases.
+[`@kontourai/corpus-conformance`](../packages/conformance/README.md#decision-record-vectors) ships `decision-records.json`, whole-registry vectors with the expected rule codes, so another validator can be tested against the same cases. Each of the six secret detectors has its own vector. Reachability, publishing, and the ADR freeze are repository checks, not part of the record format, so the vectors do not cover them.
 
 The library exports `parseDecisionRecord(text)`, `validateDecisionRecord(slug, frontmatter, knownSlugs)`, `validateDecisions(root, decisions)`, and `renderDecisionIndex(records)`.

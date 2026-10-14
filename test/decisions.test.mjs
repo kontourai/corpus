@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { DECISION_STATUSES, EVIDENCE_KEYS, EVIDENCE_KINDS, RECORD_KEYS, SECRET_PATTERNS, parseDecisionRecord, validateDecisionRecord } from '../src/decisions.mjs';
+import { ADR_FREEZE_EXEMPT, DECISION_STATUSES, EVIDENCE_KEYS, EVIDENCE_KINDS, RECORD_KEYS, SECRET_PATTERNS, parseDecisionRecord, validateDecisionRecord } from '../src/decisions.mjs';
 import { FIXTURES, REPO_ROOT, commitAll, git, runCli, scratch } from './helpers.mjs';
 
 const RECORD_SETS = path.join(FIXTURES, 'decision-records');
@@ -26,7 +26,7 @@ The current answer.
  * A v2 repository whose docs are excluded, so only the decisions gates can
  * fail. `records` maps a slug to file text under `dir` (default docs/decisions).
  */
-function registryRepo(t, { records = { 'example-subject': VALID }, decisions = {}, files = {}, git: inGit = true } = {}) {
+function registryRepo(t, { records = { 'example-subject': VALID }, decisions = {}, files = {}, manifest = {}, git: inGit = true } = {}) {
   const repo = path.join(scratch(t), 'repo');
   const dir = decisions.dir ?? 'docs/decisions';
   mkdirSync(repo, { recursive: true });
@@ -34,7 +34,7 @@ function registryRepo(t, { records = { 'example-subject': VALID }, decisions = {
   writeFileSync(path.join(repo, 'README.md'), '# Registry\n');
   writeFileSync(
     path.join(repo, 'corpus.json'),
-    `${JSON.stringify({ schemaVersion: 2, product: 'registry', title: 'Registry', repo: 'kontourai/registry', purpose: 'Record decisions.', builtOn: [], documents: [], exclude: ['docs/**'], decisions }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 2, product: 'registry', title: 'Registry', repo: 'kontourai/registry', purpose: 'Record decisions.', builtOn: [], documents: [], exclude: ['docs/**'], decisions, ...manifest }, null, 2)}\n`,
   );
   for (const [slug, text] of Object.entries(records)) writeFileSync(path.join(repo, ...dir.split('/'), `${slug}.md`), text);
   for (const [file, text] of Object.entries(files)) {
@@ -283,6 +283,47 @@ test('renaming an ADR inside the frozen directory counts as adding one', async (
   assert.match(result.stderr, /docs\/adr\/0001-renamed\.md was added since/);
 });
 
+test('a README.md or index.md added directly in the ADR directory passes the freeze', async (t) => {
+  // Pinned independently of ADR_FREEZE_EXEMPT, so widening the list fails here.
+  assert.deepEqual(ADR_FREEZE_EXEMPT, ['README.md', 'index.md']);
+  const repo = adrRepo(t);
+  const base = await indexedAndCommitted(repo);
+  writeFileSync(path.join(repo, 'docs/adr/README.md'), '# ADRs\n\nFrozen history; new decisions go to docs/decisions.\n');
+  writeFileSync(path.join(repo, 'docs/adr/index.md'), '# ADR index\n');
+  commitAll(repo, 'explain the frozen directory');
+  const result = await runCli(['decisions', 'check', '--root', repo, '--base', base]);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /PASS adr-freeze \(docs\/adr against [0-9a-f]{40}\)/);
+});
+
+test('any other added file under the ADR directory fails, numbered or not, nested or differently cased', async (t) => {
+  const repo = adrRepo(t);
+  const base = await indexedAndCommitted(repo);
+  const added = ['docs/adr/notes.md', 'docs/adr/adr-0002-second.md', 'docs/adr/readme.md', 'docs/adr/archive/README.md', 'docs/adr/0002-second.txt'];
+  for (const file of added) {
+    mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+    writeFileSync(path.join(repo, file), '# 2. Second\n');
+  }
+  commitAll(repo, 'add files that are not exempt');
+  const result = await runCli(['decisions', 'check', '--root', repo, '--base', base]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.stderr, /FAIL adr-freeze/);
+  for (const file of added) assert.match(result.stderr, new RegExp(`${file.replace(/[.]/g, '\\.')} was added since`));
+  assert.match(result.stderr, /Only README\.md and index\.md may be added directly in docs\/adr\/\./);
+  assert.match(result.stderr, /corpus decisions check failed: 5 failures/);
+});
+
+test('renaming the exempt README.md to an ADR name is refused like any added ADR', async (t) => {
+  const repo = adrRepo(t);
+  writeFileSync(path.join(repo, 'docs/adr/README.md'), '# ADRs\n');
+  const base = await indexedAndCommitted(repo);
+  git(repo, ['mv', 'docs/adr/README.md', 'docs/adr/0002-second.md']);
+  commitAll(repo, 'rename');
+  const result = await runCli(['decisions', 'check', '--root', repo, '--base', base]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.stderr, /docs\/adr\/0002-second\.md was added since/);
+});
+
 test('without --base the freeze is skipped with a note', async (t) => {
   const repo = adrRepo(t);
   await indexedAndCommitted(repo);
@@ -363,6 +404,91 @@ test('the gate reads the directory even when documents and exclude never list it
   const repo = registryRepo(t, { records: { broken: VALID.replace(/^decided:.*\n/m, 'decided: soon\n') } });
   await indexed(repo);
   await checkFails(repo, /broken\.md: decided must be an ISO date \(YYYY-MM-DD\); got 'soon'/);
+});
+
+// A registry that relies on the other gates: nothing is excluded, so reachability sees docs/decisions.
+const UNEXCLUDED = { exclude: [] };
+
+test('records and the index are reachable without being listed once decisions is declared', async (t) => {
+  const repo = registryRepo(t, { manifest: UNEXCLUDED, records: { 'example-subject': VALID, 'other-subject': VALID } });
+  await indexed(repo);
+  const result = await runCli(['check', '--root', repo]);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /PASS reachability/);
+  assert.match(result.stdout, /PASS decisions \(2 records in docs\/decisions\)/);
+});
+
+test('reachability still fails outside the registry directory, and for the records without a decisions block', async (t) => {
+  const repo = registryRepo(t, {
+    manifest: UNEXCLUDED,
+    files: { 'docs/decisions/archive/old.md': '# Old\n', 'docs/notes.md': '# Notes\n' },
+  });
+  await indexed(repo);
+  const result = await runCli(['check', '--root', repo]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.stderr, /FAIL reachability/);
+  assert.match(result.stderr, /docs\/decisions\/archive\/old\.md is neither listed in documents nor matched by exclude/);
+  assert.match(result.stderr, /docs\/notes\.md is neither listed in documents nor matched by exclude/);
+  assert.doesNotMatch(result.stderr, /docs\/decisions\/(example-subject|index)\.md is neither listed/);
+
+  const manifest = JSON.parse(readFileSync(path.join(repo, 'corpus.json'), 'utf8'));
+  delete manifest.decisions;
+  writeFileSync(path.join(repo, 'corpus.json'), JSON.stringify(manifest));
+  const without = await runCli(['check', '--root', repo]);
+  assert.equal(without.status, 1, without.output);
+  assert.match(without.stderr, /docs\/decisions\/example-subject\.md is neither listed in documents nor matched by exclude/);
+  assert.match(without.stderr, /docs\/decisions\/index\.md is neither listed in documents nor matched by exclude/);
+});
+
+test('unlisted records are not published; listing one publishes it', async (t) => {
+  const repo = registryRepo(t, {
+    manifest: { ...UNEXCLUDED, documents: [{ source: 'docs/decisions/index.md', section: 'Decisions' }] },
+    records: { 'example-subject': VALID, 'other-subject': VALID },
+  });
+  await indexed(repo);
+  commitAll(repo, 'index');
+  const out = path.join(scratch(t), 'site');
+  const result = await runCli(['build', '--root', repo, '--out', out]);
+  assert.equal(result.status, 0, result.output);
+  assert.equal(existsSync(path.join(out, 'docs/decisions/index.html')), true);
+  assert.equal(existsSync(path.join(out, 'docs/decisions/example-subject.html')), false);
+  const sources = JSON.parse(readFileSync(path.join(out, 'docs-bundle.json'), 'utf8')).documents.map((document) => document.source);
+  assert.ok(sources.includes('docs/decisions/index.md'), sources.join(', '));
+  assert.ok(!sources.includes('docs/decisions/example-subject.md'), sources.join(', '));
+});
+
+test('decisions index bootstraps an index that documents already lists', async (t) => {
+  const repo = registryRepo(t, { manifest: { ...UNEXCLUDED, documents: [{ source: 'docs/decisions/index.md', section: 'Decisions' }] }, git: false });
+  const missing = /documents\[0\]\.source "docs\/decisions\/index\.md" does not exist \(or is outside the repository\)/;
+  // Every gate except the command that writes the file refuses the missing index.
+  for (const args of [['check'], ['decisions', 'check']]) {
+    const before = await runCli([...args, '--root', repo]);
+    assert.equal(before.status, 2, before.output);
+    assert.match(before.stderr, missing);
+  }
+  const result = await indexed(repo);
+  assert.match(result.stdout, /wrote docs\/decisions\/index\.md \(1 topic\)/);
+  const after = await runCli(['decisions', 'check', '--root', repo]);
+  assert.equal(after.status, 0, after.output);
+});
+
+test('decisions index still refuses every other missing document, and an index path that is not absent (exit 2)', async (t) => {
+  const repo = registryRepo(t, {
+    manifest: { ...UNEXCLUDED, documents: [{ source: 'docs/decisions/index.md', section: 'Decisions' }, { source: 'docs/guide.md', section: 'Guide' }] },
+    git: false,
+  });
+  const result = await runCli(['decisions', 'index', '--root', repo]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /documents\[1\]\.source "docs\/guide\.md" does not exist/);
+  assert.doesNotMatch(result.stderr, /documents\[0\]/);
+  assert.equal(existsSync(path.join(repo, 'docs/decisions/index.md')), false);
+
+  // A dangling symlink is something at the path, so it is not a bootstrap.
+  const dangling = registryRepo(t, { manifest: { ...UNEXCLUDED, documents: [{ source: 'docs/decisions/index.md', section: 'Decisions' }] }, git: false });
+  symlinkSync('nowhere.md', path.join(dangling, 'docs/decisions/index.md'));
+  const linked = await runCli(['decisions', 'index', '--root', dangling]);
+  assert.equal(linked.status, 2, linked.output);
+  assert.match(linked.stderr, /documents\[0\]\.source "docs\/decisions\/index\.md" does not exist/);
 });
 
 test('build refuses an invalid registry and never runs the freeze', async (t) => {
@@ -508,6 +634,19 @@ test('the implementation meets every decision-record conformance vector', () => 
   }
   // Every rule code has at least one rejecting vector.
   assert.deepEqual([...seen].sort(), [...ruleCodes].sort());
+});
+
+test('every secret detector has its own conformance vector', () => {
+  // Pinned independently: six detectors, so a dropped detector or vector fails here.
+  assert.equal(SECRET_PATTERNS.length, 6);
+  const refs = vectorFile.vectors.flatMap((vector) =>
+    vector.records.filter((record) => record.expected.includes('secret')).flatMap((record) => record.frontmatter.evidence.map((item) => item.ref)),
+  );
+  for (const { label, re } of SECRET_PATTERNS) {
+    // A vector covers a detector only if no other detector would also refuse it.
+    const own = refs.filter((ref) => re.test(ref) && SECRET_PATTERNS.every((other) => other.re === re || !other.re.test(ref)));
+    assert.ok(own.length > 0, `no vector exercises only the ${label} detector`);
+  }
 });
 
 test('the published schema states the rules the checker enforces', () => {
