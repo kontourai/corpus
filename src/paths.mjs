@@ -2,7 +2,7 @@ import { lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 /**
- * Repo-relative paths in docs-kit.json are POSIX, normalized, and confined to
+ * Repo-relative paths in corpus.json (or legacy docs-kit.json) are POSIX, normalized, and confined to
  * the repository: no absolute paths, no `..` segments, no backslashes.
  * Returns an error string, or null when the path is acceptable.
  */
