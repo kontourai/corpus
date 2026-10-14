@@ -34,6 +34,7 @@ import {
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
+import { assertCompiledSource } from './shared/compiled-source.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
 import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
@@ -365,6 +366,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
     const explicitLinks = input.links ?? [];
     const wikilinks = extractWikilinks(input.body);
     const links = mergeLinks(explicitLinks, wikilinks);
+    assertCompiledSource(input.type, links, (target) => (isSafePathSegment(target) ? this.readRecord(target) : null));
 
     const record: KitRecord = {
       id,

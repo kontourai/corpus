@@ -128,16 +128,28 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       ]);
     });
 
-    test('does not enforce compiled -> source link presence at create (adapter is permissive per §8; category/type/body/agent ARE enforced)', async () => {
-      await expect(
-        adapter.create({
-          type: 'compiled',
-          title: 'No source yet',
-          body: 'placeholder',
-          category: 'engineering',
-          provenance: { agent: 'agent-1' },
-        }),
-      ).resolves.toEqual(expect.any(String));
+    test('compiled create requires a source link to an existing raw record', async () => {
+      const raw = await adapter.create({ type: 'raw', title: 'Raw input', body: 'evidence', category: 'engineering', provenance: { agent: 'agent-1' } });
+      const concept = await adapter.create({ type: 'concept', title: 'A concept', body: 'definition', category: 'engineering', provenance: { agent: 'agent-1' } });
+      const compiled = (title: string, fields: Record<string, unknown>) => adapter.create({
+        type: 'compiled', title, body: 'summary', category: 'engineering', provenance: { agent: 'agent-1' }, ...fields,
+      });
+      for (const [title, fields] of [
+        ['No links', {}],
+        ['Provenance only', { provenance: { agent: 'agent-1', source_ids: [raw] } }],
+        ['Related, not source', { links: [{ target_id: raw, kind: 'related' }] }],
+        ['Missing source', { links: [{ target_id: 'missing-raw-record', kind: 'source' }] }],
+        ['Concept source', { links: [{ target_id: concept, kind: 'source' }] }],
+        ['Wikilink only', { body: `See [[${raw}]]` }],
+      ] as const) {
+        await expect(compiled(title, fields)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      }
+      expect(await adapter.listByType('compiled', { includeHistory: true })).toEqual([]);
+      const id = await compiled('Sourced', { links: [{ target_id: concept, kind: 'source' }, { target_id: raw, kind: 'source' }] });
+      expect((await adapter.get(id))?.type).toBe('compiled');
+      // Only creation is checked: a compiled record may later drop its links.
+      await adapter.update(id, { links: [], body: 'edited' }, { agent: 'agent-1' });
+      expect((await adapter.get(id))?.body).toBe('edited');
     });
 
     test('create rejects missing/invalid required fields with MISSING_EVIDENCE', async () => {
@@ -579,11 +591,19 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
     // `supersedes` link, and leave the working set in both adapters.
 
     test('supersede never deletes; superseded records remain gettable with a reverse supersedes link', async () => {
+      const source = await adapter.create({
+        type: 'raw',
+        title: 'Summary source',
+        body: 'source evidence',
+        category: 'engineering.sources',
+        provenance: { agent: 'agent-1' },
+      });
       const oldCompiled = await adapter.create({
         type: 'compiled',
         title: 'Old summary',
         body: 'stale content',
         category: 'engineering',
+        links: [{ target_id: source, kind: 'source' }],
         provenance: { agent: 'agent-1' },
       });
       const newCompiled = await adapter.create({
@@ -591,6 +611,7 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
         title: 'New summary',
         body: 'fresh content',
         category: 'engineering',
+        links: [{ target_id: source, kind: 'source' }],
         provenance: { agent: 'agent-1' },
       });
 
@@ -665,11 +686,19 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
     // across both adapters (neither archives on retire; only supersede archives).
 
     test('retire enforces the status transition table and working-set exclusion', async () => {
+      const source = await adapter.create({
+        type: 'raw',
+        title: 'Retire source',
+        body: 'source evidence',
+        category: 'engineering.sources',
+        provenance: { agent: 'agent-1' },
+      });
       const id = await adapter.create({
         type: 'compiled',
         title: 'To retire',
         body: 'content',
         category: 'engineering',
+        links: [{ target_id: source, kind: 'source' }],
         provenance: { agent: 'agent-1' },
       });
 

@@ -1,10 +1,1 @@
-{
-  "compiled-without-source": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision: compiled create requires a link to a raw source; legacy records remain readable; phase 3 step 5.",
-    "errorPattern": "^create must reject$"
-  }
-}
+{}

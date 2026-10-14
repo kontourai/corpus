@@ -19,8 +19,6 @@ The [conformance vectors](../conformance/README.md) encode the owner's
 2026-10-13 decisions. A decision not yet implemented is an explicit entry in
 [the expected-fail list](test/expected-fails.json), never silent behavior.
 
-Implemented:
-
 - **Proposals may target any record type.** `propose`, `apply` and `reject`
   accept a target of every type, not only `concept`. The target and proposer
   must exist (`NOT_FOUND`), evidence fields are still required
@@ -49,9 +47,14 @@ Implemented:
   the working set. This is record expiry only: no `stale` status is stored,
   and maintenance age and trust freshness are separate signals.
 
-Not yet implemented, and listed as expected failures:
+- **A compiled record must link a raw source when it is created.** `create`
+  with `type: 'compiled'` requires at least one link of kind `source` to an
+  existing `raw` record; otherwise it throws `MISSING_EVIDENCE` and writes
+  nothing. `provenance.source_ids`, `related` links and body wikilinks do not
+  count. Only creation is checked: existing compiled records without a source
+  stay readable, listable and updatable.
 
-- A compiled record must link a raw source when it is created.
+Every decision is implemented, and the expected-fail list is empty.
 
 ## Host composition
 

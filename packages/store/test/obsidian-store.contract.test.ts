@@ -133,11 +133,19 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
   });
 
   test("supersede MOVES the superseded record's file to archive/, preserving its relative path, and it remains gettable", async () => {
+    const source = await adapter.create({
+      type: 'raw',
+      title: 'Decision source',
+      body: 'source evidence',
+      category: 'engineering.inputs',
+      provenance: { agent: 'agent-1' },
+    });
     const oldId = await adapter.create({
       type: 'compiled',
       title: 'Old summary',
       body: 'stale',
       category: 'engineering.decisions',
+      links: [{ target_id: source, kind: 'source' }],
       provenance: { agent: 'agent-1' },
     });
     const newId = await adapter.create({
@@ -145,6 +153,7 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
       title: 'New summary',
       body: 'fresh',
       category: 'engineering.decisions',
+      links: [{ target_id: source, kind: 'source' }],
       provenance: { agent: 'agent-1' },
     });
 
@@ -187,11 +196,19 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
   });
 
   test('a record file is genuinely Obsidian-readable: frontmatter excludes body; body renders below the fence with the sentinel', async () => {
+    const source = await adapter.create({
+      type: 'raw',
+      title: 'Fixture source',
+      body: 'source evidence',
+      category: 'engineering.inputs',
+      provenance: { agent: 'agent-1' },
+    });
     const id = await adapter.create({
       type: 'compiled',
       title: 'Fixture record',
       body: 'Body text with a [[wikilink-target]] reference.',
       category: 'engineering.fixtures',
+      links: [{ target_id: source, kind: 'source' }],
       provenance: { agent: 'fixture-agent' },
     });
 
