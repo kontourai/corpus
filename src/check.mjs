@@ -1,5 +1,6 @@
 import { checkBuiltOn } from './built-on.mjs';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
@@ -82,12 +83,19 @@ export function checkLinks(root, manifest, read) {
   return failures;
 }
 
-/** Gate 3: every docs/**\/*.md is listed (bundle-only documents count) or excluded. */
+/**
+ * Gate 3: every docs/**\/*.md is listed (bundle-only documents count) or excluded.
+ * With a `decisions` block, every `*.md` directly in `decisions.dir` (the records
+ * and the index) is reachable without being listed: the decisions gate already
+ * reads and validates each one. Listing them still decides whether they are published.
+ */
 export function checkReachability(root, manifest) {
   const listed = new Set(bundledSources(manifest));
   const isExcluded = globMatcher(manifest.exclude);
+  const registry = manifest.decisions?.dir ?? null;
+  const inRegistry = (file) => registry !== null && path.posix.dirname(file) === registry;
   return listMarkdownFiles(root, 'docs')
-    .filter((file) => !listed.has(file) && !isExcluded(file))
+    .filter((file) => !listed.has(file) && !isExcluded(file) && !inRegistry(file))
     .map((file) => `${file} is neither listed in documents nor matched by exclude`);
 }
 

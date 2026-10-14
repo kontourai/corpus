@@ -175,7 +175,8 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       case 'decisions index': {
         const { loadManifest, manifestFile } = await import('./manifest.mjs');
         const { writeDecisionIndex } = await import('./decisions.mjs');
-        const manifest = loadManifest(root);
+        // A documents entry for the index may name the file this command is about to create.
+        const manifest = loadManifest(root, { allowMissingDecisionIndex: true });
         if (!manifest.decisions)
           throw new UsageError(`${manifestFile(root)} has no "decisions" block; add "decisions": {} to enable the decisions gate`);
         say(writeDecisionIndex(root, manifest.decisions));
