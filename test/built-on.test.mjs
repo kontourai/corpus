@@ -165,8 +165,82 @@ for (const source of ['scripts', 'workflow']) {
   });
 }
 
-for (const command of ['npm run veritas readiness', 'npm install veritas readiness']) {
-  test(`builtOn npm non-exec is no evidence: ${command}`, (t) => {
+for (const source of ['scripts', 'workflow']) {
+  // One bad line in a block costs only itself: the invocation on another line still counts.
+  for (const block of [
+    'veritas readiness\necho ${bad expression}',
+    'echo ${bad expression}\nveritas readiness',
+    'veritas readiness\necho ${',
+    'veritas readiness\necho ${{ github.sha',
+    'echo ${{ github.sha\nveritas readiness',
+    'echo ${bad expression} "start\nstill quoted"\nveritas readiness',
+    'echo one \\\n  ${bad expression}\nveritas readiness',
+  ]) {
+    test(`builtOn unparseable line keeps the rest of the block: ${source} ${JSON.stringify(block)}`, (t) => {
+      const result = runEvidenceCommands(t, source, [block]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /PASS builtOn/);
+    });
+  }
+  test(`builtOn unparseable lines are named in the failure: ${source}`, (t) => {
+    const result = runEvidenceCommands(t, source, ['echo ${{ github.sha\n  }}\necho ${bad expression} veritas\necho ok \\\n  more\necho ${{ github.sha veritas']);
+    const where = source === 'scripts' ? 'package\\.json scripts\\.step0' : '\\.github/workflows/check\\.yml jobs\\.check\\.steps\\[0\\]\\.run';
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, new RegExp(`via veritas\\) has no matching dependency; .*; 2 command lines were skipped as unparseable \\(${where} line 3, ${where} line 6\\)`));
+  });
+  // The skipped unit is the whole logical line, so a quoted continuation is not read as a command.
+  test(`builtOn quoted lines of an unparseable command stay out of the evidence: ${source}`, (t) => {
+    const result = runEvidenceCommands(t, source, ['echo ${bad expression} "start\nveritas readiness"']);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /no matching dependency; .*1 command line was skipped as unparseable \(.* line 1\)/);
+  });
+  test(`builtOn heredoc on an unparseable line stays out of the evidence: ${source}`, (t) => {
+    const result = runEvidenceCommands(t, source, ['cat <<EOF ${bad expression}\nveritas readiness\nEOF']);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /no matching dependency; .*1 command line was skipped as unparseable \(.* line 1\)/);
+  });
+  // GitHub ends an expression at the first `}}` outside a single-quoted string.
+  for (const block of [
+    "echo ${{ '}}' }} && veritas readiness",
+    "echo ${{ format('{0}}}', github.sha) }} && veritas readiness",
+    "echo ${{ 'it''s }}' }} && veritas readiness",
+  ]) {
+    test(`builtOn quoted }} inside an expression: ${source} ${JSON.stringify(block)}`, (t) => {
+      const result = runEvidenceCommands(t, source, [block]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /PASS builtOn/);
+    });
+  }
+  test(`builtOn expression string text is not a command: ${source}`, (t) => {
+    const result = runEvidenceCommands(t, source, ["echo ${{ '}} && veritas readiness' }}"]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /no matching dependency/);
+    assert.doesNotMatch(result.stderr, /skipped as unparseable/);
+  });
+}
+
+for (const [workspace, status, message, absent] of [
+  ["packages: ['.']", 1, /package\.json dependencies: @kontourai\/datum is missing/, /knowledge|no workspace members/],
+  ["packages: ['./']", 1, /package\.json dependencies: @kontourai\/datum is missing/, /knowledge|no workspace members/],
+  ["packages: ['!packages/legacy']", 1, /package\.json dependencies: @kontourai\/datum is missing/, /knowledge|no workspace members/],
+  ["packages:\n  - '!packages/*'\n  - '!tools/*'", 1, /package\.json dependencies: @kontourai\/datum is missing/, /knowledge|no workspace members/],
+  ["packages: ['.', 'packages/*']", 1, /packages\/legacy\/package\.json dependencies: @kontourai\/knowledge is missing/, /no workspace members/],
+  ["packages: ['.', 'missing/*']", 2, /pnpm-workspace\.yaml: no workspace members resolve/, /PASS builtOn/],
+]) {
+  test(`builtOn pnpm workspace shape: ${JSON.stringify(workspace)}`, (t) => {
+    const root = scratch(t, 'built-on-pnpm-');
+    cpSync(path.join(FIXTURES, 'built-on', 'pnpm-root-member'), root, { recursive: true });
+    writeFileSync(path.join(root, 'pnpm-workspace.yaml'), `${workspace}\n`);
+    const result = spawnSync(process.execPath, [path.join(REPO_ROOT, 'bin/corpus.mjs'), 'check', '--root', root], { encoding: 'utf8' });
+    assert.equal(result.status, status, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, message);
+    assert.doesNotMatch(result.stdout + result.stderr, absent);
+  });
+}
+
+// `pnpm <bin>` and `yarn <bin>` run an installed bin; a versioned name there is not that bin.
+for (const command of ['npm run veritas readiness', 'npm install veritas readiness', 'pnpm veritas@1 readiness', 'yarn veritas@1 readiness', 'veritas@1 readiness']) {
+  test(`builtOn non-exec form is no evidence: ${command}`, (t) => {
     const result = runEvidenceCommands(t, 'scripts', [command]);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /no matching dependency/);
