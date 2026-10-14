@@ -23,9 +23,16 @@ if (metadata.version !== version) refuse(`package.json version ${JSON.stringify(
 let changelog;
 try { changelog = readFileSync('CHANGELOG.md', 'utf8'); }
 catch (error) { refuse(`cannot read CHANGELOG.md: ${error.message}`); }
-const headings = [...changelog.matchAll(/^## +(.+?)\s*$/gm)].map((match) => match[1]);
-const unreleased = headings.find((heading) => /^unreleased\b/i.test(heading));
-if (unreleased !== undefined) refuse(`CHANGELOG.md still has "## ${unreleased}"; release those changes under "## ${version}" first`);
-if (headings[0] !== version) refuse(`CHANGELOG.md's first section is ${headings[0] === undefined ? 'missing' : `"## ${headings[0]}"`}, not "## ${version}"`);
+// Every ATX heading, at any level, with Keep a Changelog's [brackets] stripped,
+// so "## [Unreleased]", "### Unreleased", and "# Unreleased" are all seen.
+const headings = [...changelog.matchAll(/^(#{1,6}) +(.+?)\s*$/gm)].map((match) => ({
+  written: `${match[1]} ${match[2]}`,
+  level: match[1].length,
+  text: match[2].replace(/[[\]]/g, '').trim(),
+}));
+const unreleased = headings.find(({ text }) => /\bunreleased\b/i.test(text));
+if (unreleased !== undefined) refuse(`CHANGELOG.md still has "${unreleased.written}"; release those changes under "## ${version}" first`);
+const first = headings.find(({ level }) => level === 2);
+if (first?.text !== version) refuse(`CHANGELOG.md's first section is ${first === undefined ? 'missing' : `"${first.written}"`}, not "## ${version}"`);
 
 console.log(`Release preflight passed for @kontourai/corpus@${version}`);

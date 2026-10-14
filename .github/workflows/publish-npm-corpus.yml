@@ -27,6 +27,9 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      # Carried outside the artifact, so the publish job checks the tarball against
+      # what this job verified, not only against the SHA256SUMS shipped beside it.
+      sha256: ${{ steps.tarball.outputs.sha256 }}
     steps:
       - name: Require main
         run: test "$GITHUB_REF" = refs/heads/main
@@ -64,6 +67,7 @@ jobs:
         run: npm run verify:pack -- "$RUNNER_TEMP/corpus-root-pack"
 
       - name: Require exactly the expected tarball
+        id: tarball
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
@@ -73,6 +77,9 @@ jobs:
           test "$(wc -l < SHA256SUMS)" -eq 1
           grep -q "  kontourai-corpus-$RELEASE_VERSION.tgz\$" SHA256SUMS
           sha256sum --check --strict SHA256SUMS
+          sha256="$(sha256sum "kontourai-corpus-$RELEASE_VERSION.tgz" | cut -d' ' -f1)"
+          test "${#sha256}" -eq 64
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload verified tarball and hash
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -108,10 +115,16 @@ jobs:
           name: verified-corpus-root
           path: ${{ runner.temp }}/corpus-root-pack/
 
-      - name: Check downloaded hash
+      - name: Check downloaded hash against the verify job's output
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          VERIFIED_SHA256: ${{ needs.verify.outputs.sha256 }}
         run: |
           cd "$RUNNER_TEMP/corpus-root-pack"
           sha256sum --check --strict SHA256SUMS
+          test "${#VERIFIED_SHA256}" -eq 64
+          printf '%s  %s\n' "$VERIFIED_SHA256" "kontourai-corpus-$RELEASE_VERSION.tgz" > "$RUNNER_TEMP/verified-sha256"
+          sha256sum --check --strict "$RUNNER_TEMP/verified-sha256"
 
       - name: Preflight the registry version before publishing
         env:
@@ -125,5 +138,5 @@ jobs:
           DIST_TAG: ${{ needs.verify.outputs.tag }}
         run: |
           node scripts/npm-publish-guard.mjs @kontourai/corpus "$RELEASE_VERSION" "$DIST_TAG"
-          (cd "$RUNNER_TEMP/corpus-root-pack" && sha256sum --check --strict SHA256SUMS)
+          (cd "$RUNNER_TEMP/corpus-root-pack" && sha256sum --check --strict "$RUNNER_TEMP/verified-sha256")
           npm publish "$RUNNER_TEMP/corpus-root-pack/kontourai-corpus-$RELEASE_VERSION.tgz" --access public --provenance --ignore-scripts --tag "$DIST_TAG"

@@ -37,6 +37,21 @@ const refusals = [
     options: { version: '0.7.0', args: ['0.7.0'], changelog: '# Changelog\n\n## 0.7.0\n\n- A.\n\n## Unreleased — Corpus\n\n- B.\n' },
     message: /still has "## Unreleased — Corpus"/,
   },
+  {
+    label: 'a bracketed [Unreleased] section after the release',
+    options: { changelog: '# Changelog\n\n## 0.8.0\n\n- A.\n\n## [Unreleased]\n\n- B.\n' },
+    message: /still has "## \[Unreleased\]"/,
+  },
+  {
+    label: 'an Unreleased heading at another level',
+    options: { changelog: '# Changelog\n\n## 0.8.0\n\n### Unreleased\n\n- B.\n' },
+    message: /still has "### Unreleased"/,
+  },
+  {
+    label: 'a top-level Unreleased heading',
+    options: { changelog: '# Unreleased\n\n## 0.8.0\n\n- A.\n' },
+    message: /still has "# Unreleased"/,
+  },
   { label: 'a changelog whose first section is another version', options: { changelog: '# Changelog\n\n## 0.7.0\n\n- A.\n' }, message: /first section is "## 0\.7\.0", not "## 0\.8\.0"/ },
   { label: 'a missing changelog', options: { changelog: null }, message: /cannot read CHANGELOG\.md/ },
   { label: 'no version argument', options: { args: [] }, message: /usage: root-release-preflight\.mjs <exact-version>/ },

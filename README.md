@@ -50,9 +50,11 @@ tarball's file list against an allow-list (`bin/`, `src/`, `schemas/`,
 `--ignore-scripts` into a fresh project, and runs the installed `corpus check`,
 `corpus decisions check` (including a rejected record), and the `docs-kit`
 alias against a fixture corpus and against this repository. It then exports
-that same tarball with its SHA-256. The publish job, with `id-token: write` in
-the `npm-publish` environment, checks the hash after download and again
-immediately before publishing, and publishes the exact verified file with
+that same tarball with its SHA-256, and also passes that SHA-256 to the publish
+job as a job output, outside the artifact. The publish job, with
+`id-token: write` in the `npm-publish` environment, checks the downloaded
+tarball against both the artifact's `SHA256SUMS` and that job output, and
+again immediately before publishing, and publishes the exact verified file with
 `--provenance --ignore-scripts`, without repacking. Run
 `npm run verify:pack` locally to exercise the same check; it fetches the
 tarball's dependencies from the registry.
@@ -78,8 +80,9 @@ the initial candidate is `0.1.0-next.0`. Release-please does not manage these
 workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
-and uploads the two tested `npm pack` tarballs with SHA-256 hashes. A separate
-publish job checks those hashes after download and immediately before publishing
+and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
+passes to the publish job as job outputs. A separate publish job checks the
+tarballs against both after download and immediately before publishing
 the same tarballs with provenance. Only the publish job has OIDC permission;
 test and build steps use `contents: read`. Every prerelease
 uses `next`; stable versions use `latest`. Both versions must be absent on npm
