@@ -236,48 +236,96 @@ export function checkFreshness(root, manifest, base) {
   const changed = changedFiles(root, base);
   const changedSet = new Set(changed);
   const failures = [];
+  const stale = [];
   for (const document of manifest.documents) {
     if (document.covers.length === 0) continue;
     const covered = changed.filter(globMatcher(document.covers));
     if (covered.length === 0 || changedSet.has(document.source)) continue;
     const sample = covered.slice(0, 5).join(', ') + (covered.length > 5 ? `, +${covered.length - 5} more` : '');
     failures.push(`${document.source} is stale: covered files changed since ${base} (${sample}) but the document did not`);
+    stale.push({ source: document.source, kind: STALE_KIND.freshness, changed: covered });
   }
-  return { failures, changedCount: changed.length };
+  return { failures, stale, changedCount: changed.length };
 }
+
+/**
+ * Why a document is stale, by the gate that found it. Only the freshness gate
+ * finds stale documents today: their `covers` sources changed and they did
+ * not. Every stale document in a report carries one of these kinds, never a
+ * bare "stale" flag.
+ */
+export const STALE_KIND = Object.freeze({ freshness: 'docs-covers' });
+
+/** Every gate `check` can report, in report order. `--only` accepts these names. */
+export const GATE_NAMES = Object.freeze(['manifest', 'purpose', 'builtOn', 'links', 'reachability', 'topics', 'redirects', 'paths', 'covers', 'decisions', 'adr-freeze', 'freshness']);
+
+/** Parse `--only a,b`: known gate names, at least one. */
+export function parseOnly(value) {
+  const names = value.split(',').map((name) => name.trim()).filter(Boolean);
+  if (names.length === 0) throw new UsageError('--only needs at least one gate name');
+  const unknown = names.filter((name) => !GATE_NAMES.includes(name));
+  if (unknown.length > 0) throw new UsageError(`--only: unknown gate ${unknown.map((name) => `"${name}"`).join(', ')}; gates are ${GATE_NAMES.join(', ')}`);
+  return [...new Set(names)];
+}
+
+const ONLY_HINTS = {
+  freshness: 'pass --base <git-ref>',
+  decisions: 'the manifest declares no "decisions" block',
+  'adr-freeze': 'it needs --base <git-ref> and a "decisions.adr" block',
+};
 
 /**
  * Run the gates. Returns { exitCode, gates, manifest } and never throws for
  * gate failures. An invalid manifest is a configuration error (exit 2) and the
  * dependent gates are reported as skipped.
  */
-export function runChecks({ root, base = null, advisory = false, freshness = true }) {
+export function runChecks({ root, base = null, advisory = false, freshness = true, only = null }) {
+  const result = runSelectedChecks({ root, base, advisory, freshness, only });
+  // A selected gate that did not run must not read as a pass: a lane that
+  // asks for one gate never passes by checking nothing.
+  if (only !== null && result.manifest !== null) {
+    for (const name of only) {
+      const gate = result.gates.find((entry) => entry.name === name);
+      if (gate && !gate.skipped) continue;
+      throw new UsageError(`--only ${name}: the gate did not run (${gate?.skipped ?? ONLY_HINTS[name] ?? 'it does not apply to this run'})`);
+    }
+  }
+  return result;
+}
+
+function runSelectedChecks({ root, base, advisory, freshness, only }) {
   const gates = [];
   let exitCode = EXIT_OK;
   const raise = (code) => {
     exitCode = Math.max(exitCode, code);
   };
+  // The manifest always runs: every other gate depends on it.
+  const selected = (name) => only === null || only.includes(name);
 
   const { manifest, errors } = validateManifest(readManifestJson(root), root, manifestFile(root));
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);
-    for (const name of ['purpose', 'links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
+    for (const name of ['purpose', 'links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])].filter(selected))
       gates.push({ name, skipped: `${manifestFile(root)} is invalid` });
     return { exitCode, gates, manifest: null };
   }
 
   // An exact match only: a heuristic on "TODO" would also refuse real sentences.
   // A gate failure (exit 1), not a manifest error, so a new adopter still sees every other gate.
-  const purposeFailures = manifest.purpose === INIT_PURPOSE_PLACEHOLDER
-    ? [`${manifestFile(root)}: purpose is still the init placeholder; replace it with one sentence saying what this product is for`]
-    : [];
-  gates.push({ name: 'purpose', failures: purposeFailures });
-  if (purposeFailures.length > 0) raise(EXIT_GATE);
+  if (selected('purpose')) {
+    const purposeFailures = manifest.purpose === INIT_PURPOSE_PLACEHOLDER
+      ? [`${manifestFile(root)}: purpose is still the init placeholder; replace it with one sentence saying what this product is for`]
+      : [];
+    gates.push({ name: 'purpose', failures: purposeFailures });
+    if (purposeFailures.length > 0) raise(EXIT_GATE);
+  }
 
-  const builtOn = checkBuiltOn(root, manifest);
-  gates.push({ name: 'builtOn', ...builtOn });
-  if (builtOn.failures?.length) raise(EXIT_GATE);
+  if (selected('builtOn')) {
+    const builtOn = checkBuiltOn(root, manifest);
+    gates.push({ name: 'builtOn', ...builtOn });
+    if (builtOn.failures?.length) raise(EXIT_GATE);
+  }
 
   const read = createDocumentReader(root);
   for (const [name, run] of [
@@ -289,20 +337,29 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
     // covers only feeds freshness, so build (freshness: false) is not blocked by it.
     ...(freshness ? [['covers', () => checkCovers(root, manifest)]] : []),
   ]) {
+    if (!selected(name)) continue;
     const failures = run();
     gates.push({ name, failures });
     if (failures.length > 0) raise(EXIT_GATE);
   }
 
-  if (manifest.decisions) runDecisionGates(root, manifest, freshness ? base : undefined, gates, raise);
+  if (manifest.decisions && (selected('decisions') || selected('adr-freeze'))) {
+    // decisions and adr-freeze share one pass, which pushes each gate and then
+    // raises its code; an unselected gate is dropped, and so is its exit code.
+    const decisionGates = [];
+    runDecisionGates(root, manifest, freshness ? base : undefined, decisionGates, (code) => {
+      if (selected(decisionGates.at(-1).name)) raise(code);
+    });
+    gates.push(...decisionGates.filter((gate) => selected(gate.name)));
+  }
 
-  if (freshness && base !== null) {
+  if (freshness && base !== null && selected('freshness')) {
     try {
-      const { failures, changedCount } = checkFreshness(root, manifest, base);
+      const { failures, stale, changedCount } = checkFreshness(root, manifest, base);
       if (advisory) {
-        gates.push({ name: 'freshness', failures: [], warnings: failures, note: `${changedCount} changed files since ${base}, advisory` });
+        gates.push({ name: 'freshness', failures: [], warnings: failures, stale, note: `${changedCount} changed files since ${base}, advisory` });
       } else {
-        gates.push({ name: 'freshness', failures, note: `${changedCount} changed files since ${base}` });
+        gates.push({ name: 'freshness', failures, stale, note: `${changedCount} changed files since ${base}` });
         if (failures.length > 0) raise(EXIT_GATE);
       }
     } catch (error) {
@@ -397,4 +454,53 @@ export function formatCheckReport({ gates, exitCode }, root, { title = 'docs-kit
   else if (exitCode === EXIT_USAGE) lines.push(`${title}: configuration error (${failed} problem${failed === 1 ? '' : 's'})`);
   else lines.push(`${title} failed: ${failed} failure${failed === 1 ? '' : 's'}`);
   return lines.join('\n');
+}
+
+const gateStatus = (gate) => (gate.skipped ? 'skip' : gate.error ? 'error' : gate.failures.length > 0 ? 'fail' : gate.warnings?.length ? 'warn' : 'pass');
+
+/**
+ * `check --json`: the same result as one JSON object, for tools that consume
+ * a verdict, such as a Veritas external-tool evidence check. `verdict` is
+ * `pass`, `warn` (exit 0 with warnings, as with --advisory), or `fail` (exit 1
+ * or 2; `exitCode` tells them apart). `summary` holds numeric counts. Each
+ * stale document is listed once in `staleDocuments` with the kind of
+ * staleness, and once in `actions` with `type` set to that kind.
+ */
+export function checkReportJson({ gates, exitCode }, { base = null, advisory = false, only = null } = {}) {
+  const staleDocuments = gates.flatMap((gate) =>
+    (gate.stale ?? []).map(({ source, kind, changed }) => ({ source, kind, gate: gate.name, severity: gate.failures.length > 0 ? 'failure' : 'warning', changed })),
+  );
+  const count = (key) => gates.reduce((sum, gate) => sum + (gate[key]?.length ?? 0), 0);
+  const warnings = count('warnings');
+  return {
+    schemaVersion: 1,
+    tool: 'corpus',
+    command: 'check',
+    verdict: exitCode !== EXIT_OK ? 'fail' : warnings > 0 ? 'warn' : 'pass',
+    exitCode,
+    base,
+    advisory,
+    only,
+    summary: { failures: count('failures'), warnings, errors: gates.filter((gate) => gate.error).length, staleDocuments: staleDocuments.length },
+    gates: gates.map((gate) => ({
+      name: gate.name,
+      status: gateStatus(gate),
+      ...(gate.note ? { note: gate.note } : {}),
+      ...(gate.skipped ? { skipped: gate.skipped } : {}),
+      ...(gate.error ? { error: gate.error } : {}),
+      failures: gate.failures ?? [],
+      warnings: gate.warnings ?? [],
+    })),
+    staleDocuments,
+    actions: staleDocuments.map(({ source, kind, changed }) => ({
+      type: kind,
+      description: `${source} is stale: ${changed.length} covered file${changed.length === 1 ? '' : 's'} changed since ${base} but the document did not`,
+      paths: [source, ...changed],
+    })),
+  };
+}
+
+/** `check --json` when the run could not start (a usage or configuration error before any gate ran). */
+export function checkErrorJson(error, { base = null, advisory = false, only = null } = {}) {
+  return { schemaVersion: 1, tool: 'corpus', command: 'check', verdict: 'fail', exitCode: error.exitCode, base, advisory, only, error: error.message };
 }

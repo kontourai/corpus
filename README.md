@@ -184,10 +184,39 @@ Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An in
 ### check
 
 ```sh
-corpus check [--root dir] [--base <git-ref>] [--advisory]
+corpus check [--root dir] [--base <git-ref>] [--advisory] [--only <gates>] [--json]
 ```
 
 `check` runs the gates below and reports every failure, not only the first.
+
+- `--only <gates>` runs only the named gates, comma-separated, using the names in the list below (`builtOn`, `adr-freeze`, and so on). The manifest always runs, because every other gate depends on it. An unknown name is a usage error (exit `2`). So is a selected gate that does not run, such as `freshness` without `--base`, `decisions` without a `decisions` block, or `adr-freeze` without `--base` and `decisions.adr`: a lane that asks for one gate never passes by checking nothing.
+- `--json` prints one JSON object on stdout instead of the text report. Exit codes are unchanged. If the run cannot start (for example, no `corpus.json`, or a bad `--only`), it still prints an object with `verdict: "fail"`, `exitCode: 2`, and `error`, and the message also goes to stderr. The object is:
+
+  ```json
+  {
+    "schemaVersion": 1,
+    "tool": "corpus",
+    "command": "check",
+    "verdict": "fail",
+    "exitCode": 1,
+    "base": "origin/main",
+    "advisory": false,
+    "only": ["freshness"],
+    "summary": { "failures": 1, "warnings": 0, "errors": 0, "staleDocuments": 1 },
+    "gates": [
+      { "name": "manifest", "status": "pass", "failures": [], "warnings": [] },
+      { "name": "freshness", "status": "fail", "note": "3 changed files since origin/main", "failures": ["docs/cli.md is stale: …"], "warnings": [] }
+    ],
+    "staleDocuments": [
+      { "source": "docs/cli.md", "kind": "docs-covers", "gate": "freshness", "severity": "failure", "changed": ["src/cli.js"] }
+    ],
+    "actions": [
+      { "type": "docs-covers", "description": "docs/cli.md is stale: 1 covered file changed since origin/main but the document did not", "paths": ["docs/cli.md", "src/cli.js"] }
+    ]
+  }
+  ```
+
+  `verdict` is `pass`, `warn` (exit `0` with warnings, as under `--advisory`), or `fail` (exit `1` or `2`; `exitCode` tells them apart). A gate's `status` is `pass`, `warn`, `fail`, `skip` (with `skipped`, the reason), or `error` (with `error`). `summary` holds only numbers. Every stale document carries the `kind` of staleness, never a bare stale flag. Today the only kind is `docs-covers`: a file matched by the document's `covers` changed and the document did not. `changed` lists every such file, and `severity` is `warning` under `--advisory`. `actions` has one entry per stale document, with `type` set to its kind. A broken link and a stale document therefore no longer look the same: both exit `1`, but only a stale document is listed in `staleDocuments` and `actions`. The shape matches the external-tool artifact that a [Veritas](https://github.com/kontourai/veritas) evidence check reads (`verdict`, numeric `summary`, `actions`), so `corpus check --base origin/main --only freshness --json` can be bound as evidence.
 
 For v2 manifests, the **builtOn** gate compares declarations with root and workspace `package.json` dependencies, peer dependencies, and optional dependencies. Dependencies are verified by their exact package keys in `via`. `via` accepts a string or a non-empty array, allowing `{ "product": "console", "via": ["@kontourai/console-core", "@kontourai/console-ui"], "for": "Console integration" }`. All names in an entry are declared to belong to that product. **Product ids and package-to-product ownership are declared by the owner and cannot be verified offline.** The gate does not derive product identity from a scope, package name, or GitHub repository name. Missing-package suggestions use `OWNER_PRODUCT_ID`, which the owner must replace.
 

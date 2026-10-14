@@ -16,6 +16,9 @@ Commands:
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
+            --only <gates>      run only these comma-separated gates (and the manifest);
+                                a selected gate that cannot run is a usage error
+            --json              print the result as one JSON object on stdout
   build   Run check (without freshness), render the site, write docs-bundle.json,
           and verify every internal link of the generated site
             --root <dir>        repository root (default: .)
@@ -50,7 +53,7 @@ Exit codes: 0 ok, 1 gate failure, 2 usage or configuration error.
 Manifest reference: https://github.com/kontourai/corpus#manifest-reference`;
 
 const COMMAND_OPTIONS = {
-  check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' } },
+  check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' }, only: { type: 'string' }, json: { type: 'boolean' } },
   build: { root: { type: 'string' }, out: { type: 'string' }, 'base-url': { type: 'string' } },
   locate: { root: { type: 'string' }, quote: { type: 'string' }, source: { type: 'string' } },
   mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' } },
@@ -124,11 +127,20 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
 
     switch (command) {
       case 'check': {
-        if (values.advisory && values.base === undefined) throw new UsageError('--advisory only applies to the freshness gate; pass --base <git-ref>');
-        const { runChecks, formatCheckReport } = await import('./check.mjs');
-        const result = runChecks({ root, base: values.base ?? null, advisory: Boolean(values.advisory) });
-        (result.exitCode === EXIT_OK ? say : warn)(formatCheckReport(result, root));
-        return result.exitCode;
+        const { runChecks, formatCheckReport, parseOnly, checkReportJson, checkErrorJson } = await import('./check.mjs');
+        const run = { base: values.base ?? null, advisory: Boolean(values.advisory), only: null };
+        try {
+          if (values.advisory && values.base === undefined) throw new UsageError('--advisory only applies to the freshness gate; pass --base <git-ref>');
+          if (values.only !== undefined) run.only = parseOnly(values.only);
+          const result = runChecks({ root, ...run });
+          if (values.json) say(JSON.stringify(checkReportJson(result, run), null, 2));
+          else (result.exitCode === EXIT_OK ? say : warn)(formatCheckReport(result, root));
+          return result.exitCode;
+        } catch (error) {
+          // A JSON consumer reads stdout, so a run that cannot start still prints a verdict there.
+          if (values.json && error instanceof DocsKitError) say(JSON.stringify(checkErrorJson(error, run), null, 2));
+          throw error;
+        }
       }
       case 'build': {
         const { runBuild } = await import('./build.mjs');
