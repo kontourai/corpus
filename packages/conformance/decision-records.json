@@ -451,6 +451,52 @@
       ]
     },
     {
+      "id": "valid-subject-continued-over-lines",
+      "description": "A subject written over several lines folds into one line, so it is valid.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: First line\n  second line\ndecided: 2026-07-03\nevidence:\n  - kind: pr\n    ref: \"#1\"\n---\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "First line second line",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "pr",
+                "ref": "#1"
+              }
+            ]
+          },
+          "expected": []
+        }
+      ]
+    },
+    {
+      "id": "subject-block-scalar-keeps-newline",
+      "description": "A folded block scalar without the strip indicator keeps its final line break, so the subject is not one line.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: >\n  First line\n  second line\ndecided: 2026-07-03\nevidence:\n  - kind: pr\n    ref: \"#1\"\n---\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "First line second line\n",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "pr",
+                "ref": "#1"
+              }
+            ]
+          },
+          "expected": [
+            "subject"
+          ]
+        }
+      ]
+    },
+    {
       "id": "subject-not-a-string",
       "description": "The subject is a string, not a mapping.",
       "records": [
@@ -718,6 +764,126 @@
               {
                 "kind": "url",
                 "ref": "https://example.com/?token=\"not-a-real-value\""
+              }
+            ]
+          },
+          "expected": [
+            "secret"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "secret-aws-access-key-id",
+      "description": "An AWS access key id (AKIA…) in a ref is refused. The literal is written with a JSON \\u escape so the file itself holds no credential-shaped text; it decodes to the refused value.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: url\n    ref: https://example.com/?id=A\u004BIAIOSFODNN7EXAMPLE\n---\n\n# Example subject\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Example subject",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "url",
+                "ref": "https://example.com/?id=A\u004BIAIOSFODNN7EXAMPLE"
+              }
+            ]
+          },
+          "expected": [
+            "secret"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "secret-aws-sts-key-id",
+      "description": "An AWS STS key id (ASIA…) in a ref is refused. The literal is written with a JSON \\u escape so the file itself holds no credential-shaped text; it decodes to the refused value.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: doc\n    ref: A\u0053IAIOSFODNN7EXAMPLE\n---\n\n# Example subject\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Example subject",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "doc",
+                "ref": "A\u0053IAIOSFODNN7EXAMPLE"
+              }
+            ]
+          },
+          "expected": [
+            "secret"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "secret-github-token",
+      "description": "A GitHub token (ghp_, gho_, ghu_, ghs_, ghr_) in a ref is refused. The literal is written with a JSON \\u escape so the file itself holds no credential-shaped text; it decodes to the refused value.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: url\n    ref: https://example.com/?auth=g\u0068p_EXAMPLEexampleEXAMPLEexampleEXAMPLE0\n---\n\n# Example subject\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Example subject",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "url",
+                "ref": "https://example.com/?auth=g\u0068p_EXAMPLEexampleEXAMPLEexampleEXAMPLE0"
+              }
+            ]
+          },
+          "expected": [
+            "secret"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "secret-private-key-block",
+      "description": "A private key header in a ref is refused.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: doc\n    ref: \"-----BEGIN OPENSSH PRIVATE KEY-----\"\n---\n\n# Example subject\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Example subject",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "doc",
+                "ref": "-----BEGIN OPENSSH PRIVATE KEY-----"
+              }
+            ]
+          },
+          "expected": [
+            "secret"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "secret-jwt",
+      "description": "A JSON Web Token in a ref is refused.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: url\n    ref: https://example.com/#eyJhbGciOiJub25lIn0.eyJzdWIiOiJleGFtcGxlIn0.ZXhhbXBsZS1zaWduYXR1cmU\n---\n\n# Example subject\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Example subject",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "url",
+                "ref": "https://example.com/#eyJhbGciOiJub25lIn0.eyJzdWIiOiJleGFtcGxlIn0.ZXhhbXBsZS1zaWduYXR1cmU"
               }
             ]
           },
