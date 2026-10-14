@@ -2,9 +2,11 @@
 // repository root by the root publish workflow before anything is packed.
 //
 // The dispatched version must be the manifest version, and CHANGELOG.md must
-// already describe it: its first `## ` heading is exactly that version and no
-// `## Unreleased` section remains. A tree whose changelog still carries
-// unreleased changes cannot be published under the previous version's number.
+// already describe it: its first level-2 heading is exactly that version, and
+// no heading of any kind names "Unreleased" (ATX at any level, indented or
+// tab-separated, bracketed as "[Unreleased]", or setext-underlined). A tree
+// whose changelog still carries unreleased changes cannot be published under
+// the previous version's number. Body text that mentions the word is fine.
 import { readFileSync } from 'node:fs';
 
 const [version, ...extra] = process.argv.slice(2);
@@ -23,13 +25,20 @@ if (metadata.version !== version) refuse(`package.json version ${JSON.stringify(
 let changelog;
 try { changelog = readFileSync('CHANGELOG.md', 'utf8'); }
 catch (error) { refuse(`cannot read CHANGELOG.md: ${error.message}`); }
-// Every ATX heading, at any level, with Keep a Changelog's [brackets] stripped,
-// so "## [Unreleased]", "### Unreleased", and "# Unreleased" are all seen.
-const headings = [...changelog.matchAll(/^(#{1,6}) +(.+?)\s*$/gm)].map((match) => ({
-  written: `${match[1]} ${match[2]}`,
-  level: match[1].length,
-  text: match[2].replace(/[[\]]/g, '').trim(),
-}));
+// Every heading, deliberately looser than CommonMark so nothing slips past:
+// ATX with any leading whitespace and a space or tab after the #s, and setext
+// (a text line underlined with = or -). Keep a Changelog's [brackets] and
+// closing #s are stripped from the text.
+const headings = [];
+const lines = changelog.split(/\r?\n/);
+const clean = (text) => text.replace(/[[\]]/g, '').replace(/\s+#+\s*$/, '').trim();
+lines.forEach((line, index) => {
+  const atx = /^\s*(#{1,6})(?:[ \t]+(.*))?$/.exec(line);
+  if (atx) return headings.push({ written: line.trim(), level: atx[1].length, text: clean(atx[2] ?? '') });
+  const underline = /^\s*(=+|-+)\s*$/.exec(lines[index + 1] ?? '');
+  if (underline && line.trim() !== '' && !/^\s*([-*+]\s|>|\d+[.)]\s)/.test(line))
+    headings.push({ written: `${line.trim()} (underlined)`, level: underline[1].startsWith('=') ? 1 : 2, text: clean(line) });
+});
 const unreleased = headings.find(({ text }) => /\bunreleased\b/i.test(text));
 if (unreleased !== undefined) refuse(`CHANGELOG.md still has "${unreleased.written}"; release those changes under "## ${version}" first`);
 const first = headings.find(({ level }) => level === 2);

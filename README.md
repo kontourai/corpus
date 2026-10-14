@@ -52,9 +52,10 @@ tarball's file list against an allow-list (`bin/`, `src/`, `schemas/`,
 alias against a fixture corpus and against this repository. It then exports
 that same tarball with its SHA-256, and also passes that SHA-256 to the publish
 job as a job output, outside the artifact. The publish job, with
-`id-token: write` in the `npm-publish` environment, checks the downloaded
-tarball against both the artifact's `SHA256SUMS` and that job output, and
-again immediately before publishing, and publishes the exact verified file with
+`id-token: write` in the `npm-publish` environment, checks the tarball twice.
+Right after download it checks it against the artifact's `SHA256SUMS` and
+against the job-output hash. Immediately before `npm publish` it checks it
+against the job-output hash again. It then publishes that exact file with
 `--provenance --ignore-scripts`, without repacking. Run
 `npm run verify:pack` locally to exercise the same check; it fetches the
 tarball's dependencies from the registry.
@@ -81,9 +82,10 @@ workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
 and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
-passes to the publish job as job outputs. A separate publish job checks the
-tarballs against both after download and immediately before publishing
-the same tarballs with provenance. Only the publish job has OIDC permission;
+passes to the publish job as job outputs. A separate publish job checks each
+tarball right after download against the artifact's `SHA256SUMS` and against
+the job-output hashes, then against the job-output hash again immediately
+before each `npm publish`, and publishes those same tarballs with provenance. Only the publish job has OIDC permission;
 test and build steps use `contents: read`. Every prerelease
 uses `next`; stable versions use `latest`. Both versions must be absent on npm
 before either publish begins. An existing version, registry error other than
