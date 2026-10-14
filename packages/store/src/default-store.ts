@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type {
   ApplyEvidence,
+  CategoryListOptions,
   CreateInput,
   KitLink,
   KitRecord,
@@ -16,6 +17,7 @@ import type {
   KitReverseLink,
   KnowledgeStoreAdapter,
   LinkEvidence,
+  ListOptions,
   ProposeEvidence,
   RejectEvidence,
   RetireEvidence,
@@ -33,6 +35,7 @@ import {
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { freshnessPatch } from './shared/freshness.js';
+import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
 import {
   addLinksToGraph,
@@ -982,40 +985,30 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
     });
   }
 
-  // ── listByCategory / listByType (§7, B.3/B.5) ─────────────────────────
+  // ── listByCategory / listByType (§7, B.3/B.5; working set by default) ──
 
   async listByCategory(
     category: string,
-    options: { prefix?: boolean; includeRetired?: boolean } = {},
+    options: CategoryListOptions = {},
   ): Promise<KitRecord[]> {
-    return this.files.read(() => {
-      const includeRetired = options.includeRetired === true;
-      const keep = (r: KitRecord) =>
-        includeRetired || (r.status ?? 'active') !== 'retired';
-      const records = this.allRecords();
-      if (options.prefix) {
-        return records.filter(
-          (r) =>
-            (r.category === category ||
-              r.category.startsWith(`${category}.`)) &&
-            keep(r),
-        );
-      }
-      return records.filter((r) => r.category === category && keep(r));
-    });
+    return this.files.read(() =>
+      this.listed(options).filter((r) =>
+        options.prefix
+          ? r.category === category || r.category.startsWith(`${category}.`)
+          : r.category === category,
+      ),
+    );
   }
 
   async listByType(
     type: KitRecordType,
-    options: { includeRetired?: boolean } = {},
+    options: ListOptions = {},
   ): Promise<KitRecord[]> {
-    return this.files.read(() => {
-      const includeRetired = options.includeRetired === true;
-      return this.allRecords().filter(
-        (r) =>
-          r.type === type &&
-          (includeRetired || (r.status ?? 'active') !== 'retired'),
-      );
-    });
+    return this.files.read(() => this.listed(options).filter((r) => r.type === type));
+  }
+
+  private listed(options: ListOptions): KitRecord[] {
+    const history = includesHistory(options);
+    return this.allRecords().filter((r) => history || !isHistorical(r));
   }
 }

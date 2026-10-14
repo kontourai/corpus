@@ -224,13 +224,32 @@ export interface KnowledgeStoreAdapter {
   getLinks(
     idOrHandle: string,
   ): Promise<{ forward: KitLink[]; reverse: KitReverseLink[] }>;
-  // B.5 also adds `includeRetired?: boolean` to both list methods' options (default: excludes retired).
+  /** Lists the working set by default; see `ListOptions`. */
   listByCategory(
     category: string,
-    options?: { prefix?: boolean; includeRetired?: boolean },
+    options?: CategoryListOptions,
   ): Promise<KitRecord[]>;
   listByType(
     type: KitRecordType,
-    options?: { includeRetired?: boolean },
+    options?: ListOptions,
   ): Promise<KitRecord[]>;
+}
+
+/**
+ * List options (owner decision, 2026-10-13). Lists return the working set: records
+ * that are neither retired nor superseded. `includeHistory: true` adds retired and
+ * superseded records. `get` and `getLinks` always reach history.
+ */
+export interface ListOptions {
+  includeHistory?: boolean;
+  /**
+   * @deprecated Use `includeHistory`. Accepted as an alias and translated to
+   * `includeHistory: true`, which also includes superseded records.
+   */
+  includeRetired?: boolean;
+}
+
+export interface CategoryListOptions extends ListOptions {
+  /** Also match dot-separated subcategories of `category`. */
+  prefix?: boolean;
 }

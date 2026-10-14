@@ -293,7 +293,7 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-6 of the 7 expected failures are bound to ref/kind/expected/actual, and 1 to
+3 of the 4 expected failures are bound to ref/kind/expected/actual, and 1 to
 specific error patterns.
 
 ### Host vectors
@@ -323,3 +323,22 @@ and a test that the kept checks still reject.
 
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 116 passing and
 7 expected failures, with no unexpected result, for both default and vault.
+
+### Lists return the working set
+
+One predicate (`shared/lifecycle.ts`) decides history for both profiles:
+retired status, a `superseded-by` mutation-log entry, or an archived vault
+note. Lists exclude historical records unless `includeHistory: true`; the
+vault's history walks archived notes. `includeRetired` is translated to
+`includeHistory`. Before this change the default profile listed superseded
+records and the vault excluded archived notes even from `includeRetired`, so
+the two profiles disagreed; the contract suite's header exclusion for
+supersede listing is removed and the shared suite now asserts the working set
+and history for both. `retire-working-set`, `supersede-listing` and
+`read-retired` leave the list. The adjudication tests used live list entries as
+examples, so they now adjudicate a fixture list instead (the selected-vector
+CLI test passes it through `CORPUS_EXPECTED_FAILS`), keeping their force once
+the real list is empty.
+
+EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 119 passing and
+4 expected failures, with no unexpected result, for both default and vault.

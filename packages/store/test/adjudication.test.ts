@@ -1,16 +1,34 @@
 import { expect, test } from 'vitest';
 import { hostVectors, storeVectors, vectors } from '@kontourai/corpus-conformance';
 import { adjudicate, packageCases } from './conformance.mjs';
-import expected from './expected-fails.json';
+// A fixture list with both binding shapes, so these tests keep their force after
+// the real list empties.
+const expected = {
+  'read-retired': {
+    profiles: ['default', 'vault'],
+    awaits: 'fixture decision',
+    assertions: {
+      default: { ref: 'history', kind: 'length', expected: 1, actual: 0 },
+      vault: { ref: 'history', kind: 'length', expected: 1, actual: 0 },
+    },
+  },
+  'compiled-without-source': {
+    profiles: ['default', 'vault'],
+    awaits: 'fixture decision',
+    errorPattern: '^create must reject$',
+  },
+};
 test('expected failures bind to the exact assertion and observed values', () => {
-  for (const profile of ['default', 'vault']) for (const [id, decision] of Object.entries(expected)) {
-    if (!('assertions' in decision)) continue;
-    const assertion = decision.assertions[profile];
-    const failure = { id, passed: false, error: 'Expected values to be strictly equal', assertion };
+  for (const profile of ['default', 'vault']) {
+    const assertion = expected['read-retired'].assertions[profile as 'default' | 'vault'];
+    const failure = { id: 'read-retired', passed: false, error: 'Expected values to be strictly equal', assertion };
     expect(adjudicate({ results: [failure] }, profile, expected, { selected: true }).passed).toBe(true);
     for (const changed of [{ ...assertion, ref: 'wrong' }, { ...assertion, expected: 999 }, { ...assertion, actual: 999 }]) {
       expect(adjudicate({ results: [{ ...failure, assertion: changed }] }, profile, expected, { selected: true }).passed).toBe(false);
     }
+    const patterned = { id: 'compiled-without-source', passed: false, error: 'create must reject' };
+    expect(adjudicate({ results: [patterned] }, profile, expected, { selected: true }).passed).toBe(true);
+    expect(adjudicate({ results: [{ ...patterned, error: 'something else' }] }, profile, expected, { selected: true }).passed).toBe(false);
   }
 });
 test('selected vectors still reject unexpected passes and unexpected failures', () => {
@@ -20,10 +38,24 @@ test('selected vectors still reject unexpected passes and unexpected failures', 
 
 test('the selected-vector CLI applies expected-fail adjudication', async () => {
   const { spawnSync } = await import('node:child_process');
-  const result = spawnSync(process.execPath, [new URL('./conformance.mjs', import.meta.url).pathname, 'read-retired'], { encoding: 'utf8' });
-  expect(result.status, result.stderr + result.stdout).toBe(0);
-  expect(result.stdout).toContain('"unexpected": []');
-  expect(result.stdout).toContain('"read-retired"');
+  const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const directory = mkdtempSync(join(tmpdir(), 'corpus-adjudication-'));
+  try {
+    // A passing vector listed as an expected failure must fail the selected run.
+    const list = join(directory, 'expected-fails.json');
+    writeFileSync(list, JSON.stringify({ 'create-roundtrip': { profiles: ['default', 'vault'], awaits: 'fixture', errorPattern: '^never$' } }));
+    const cli = new URL('./conformance.mjs', import.meta.url).pathname;
+    const listed = spawnSync(process.execPath, [cli, 'create-roundtrip'], { encoding: 'utf8', env: { ...process.env, CORPUS_EXPECTED_FAILS: list } });
+    expect(listed.status, listed.stderr + listed.stdout).toBe(1);
+    expect(listed.stdout).toContain('Expected-fail vector passed; remove it from the list');
+    const unlisted = spawnSync(process.execPath, [cli, 'create-roundtrip'], { encoding: 'utf8' });
+    expect(unlisted.status, unlisted.stderr + unlisted.stdout).toBe(0);
+    expect(unlisted.stdout).toContain('"unexpected": []');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('the package runs every store vector and no host vector', () => {

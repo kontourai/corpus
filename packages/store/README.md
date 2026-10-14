@@ -28,9 +28,18 @@ Implemented:
   `proposes` link to the target. Mutation-log evidence keeps its stored
   `concept_id` key.
 
+- **Lists return the working set.** `listByType` and `listByCategory` omit
+  retired and superseded records unless `includeHistory: true` is passed. Both
+  profiles share one predicate: a record is historical when its status is
+  `retired`, when it carries a `superseded-by` mutation-log entry, or (vault)
+  when its note is archived. `implemented` records stay in the working set.
+  The vault's history walks archived notes. `includeRetired` is a deprecated
+  alias, translated to `includeHistory: true`, so it now also returns superseded
+  records; removing the alias is a separate, owner-approved change. `get` and
+  `getLinks` always reach history.
+
 Not yet implemented, and listed as expected failures:
 
-- List results default to the working set, with one `includeHistory` flag.
 - One expiry rule (`created_at + ttl_seconds`, explicit `expires_at` first) and
   an expiry-only stale filter.
 - A compiled record must link a raw source when it is created.
@@ -58,11 +67,12 @@ await store.get(id);
 
 Vault construction uses `KitObsidianStoreAdapter` with the same options plus
 optional `sourcesDir` (default `sources`). Constructors prepare directories;
-locked reads may repair derived indexes or recover a journal. List options remain
-`includeRetired` and category `prefix`; retired records are gettable. Default
-superseded files remain listed; vault superseded files are archived. No
-`includeHistory`, stale filter, search, capabilities object, alternate vault
-index format or public storage API is claimed by this extraction.
+locked reads may repair derived indexes or recover a journal. Lists return the
+working set; `includeHistory: true` adds retired and superseded records, and
+category lists also take `prefix` (see [Owner decisions](#owner-decisions)).
+Retired and superseded records are always gettable. Vault superseded files move
+to `archive/`. No stale filter, search, capabilities object, alternate vault
+index format or public storage API is claimed by this package.
 
 The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or

@@ -11,19 +11,10 @@
  * adapter's own `*.contract.test.ts`): on-disk file/path shape assertions
  * (`records/<id>.md` vs. category-path-routed vault layout), `reindex()` /
  * corrupt-index self-heal logging assertions (adapter-internal index filenames
- * differ), and anything that depends on a specific physical file location. Also
- * excluded on a grounded, documented basis (Addendum L §L.6, store-contract.md:1543-
- * 1546 — the dispositive text — read alongside Addendum J.3; see the
- * s200-knowledge-store deliver.md Wave-2 notes and the Wave-2 code review's A.7-vs-J.3
- * adjudication for the full citation trail): a superseded record's presence in
- * `listByType`/`listByCategory` after `supersede`, since the two adapters diverge here
- * BY DESIGN (`kit-default-store` leaves the file in place — status untouched, so it
- * remains listed; `kit-obsidian-store` archives the file — the Kit's own reference
- * adapter does the same, and §L.6 names the default-store's listing inclusion as an
- * adapter-specific "additional guarantee," not a store-wide contract). The store-
- * contract's actual cross-adapter guarantee for supersession is `get(id)` +
- * `getLinks(id).reverse`, both asserted below, which do hold identically across both
- * adapters.
+ * differ), and anything that depends on a specific physical file location.
+ * Listing after `supersede` was once excluded because the adapters diverged; the
+ * owner's working-set decision (2026-10-13) made it identical, and it is asserted
+ * below for both adapters.
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -584,10 +575,8 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
-    // supersede (Addendum A.5/A.6) — the cross-adapter guarantee (Addendum L §L.6,
-    // store-contract.md:1543-1546, read alongside J.3) is `get`/
-    // `getLinks(...).reverse`, NOT listByType/listByCategory inclusion (see the file
-    // header note for why that's deliberately excluded from this shared suite).
+    // supersede (Addendum A.5/A.6): superseded records stay gettable with a reverse
+    // `supersedes` link, and leave the working set in both adapters.
 
     test('supersede never deletes; superseded records remain gettable with a reverse supersedes link', async () => {
       const oldCompiled = await adapter.create({
@@ -644,6 +633,34 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
+    test('lists return the working set; includeHistory adds superseded and retired records', async () => {
+      const ids = async (records: Promise<{ id: string }[]>) => (await records).map((r) => r.id).sort();
+      const source = await adapter.create({ type: 'raw', title: 'Source', body: 'evidence', category: 'history.sources', provenance: { agent: 'agent-1' } });
+      const compiled = (title: string) => adapter.create({ type: 'compiled', title, body: title, category: 'history', provenance: { agent: 'agent-1' }, links: [{ target_id: source, kind: 'source' }] });
+      const superseded = await compiled('Superseded summary');
+      const current = await compiled('Current summary');
+      const retired = await compiled('Retired summary');
+      const implemented = await compiled('Implemented summary');
+      await adapter.supersede(current, [superseded], { agent: 'agent-1', rationale: 'newer' });
+      await adapter.retire(retired, 'retired', { agent: 'agent-1', rationale: 'obsolete' });
+      await adapter.retire(implemented, 'implemented', { agent: 'agent-1', rationale: 'done', implementedByRef: 'change-1' });
+
+      const working = [current, implemented].sort();
+      const history = [current, implemented, retired, superseded].sort();
+      expect(await ids(adapter.listByType('compiled'))).toEqual(working);
+      expect(await ids(adapter.listByCategory('history'))).toEqual(working);
+      expect(await ids(adapter.listByType('compiled', { includeHistory: true }))).toEqual(history);
+      expect(await ids(adapter.listByCategory('history', { includeHistory: true }))).toEqual(history);
+      expect((await ids(adapter.listByCategory('history', { prefix: true, includeHistory: true })))).toEqual([...history, source].sort());
+      // The deprecated alias is translated to includeHistory, superseded records included.
+      expect(await ids(adapter.listByType('compiled', { includeRetired: true }))).toEqual(history);
+      expect(await ids(adapter.listByCategory('history', { includeRetired: true }))).toEqual(history);
+      expect(await ids(adapter.listByType('compiled', { includeHistory: false }))).toEqual(working);
+      // get and getLinks always reach history.
+      expect((await adapter.get(superseded))?.id).toBe(superseded);
+      expect((await adapter.get(retired))?.status).toBe('retired');
+    });
+
     // retire (Addendum B.2/B.4/B.5) — status-based working-set exclusion is identical
     // across both adapters (neither archives on retire; only supersede archives).
 
@@ -692,7 +709,7 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       const listed = await adapter.listByType('compiled');
       expect(listed.find((r) => r.id === id)).toBeUndefined();
       const listedWithRetired = await adapter.listByType('compiled', {
-        includeRetired: true,
+        includeHistory: true,
       });
       expect(listedWithRetired.find((r) => r.id === id)).toBeDefined();
 
@@ -701,7 +718,7 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       const byCategoryWithRetired = await adapter.listByCategory(
         'engineering',
         {
-          includeRetired: true,
+          includeHistory: true,
         },
       );
       expect(byCategoryWithRetired.find((r) => r.id === id)).toBeDefined();
