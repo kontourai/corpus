@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { BIN, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { BIN, fixtureRepo, git, scratch } from './helpers.mjs';
+import { gitEnv } from '../src/git.mjs';
 import { bundleDigest, bundleFromCheckout } from '../src/bundle.mjs';
 import { bundleShapeError, staticSource } from '../src/mcp.mjs';
 
@@ -15,6 +17,21 @@ async function connect(t, args) {
   await client.connect(transport);
   t.after(() => client.close());
   return client;
+}
+
+/**
+ * `corpus mcp <args>` with stdin closed at once. A refused source exits 2
+ * before reading stdin; if a refusal regresses, the server starts, sees EOF,
+ * and exits 0, so the assertion fails instead of the test hanging.
+ */
+function runMcpClosed(args) {
+  return new Promise((resolve) => {
+    const child = execFile(process.execPath, [BIN, 'mcp', ...args], { env: gitEnv(), encoding: 'utf8', timeout: 30_000 }, (error, stdout, stderr) => {
+      const status = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
+      resolve({ status, stdout, stderr, output: `${stdout}\n${stderr}` });
+    });
+    child.stdin.end();
+  });
 }
 
 async function call(client, name, args = {}) {
@@ -106,7 +123,7 @@ test('mcp --bundle repeats for more products and refuses two bundles for one pro
   const products = await call(client, 'list_products');
   assert.deepEqual(products.data.products.map((entry) => entry.product).sort(), ['sample', 'second']);
 
-  const duplicate = await runCli(['mcp', '--bundle', first, '--bundle', first]);
+  const duplicate = await runMcpClosed(['--bundle', first, '--bundle', first]);
   assert.equal(duplicate.status, 2, duplicate.output);
   assert.match(duplicate.stderr, /product "sample" is already served by --bundle /);
 });
@@ -127,7 +144,7 @@ test('mcp --bundle refuses a malformed, dangling, cyclic, unreadable, or combine
     [variant((topics) => (topics[1].parentId = '')), /topics\[1\]\.parentId must be a non-empty string/],
   ];
   for (const [file, message] of cases) {
-    const result = await runCli(['mcp', '--bundle', file]);
+    const result = await runMcpClosed(['--bundle', file]);
     assert.equal(result.status, 2, result.output);
     assert.match(result.stderr, message);
     assert.match(result.stderr, /--bundle /, 'the error names the bundle');
@@ -135,19 +152,19 @@ test('mcp --bundle refuses a malformed, dangling, cyclic, unreadable, or combine
 
   const notJson = path.join(scratch(t), 'bad.json');
   writeFileSync(notJson, '{');
-  const invalid = await runCli(['mcp', '--bundle', notJson]);
+  const invalid = await runMcpClosed(['--bundle', notJson]);
   assert.equal(invalid.status, 2, invalid.output);
   assert.match(invalid.stderr, /invalid JSON/);
 
-  const missing = await runCli(['mcp', '--bundle', path.join(scratch(t), 'absent.json')]);
+  const missing = await runMcpClosed(['--bundle', path.join(scratch(t), 'absent.json')]);
   assert.equal(missing.status, 2, missing.output);
   assert.match(missing.stderr, /ENOENT/);
 
-  const blank = await runCli(['mcp', '--bundle', notJson, '--bundle', ' ']);
+  const blank = await runMcpClosed(['--bundle', notJson, '--bundle', ' ']);
   assert.equal(blank.status, 2, blank.output);
   assert.match(blank.stderr, /--bundle needs a value/);
 
-  const combined = await runCli(['mcp', '--bundle', notJson, '--hub', 'https://kontourai.github.io/']);
+  const combined = await runMcpClosed(['--bundle', notJson, '--hub', 'https://kontourai.github.io/']);
   assert.equal(combined.status, 2, combined.output);
   assert.match(combined.stderr, /exactly one source; got --hub and --bundle/);
 });
