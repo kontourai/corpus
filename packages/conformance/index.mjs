@@ -3,6 +3,21 @@ import { readFileSync } from 'node:fs';
 
 export const vectors = JSON.parse(readFileSync(new URL('./vectors.json', import.meta.url), 'utf8')).vectors;
 
+/**
+ * Vector scopes. `store` (the default when `scope` is absent) is satisfied by a
+ * store adapter alone. `host` needs host-owned behavior, such as search, that a
+ * store library deliberately does not implement: a store package cannot pass it,
+ * and every host that mounts a store must.
+ */
+export const vectorScopes = Object.freeze(['store', 'host']);
+export function vectorScope(vector) {
+  const scope = vector.scope ?? 'store';
+  if (!vectorScopes.includes(scope)) throw new Error(`vector ${vector.id}: unknown scope ${JSON.stringify(scope)}`);
+  return scope;
+}
+export const storeVectors = vectors.filter((vector) => vectorScope(vector) === 'store');
+export const hostVectors = vectors.filter((vector) => vectorScope(vector) === 'host');
+
 function reference(values, ref) {
   const [name, ...keys] = ref.split('.');
   assert.ok(Object.hasOwn(values, name), `unresolved reference ${ref}`);

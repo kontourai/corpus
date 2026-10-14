@@ -55,10 +55,11 @@ directory. The Station lock itself is neither copied nor moved.
 
 ## Conformance interpretation
 
-The runner executes every public vector for both profiles. It preserves raw
+The runner executes every public store vector for both profiles; host vectors
+are a host obligation (see [Host vectors](#host-vectors)). It preserves raw
 negative results and adjudicates them against the explicit expected-fail list.
-Expected failures await versioned working-set/history, expiry, compiled-source,
-any-type proposal or host search implementation; they do not mean full semantic
+Expected failures await versioned working-set/history, expiry, compiled-source
+or any-type proposal implementation; they do not mean full semantic
 conformance. The list fails on an unexpected pass or wrong failure pattern.
 
 Two existing vector defects were corrected: wikilink body `$b` was a literal,
@@ -193,8 +194,9 @@ its exact pushed head; local results do not stand in for hosted checks.
 
 REASONED: the brief's extraction-only scope wins over design suggestions for
 public storage, capabilities, moving the Station lock, dual vault formats and
-immediate semantic convergence. Search vectors remain an expected host-level
-failure because retrieval is deliberately outside this library. No ranked
+immediate semantic convergence. Search vectors remained an expected host-level
+failure because retrieval is deliberately outside this library; they were later
+reclassified as [host vectors](#host-vectors). No ranked
 search, hosted CI, mixed Station/standalone lock or deployment qualification is
 inferred from the package tests.
 
@@ -217,9 +219,10 @@ starts with a Station-written envelope and deliberately models an external edit.
 factory/recheck shape is validated before directory preparation. Fixed-directory
 standalone hosts must also opt in to an explicit identity.
 
-6 of the 20 expected failures are bound to ref/kind/expected/actual, and 14 to
-specific error patterns. This is a diagnostic extraction with deferred owner
-decisions, not a claim of complete semantic conformance.
+Round 2 bound 6 of its 20 expected failures to ref/kind/expected/actual, and 14
+to specific error patterns. This is a diagnostic extraction with deferred owner
+decisions, not a claim of complete semantic conformance. The live counts are in
+[Owner decisions after extraction](#owner-decisions-after-extraction).
 
 EXECUTED on macOS at `1ff4b262163edf3edf4c5481302300ce41f0733f`:
 
@@ -283,3 +286,28 @@ npm run compare:station --workspace=@kontourai/corpus-store -- <station-reposito
 
 Hosted CI is tracked against the exact pushed head on the PR. These local
 receipts do not claim hosted CI success.
+
+## Owner decisions after extraction
+
+Each later change that implements an owner decision removes its vectors from
+the expected-fail list in the same commit; the runner fails a listed vector
+that starts passing. The list is empty when every decision has shipped.
+
+6 of the 19 expected failures are bound to ref/kind/expected/actual, and 13 to
+specific error patterns.
+
+### Host vectors
+
+A vector with `"scope": "host"` is a host obligation: it needs behavior that
+this library deliberately does not implement. `search-working-set` is the only
+one. It retires a record and expects search to omit it unless
+`includeHistory: true` is passed, and search belongs to the host that mounts the
+store. The package therefore cannot pass it, and listing it as an expected
+failure could never empty the list. Corpus Conformance exports `storeVectors`
+and `hostVectors`; this package's runner executes only `storeVectors` (123 per
+profile), refuses a selected host vector, and fails if the expected-fail list
+names one. A host such as Station runs `hostVectors` through its own search
+route and must pass them.
+
+EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 104 passing and
+19 expected failures, with no unexpected result, for both default and vault.

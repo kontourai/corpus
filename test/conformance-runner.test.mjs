@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runConformance, vectors } from '../packages/conformance/index.mjs';
+import { runConformance, vectors, storeVectors, hostVectors, vectorScope } from '../packages/conformance/index.mjs';
 
 const rejection = vectors.find((vector) => vector.id === 'create-invalid-body-   ');
 test('runner distinguishes expected contract errors from acceptance and unrelated errors', async () => {
@@ -56,4 +56,12 @@ test('absence expectations check field removal and reject a retained null', asyn
   const retained = await runConformance(() => ({ get: async () => ({ expires_at: null }) }), { cases });
   assert.equal(retained.passed, false);
   assert.match(retained.results[0].error, /must be absent/);
+});
+
+test('vector scopes partition the vectors into store and host obligations', () => {
+  assert.equal(storeVectors.length + hostVectors.length, vectors.length);
+  assert.ok(hostVectors.every((vector) => vector.scope === 'host'));
+  assert.ok(storeVectors.every((vector) => vector.scope === undefined || vector.scope === 'store'));
+  assert.equal(vectorScope({ id: 'unscoped' }), 'store');
+  assert.throws(() => vectorScope({ id: 'typo', scope: 'hosts' }), /vector typo: unknown scope "hosts"/);
 });

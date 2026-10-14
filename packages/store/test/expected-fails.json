@@ -228,13 +228,5 @@
     ],
     "awaits": "Owner decision: compiled create requires a link to a raw source; legacy records remain readable; phase 3 step 5.",
     "errorPattern": "^create must reject$"
-  },
-  "search-working-set": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision: search defaults to working set. Retrieval is host-owned and outside corpus-store; qualify in Station/retrieval integration, not with a fabricated package search.",
-    "errorPattern": "^missing adapter method: search"
   }
 }

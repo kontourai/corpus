@@ -24,6 +24,16 @@ const report = await runConformance(async (vector) => {
 if (!report.passed) throw new Error(JSON.stringify(report.results));
 ```
 
+Each vector has a scope. Most are store vectors (no `scope` field, or
+`"scope": "store"`), which a store adapter must pass alone. A vector with
+`"scope": "host"` needs host-owned behavior, such as search over the working
+set, that a store library does not implement. The package exports `vectors`
+(all), `storeVectors` and `hostVectors`, plus `vectorScope(vector)`, which
+throws on an unknown scope. A store package qualifies with
+`runConformance(factory, { cases: storeVectors })`; a host that mounts a store
+runs every vector, including `hostVectors`, through its own surfaces. An
+unknown `scope` value fails at import.
+
 The factory runs once per vector and must provide an isolated store. Adapter calls use the public method names and arguments in `vectors.json`; `create` returns an id string. Errors expose their contract code as `error.code`. Results are cloned when saved so later mutations cannot rewrite earlier observations. `cases` optionally selects vectors; report that selection when claiming conformance.
 
 A factory may return the adapter directly, or `{adapter, dispose, specials}`. Special probes receive `{adapter, operation, values}` and return saved observations (usually `{check: true}` after their own assertions). The runner implements TTL anchoring and short-prefix resolution itself. Other probes must perform the real storage action and assert the cited contract: front-matter separation; reindex after lost/corrupt/idempotent indexes; preserving future fields; legacy label sanitation; concurrent creates/updates; interrupted writes; traversal and physical-id collision prevention; symlink refusal; graph integrity; identity paths; and real writable population for read-facade fixtures. `read-fixture` returns `a` and `b` ids, honoring `operation.retired`.

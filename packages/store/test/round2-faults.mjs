@@ -18,7 +18,7 @@ const controls = [
   { id:'N3', file:'packages/store/src/shared/frontmatter.ts', mutate:()=>oldCodec, args:focused('every written record is standard YAML'), reason:/YAMLException|bad indentation/ },
   { id:'N4', file:'packages/store/src/services.ts', mutate:(s)=>s.replace(/  if \(typeof options\.coordinationIdentity[^\n]+\n/,'').replace('const recheck = options.coordinationIdentity();','const recheck = options.coordinationIdentity?.() ?? (() => {});'), args:focused('missing coordination identity'), reason:/missing coordination identity rejects/ },
   { id:'N4-types', file:'packages/store/src/services.ts', mutate:(s)=>s.replace('coordinationIdentity: () => (() => void);','coordinationIdentity?: () => (() => void);'), args:['run','verify:pack','--workspace=@kontourai/corpus-store'], build:true, reason:/Unused '@ts-expect-error' directive/ },
-  { id:'N5', file:'docs/store-extraction.md', mutate:(s)=>s.replace('6 of the 20 expected failures are bound to ref/kind/expected/actual, and 14 to\nspecific error patterns.','20 of the 20 expected failures are bound to ref/kind/expected/actual, and 0 to\nspecific error patterns.'), command:process.execPath,args:['--test','test/public-store-docs.test.mjs'],reason:/public expected-fail binding counts/ },
+  { id:'N5', file:'docs/store-extraction.md', mutate:(s)=>s.replace(/^\d+ of the (\d+) expected failures are bound to ref\/kind\/expected\/actual, and \d+ to$/m,'$1 of the $1 expected failures are bound to ref/kind/expected/actual, and 0 to'), command:process.execPath,args:['--test','test/public-store-docs.test.mjs'],reason:/public expected-fail binding counts/ },
 ];
 function run(label,args,success,command='npm') {
   const r=spawnSync(command,args,{cwd:repo,encoding:'utf8',timeout:240000});
