@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DECISION_STATUSES, EVIDENCE_KEYS, EVIDENCE_KINDS, RECORD_KEYS, SECRET_PATTERNS, parseDecisionRecord, validateDecisionRecord } from '../src/decisions.mjs';
@@ -175,6 +175,33 @@ test('every invalid record is reported, not only the first', async (t) => {
   assert.match(result.stderr, /corpus decisions check failed: 2 failures/);
 });
 
+test('a subject with a line break fails instead of breaking the index', async (t) => {
+  const repo = registryRepo(t, { records: { 'example-subject': VALID.replace('subject: Example subject', 'subject: "Paths like C:\\new"') } });
+  await indexed(repo);
+  await checkFails(repo, /example-subject\.md: subject must be a single line without control characters/);
+});
+
+test('a symlinked record is refused', async (t) => {
+  const repo = registryRepo(t, { git: false });
+  symlinkSync('example-subject.md', path.join(repo, 'docs/decisions/alias.md'));
+  await indexed(repo);
+  await checkFails(repo, /docs\/decisions\/alias\.md: must be a regular file \(not a symlink or directory\)/);
+});
+
+test('an unreadable record is a gate failure, not a crash', { skip: process.getuid?.() === 0 && 'root can read any file' }, async (t) => {
+  const repo = registryRepo(t, { git: false });
+  await indexed(repo);
+  const file = path.join(repo, 'docs/decisions/example-subject.md');
+  chmodSync(file, 0o000);
+  await checkFails(repo, /example-subject\.md: cannot be read \(EACCES\)/);
+});
+
+test('an index that is a directory fails the gate', async (t) => {
+  const repo = registryRepo(t, { git: false });
+  mkdirSync(path.join(repo, 'docs/decisions/index.md'));
+  await checkFails(repo, /docs\/decisions\/index\.md must be a regular file \(not a symlink or directory\)/);
+});
+
 // --- The real record sets ---
 
 test('all 97 records from the seven registries pass, and the index differs only in its header', async (t) => {
@@ -277,6 +304,18 @@ test('a --base that does not resolve is a configuration error (exit 2)', async (
   assert.match(result.stderr, /--base no-such-ref does not resolve to a commit/);
 });
 
+test('without decisions.adr, --base is still verified and the freeze is reported as not declared', async (t) => {
+  const repo = registryRepo(t);
+  const base = await indexedAndCommitted(repo);
+  const bad = await runCli(['decisions', 'check', '--root', repo, '--base', 'no-such-ref']);
+  assert.equal(bad.status, 2, bad.output);
+  assert.match(bad.stderr, /ERROR adr-freeze/);
+  assert.match(bad.stderr, /--base no-such-ref does not resolve to a commit/);
+  const good = await runCli(['decisions', 'check', '--root', repo, '--base', base]);
+  assert.equal(good.status, 0, good.output);
+  assert.match(good.stdout, /SKIP adr-freeze \(decisions\.adr is not declared\)/);
+});
+
 test('ADR content is never validated as a decision record', async (t) => {
   const repo = adrRepo(t);
   await indexed(repo);
@@ -326,8 +365,8 @@ test('the gate reads the directory even when documents and exclude never list it
   await checkFails(repo, /broken\.md: decided must be an ISO date \(YYYY-MM-DD\); got 'soon'/);
 });
 
-test('build refuses an invalid registry', async (t) => {
-  const repo = registryRepo(t, { records: { broken: withStatus('accepted') } });
+test('build refuses an invalid registry and never runs the freeze', async (t) => {
+  const repo = registryRepo(t, { records: { broken: withStatus('accepted') }, decisions: { adr: {} }, files: { 'docs/adr/0001-x.md': '# 1\n' } });
   await indexed(repo);
   commitAll(repo, 'index');
   const result = await runCli(['build', '--root', repo, '--out', path.join(scratch(t), 'site')]);
@@ -392,6 +431,24 @@ test('decisions index refuses to write through a symlinked index (exit 2)', asyn
   assert.equal(result.status, 2, result.output);
   assert.match(result.stderr, /refusing to write docs\/decisions\/index\.md: docs\/decisions\/index\.md is a symlink/);
   assert.equal(readFileSync(outside, 'utf8'), 'keep me\n');
+});
+
+test('decisions index refuses a symlink anywhere on the index path (exit 2)', async (t) => {
+  const repo = registryRepo(t, { git: false });
+  renameSync(path.join(repo, 'docs'), path.join(repo, 'real-docs'));
+  symlinkSync('real-docs', path.join(repo, 'docs'));
+  const result = await runCli(['decisions', 'index', '--root', repo]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /refusing to write docs\/decisions\/index\.md: docs is a symlink/);
+  assert.equal(existsSync(path.join(repo, 'real-docs/decisions/index.md')), false);
+});
+
+test('decisions index refuses to overwrite a file that is not a generated index (exit 2)', async (t) => {
+  const repo = registryRepo(t, { records: { 'example-subject': VALID, notes: '# Notes\n\nHand-written.\n' }, decisions: { index: 'docs/decisions/notes.md' }, git: false });
+  const result = await runCli(['decisions', 'index', '--root', repo]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /refusing to overwrite docs\/decisions\/notes\.md: it is not a generated decision index/);
+  assert.equal(readFileSync(path.join(repo, 'docs/decisions/notes.md'), 'utf8'), '# Notes\n\nHand-written.\n');
 });
 
 test('decisions index reports invalid records but still writes the index', async (t) => {

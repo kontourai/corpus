@@ -211,7 +211,7 @@ If a scoped package's executable differs, use a bare `bin` string: `{ "product":
 7. **purpose:** the manifest's `purpose` is not the exact placeholder sentence that `corpus init` writes. This gate fails with exit `1`, not `2`, so a new adopter still sees every other gate. It compares the whole sentence, not a `TODO` substring.
 8. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
 9. **decisions:** only when the manifest declares `decisions`. Every record in `decisions.dir` is a valid [decision record](docs/decisions.md#record-format) and the index is what `corpus decisions index` would write. The directory is read directly, whatever `documents` and `exclude` say. Fails with exit `1`.
-10. **adr-freeze:** only when the manifest declares `decisions.adr`, and only with `--base`; otherwise it is reported as skipped. A file added under `decisions.adr.dir` since the merge base fails with exit `1`. See [Numbered ADRs](docs/decisions.md#numbered-adrs).
+10. **adr-freeze:** only when the manifest declares `decisions.adr`. Without `--base` it is reported as skipped. A file added under `decisions.adr.dir` since the merge base fails with exit `1`. See [Numbered ADRs](docs/decisions.md#numbered-adrs).
 11. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
 ### decisions
@@ -221,7 +221,7 @@ corpus decisions check [--root dir] [--base <git-ref>]
 corpus decisions index [--root dir]
 ```
 
-`decisions check` runs only the manifest, decisions, and adr-freeze gates of `check`, with the same output and exit codes, so a repository can keep it in a fast required lane. `decisions index` writes or refreshes the index file and nothing else. Both exit `2` when the manifest has no `decisions` block. See [Decision records](docs/decisions.md#commands).
+`decisions check` runs only the manifest, decisions, and adr-freeze gates of `check`, with the same gate lines and exit codes, so a repository can keep it in a fast required lane. `decisions index` writes or refreshes the index file and nothing else; it refuses to replace a file that is not a generated index. Both exit `2` when the manifest has no `decisions` block. See [Decision records](docs/decisions.md#commands).
 
 ### build
 

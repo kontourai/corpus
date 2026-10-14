@@ -71,7 +71,8 @@ export function repoPrefix(root) {
   }
 }
 
-function verifyBase(root, base) {
+/** Throws UsageError unless `base` is a ref that resolves to a commit in `root`. */
+export function verifyBase(root, base) {
   if (typeof base !== 'string' || base.trim() === '' || base.startsWith('-'))
     throw new UsageError(`--base must be a git ref, got "${base}"`);
   try {

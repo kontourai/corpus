@@ -4,7 +4,7 @@ import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { checkAdrFreeze, validateDecisions } from './decisions.mjs';
-import { changedFiles, trackedFiles } from './git.mjs';
+import { changedFiles, trackedFiles, verifyBase } from './git.mjs';
 import { INIT_PURPOSE_PLACEHOLDER, manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
@@ -361,6 +361,17 @@ export function runDecisionChecks({ root, base = null }) {
   if (!manifest.decisions)
     throw new UsageError(`${file} has no "decisions" block; add "decisions": {} to enable the decisions gate`);
   runDecisionGates(root, manifest, base, gates, raise);
+  // With no ADR freeze declared, --base has nothing to check, but a bad ref still must not pass silently.
+  if (base !== null && !manifest.decisions.adr) {
+    try {
+      verifyBase(root, base);
+      gates.push({ name: 'adr-freeze', skipped: 'decisions.adr is not declared' });
+    } catch (error) {
+      if (!(error instanceof UsageError)) throw error;
+      gates.push({ name: 'adr-freeze', error: error.message });
+      raise(EXIT_USAGE);
+    }
+  }
   return { exitCode, gates, manifest };
 }
 

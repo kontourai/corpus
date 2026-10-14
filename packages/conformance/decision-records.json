@@ -403,6 +403,80 @@
       ]
     },
     {
+      "id": "subject-multiline",
+      "description": "The subject is one line: it is a cell of the index table.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: |-\n  First line\n  second line\ndecided: 2026-07-03\nevidence:\n  - kind: issue\n    ref: https://github.com/kontourai/corpus/issues/1\n---\n\n# First line\nsecond line\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "First line\nsecond line",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "issue",
+                "ref": "https://github.com/kontourai/corpus/issues/1"
+              }
+            ]
+          },
+          "expected": [
+            "subject"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subject-escaped-newline",
+      "description": "A double-quoted escape can put a newline in the subject.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject: \"Paths like C:\\new\"\ndecided: 2026-07-03\nevidence:\n  - kind: issue\n    ref: \"#1\"\n---\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": "Paths like C:\new",
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "issue",
+                "ref": "#1"
+              }
+            ]
+          },
+          "expected": [
+            "subject"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subject-not-a-string",
+      "description": "The subject is a string, not a mapping.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: current\nsubject:\n  x: y\ndecided: 2026-07-03\nevidence:\n  - kind: issue\n    ref: https://github.com/kontourai/corpus/issues/1\n---\n\n# [object Object]\n\nThe current answer.\n",
+          "frontmatter": {
+            "status": "current",
+            "subject": {
+              "x": "y"
+            },
+            "decided": "2026-07-03",
+            "evidence": [
+              {
+                "kind": "issue",
+                "ref": "https://github.com/kontourai/corpus/issues/1"
+              }
+            ]
+          },
+          "expected": [
+            "subject"
+          ]
+        }
+      ]
+    },
+    {
       "id": "decided-not-iso",
       "description": "decided is YYYY-MM-DD.",
       "records": [
@@ -1112,6 +1186,20 @@
         {
           "slug": "example-subject",
           "markdown": "---\nstatus: current\nsubject: &s Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: doc\n    ref: *s\n---\n",
+          "frontmatter": null,
+          "expected": [
+            "frontmatter"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "frontmatter-tag",
+      "description": "Explicit YAML tags are refused.",
+      "records": [
+        {
+          "slug": "example-subject",
+          "markdown": "---\nstatus: !!str current\nsubject: Example subject\ndecided: 2026-07-03\nevidence:\n  - kind: issue\n    ref: \"#1\"\n---\n",
           "frontmatter": null,
           "expected": [
             "frontmatter"

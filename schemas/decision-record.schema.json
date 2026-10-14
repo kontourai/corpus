@@ -14,8 +14,8 @@
     },
     "subject": {
       "type": "string",
-      "pattern": "\\S",
-      "description": "The decision subject: a noun phrase, ideally from the repository's domain vocabulary (not enforced). Must contain a non-whitespace character."
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F]*$",
+      "description": "The decision subject: a noun phrase, ideally from the repository's domain vocabulary (not enforced). A single line with a non-whitespace character and no control characters, because it is a cell of the generated index table."
     },
     "decided": {
       "type": "string",

@@ -19,6 +19,7 @@ export const DECISIONS_DOC_URL = 'https://github.com/kontourai/corpus/blob/main/
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /** Secret-shaped literals refused in evidence refs. The schema's `not.pattern` mirrors these. */
 export const SECRET_PATTERNS = [
@@ -85,7 +86,11 @@ export function validateDecisionRecord(slug, fm, knownSlugs, { dir = 'docs/decis
   if (!Object.hasOwn(fm, 'status')) errors.push(problem('status', 'missing required field: status'));
   else if (!DECISION_STATUSES.includes(fm.status)) errors.push(problem('status', `unknown status ${show(fm.status)} (allowed: ${DECISION_STATUSES.join(', ')})`));
 
-  if (typeof fm.subject !== 'string' || fm.subject.trim() === '') errors.push(problem('subject', 'missing required field: subject (non-empty)'));
+  if (!Object.hasOwn(fm, 'subject') || fm.subject === '' || (typeof fm.subject === 'string' && fm.subject.trim() === ''))
+    errors.push(problem('subject', 'missing required field: subject (non-empty)'));
+  else if (typeof fm.subject !== 'string') errors.push(problem('subject', `subject must be a single-line string; got ${show(fm.subject)}`));
+  // The subject is a cell of the index table, so a line break or other control character would break it.
+  else if (CONTROL.test(fm.subject)) errors.push(problem('subject', 'subject must be a single line without control characters'));
 
   if (!Object.hasOwn(fm, 'decided')) errors.push(problem('decided', 'missing required field: decided'));
   else if (typeof fm.decided !== 'string' || !DATE.test(fm.decided)) errors.push(problem('decided', `decided must be an ISO date (YYYY-MM-DD); got ${show(fm.decided)}`));
@@ -150,11 +155,11 @@ function firstBodyLine(text) {
 }
 
 /** The generated index. Byte-compatible with the records' previous generator except for the header lines. */
+const INDEX_PREFIX = '---\ntitle: Decision Index\n---\n';
+
 export function renderDecisionIndex(records, { adrDir = null } = {}) {
   const lines = [
-    '---',
-    'title: Decision Index',
-    '---',
+    ...INDEX_PREFIX.trimEnd().split('\n'),
     '',
     '# Decision Index',
     '',
@@ -195,7 +200,12 @@ export function readDecisionRecords(root, decisions) {
     const slug = entry.name.slice(0, -3);
     const repoPath = `${decisions.dir}/${entry.name}`;
     if (!entry.isFile()) return { slug, path: repoPath, text: '', frontmatter: null, errors: [problem('frontmatter', 'must be a regular file (not a symlink or directory)')] };
-    const text = readFileSync(path.join(fsDir, entry.name), 'utf8');
+    let text;
+    try {
+      text = readFileSync(path.join(fsDir, entry.name), 'utf8');
+    } catch (error) {
+      return { slug, path: repoPath, text: '', frontmatter: null, errors: [problem('frontmatter', `cannot be read (${error.code ?? error.message})`)] };
+    }
     const { frontmatter, errors } = parseDecisionRecord(text);
     if (frontmatter) errors.push(...validateDecisionRecord(slug, frontmatter, knownSlugs, { dir: decisions.dir }));
     return { slug, path: repoPath, text, frontmatter, errors };
@@ -266,6 +276,10 @@ function assertPlainPath(root, repoPath) {
 /** `corpus decisions index`: write the index file, and nothing else. Returns a report line. */
 export function writeDecisionIndex(root, decisions) {
   assertPlainPath(root, decisions.index);
+  const existing = readIndex(root, decisions);
+  // decisions.index could name a record or any other file; only a previously generated index is replaced.
+  if (existing.state === 'present' && !existing.text.startsWith(INDEX_PREFIX))
+    throw new UsageError(`refusing to overwrite ${decisions.index}: it is not a generated decision index (it does not begin with the generated "title: Decision Index" frontmatter); move it or change decisions.index`);
   const records = readDecisionRecords(root, decisions);
   mkdirSync(toFsPath(root, decisions.dir), { recursive: true });
   writeFileSync(toFsPath(root, decisions.index), renderDecisionIndex(records, { adrDir: decisions.adr?.dir ?? null }));
