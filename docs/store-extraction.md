@@ -293,7 +293,7 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-3 of the 4 expected failures are bound to ref/kind/expected/actual, and 1 to
+0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
 specific error patterns.
 
 ### Host vectors
@@ -342,3 +342,20 @@ the real list is empty.
 
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 119 passing and
 4 expected failures, with no unexpected result, for both default and vault.
+
+### One expiry rule and an expiry-only stale filter
+
+`shared/freshness.ts` computes one expiry for both profiles: explicit
+`expires_at`, otherwise `created_at + ttl_seconds`, otherwise none. List
+options `{stale, now}` filter on it, with `now` defaulting to the injected
+clock. `test/expiry.test.ts` covers both profiles with an injected clock: the
+TTL survives a later update, expiry is inclusive, `expires_at` wins and
+clearing it restores the TTL, records without expiry never go stale, the
+filter composes with the working set, and malformed options are refused. The
+public `ttl-creation-anchor` vector creates without updating, so it cannot
+detect a TTL that resets on update; the update case lives in the expiry test.
+`read-stale-filter`, `ttl-creation-anchor` and `expiry-precedence` leave the
+list.
+
+EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 122 passing and
+1 expected failure, with no unexpected result, for both default and vault.

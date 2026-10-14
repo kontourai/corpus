@@ -238,10 +238,20 @@ export interface KnowledgeStoreAdapter {
 /**
  * List options (owner decision, 2026-10-13). Lists return the working set: records
  * that are neither retired nor superseded. `includeHistory: true` adds retired and
- * superseded records. `get` and `getLinks` always reach history.
+ * superseded records. `get` and `getLinks` always reach history. The expiry filter
+ * composes with either.
  */
 export interface ListOptions {
   includeHistory?: boolean;
+  /**
+   * Record-expiry filter. `true` keeps only expired records, `false` only
+   * unexpired ones; omitted means no expiry filter. Expiry is `expires_at` when
+   * set, otherwise `created_at + ttl_seconds`; a record with neither never
+   * expires, and a record is expired at its expiry instant.
+   */
+  stale?: boolean;
+  /** The instant to evaluate expiry at, in epoch milliseconds. Defaults to the store clock. */
+  now?: number;
   /**
    * @deprecated Use `includeHistory`. Accepted as an alias and translated to
    * `includeHistory: true`, which also includes superseded records.
