@@ -22,6 +22,10 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      # Carried outside the artifact, so the publish job checks each tarball against
+      # what this job verified, not only against the SHA256SUMS shipped beside it.
+      conformance_sha256: ${{ steps.hashes.outputs.conformance }}
+      store_sha256: ${{ steps.hashes.outputs.store }}
     steps:
       - name: Require main
         run: test "$GITHUB_REF" = refs/heads/main
@@ -65,6 +69,19 @@ jobs:
       - name: Verify and export the packed tarballs
         run: npm run verify:pack --workspace=@kontourai/corpus-store -- "$RUNNER_TEMP/corpus-pack"
 
+      - name: Record the verified tarball hashes
+        id: hashes
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          cd "$RUNNER_TEMP/corpus-pack"
+          sha256sum --check --strict SHA256SUMS
+          for workspace in conformance store; do
+            sha256="$(sha256sum "kontourai-corpus-$workspace-$RELEASE_VERSION.tgz" | cut -d' ' -f1)"
+            test "${#sha256}" -eq 64
+            echo "$workspace=$sha256" >> "$GITHUB_OUTPUT"
+          done
+
       - name: Upload verified tarballs and hashes
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -99,10 +116,18 @@ jobs:
           name: verified-corpus-workspaces
           path: ${{ runner.temp }}/corpus-pack/
 
-      - name: Check downloaded hashes
+      - name: Check downloaded hashes against the verify job's outputs
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          CONFORMANCE_SHA256: ${{ needs.verify.outputs.conformance_sha256 }}
+          STORE_SHA256: ${{ needs.verify.outputs.store_sha256 }}
         run: |
           cd "$RUNNER_TEMP/corpus-pack"
           sha256sum --check --strict SHA256SUMS
+          test "${#CONFORMANCE_SHA256}" -eq 64
+          test "${#STORE_SHA256}" -eq 64
+          printf '%s  %s\n' "$CONFORMANCE_SHA256" "kontourai-corpus-conformance-$RELEASE_VERSION.tgz" "$STORE_SHA256" "kontourai-corpus-store-$RELEASE_VERSION.tgz" > "$RUNNER_TEMP/verified-sha256"
+          sha256sum --check --strict "$RUNNER_TEMP/verified-sha256"
 
       - name: Preflight both registry versions before publishing
         env:
@@ -120,6 +145,6 @@ jobs:
         run: |
           for workspace in conformance store; do
             node scripts/npm-publish-guard.mjs "@kontourai/corpus-$workspace" "$RELEASE_VERSION" "$DIST_TAG"
-            (cd "$RUNNER_TEMP/corpus-pack" && sha256sum --check --strict SHA256SUMS)
+            (cd "$RUNNER_TEMP/corpus-pack" && sha256sum --check --strict "$RUNNER_TEMP/verified-sha256")
             npm publish "$RUNNER_TEMP/corpus-pack/kontourai-corpus-$workspace-$RELEASE_VERSION.tgz" --access public --provenance --ignore-scripts --tag "$DIST_TAG"
           done
