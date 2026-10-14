@@ -240,17 +240,30 @@ export function validateDecisions(root, decisions) {
 }
 
 /**
+ * Files that may be added directly in `adr.dir` despite the freeze, so the
+ * directory can explain itself. An exact, case-sensitive list rather than a
+ * "looks numbered" pattern: a pattern would let any ADR named off-pattern
+ * (`adr-0005.md`, `0005_x.md`, a subdirectory) through, while this admits
+ * two known names and nothing else.
+ */
+export const ADR_FREEZE_EXEMPT = ['README.md', 'index.md'];
+
+/**
  * The ADR freeze: with a base ref, a file added under `adr.dir` since the
- * merge base is a failure. Edits and deletions are allowed. Git errors throw
- * UsageError.
+ * merge base is a failure, except an `ADR_FREEZE_EXEMPT` name directly in
+ * `adr.dir`. Renames are read as a deletion plus an addition, so renaming an
+ * ADR to a new path is refused unless the new path is exempt. Edits and
+ * deletions are allowed. Git errors throw UsageError.
  */
 export function checkAdrFreeze(root, decisions, base) {
   const prefix = `${decisions.adr.dir}/`;
-  const added = addedFiles(root, base).filter((file) => file.startsWith(prefix));
+  const exempt = new Set(ADR_FREEZE_EXEMPT.map((name) => `${prefix}${name}`));
+  const added = addedFiles(root, base).filter((file) => file.startsWith(prefix) && !exempt.has(file));
   return added.map(
     (file) =>
       `${file} was added since ${base}, but numbered ADRs under ${decisions.adr.dir}/ are frozen history; ` +
-      `record the decision as ${decisions.dir}/<topic-slug>.md instead (see ${DECISIONS_DOC_URL}#numbered-adrs)`,
+      `record the decision as ${decisions.dir}/<topic-slug>.md instead (see ${DECISIONS_DOC_URL}#numbered-adrs). ` +
+      `Only ${ADR_FREEZE_EXEMPT.join(' and ')} may be added directly in ${decisions.adr.dir}/.`,
   );
 }
 
