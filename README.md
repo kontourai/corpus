@@ -14,25 +14,78 @@
 - **A GitHub Pages site.** `corpus build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 
-The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. Corpus Store builds TypeScript only within `packages/store`. Run it straight from git, pinned to a commit:
+The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. Corpus Store builds TypeScript only within `packages/store`. Install it from npm as an exact-pinned dev dependency, so your lockfile covers Corpus and every package it depends on:
 
 ```sh
-npx -y github:kontourai/corpus#<sha> corpus check
+npm install --save-dev --save-exact @kontourai/corpus@<version>
+npx --no-install corpus check
 ```
+
+Run it through a package script (`"docs:check": "corpus check"`) or `npx --no-install`, which use only the installed bin. A bare `npx corpus` would fetch the unrelated unscoped `corpus` package when Corpus is not installed. For a one-off run without installing, name the package and exact version: `npx -y --package=@kontourai/corpus@<version> -- corpus check`. That form resolves Corpus's own dependencies afresh on every run, with no lockfile behind them, so CI should use the dev dependency.
+
+Until the first npm release, and for an unreleased commit, pin the commit's GitHub tarball by its full sha instead, either as the dev dependency spec or directly:
+
+```sh
+npx -y --package=https://codeload.github.com/kontourai/corpus/tar.gz/<sha> -- corpus check
+```
+
+## Publishing the root package
+
+The [root publish workflow](.github/workflows/publish-npm-corpus.yml) publishes
+only `@kontourai/corpus`. Dispatch `publish-npm-corpus.yml` on `main` with an
+exact `version`. Before anything is packed,
+[`scripts/root-release-preflight.mjs`](scripts/root-release-preflight.mjs)
+requires that version to equal the root `package.json` version and to be the
+first section of `CHANGELOG.md`, with no `Unreleased` section left. A release
+pull request that sets the version and moves the unreleased entries under it
+therefore lands first. Stable versions publish to `latest` and prereleases to
+`next`, and the version must be absent from npm; the same
+[guard](scripts/npm-publish-guard.mjs) as the workspaces refuses an existing
+version, a registry error other than E404, or an unconfirmed response.
+
+The verification job, with `contents: read`, runs the tests and the dogfood
+check, then `npm run verify:pack`. That packs the root once, checks the
+tarball's file list against an allow-list (`bin/`, `src/`, `schemas/`,
+`README.md`, `LICENSE`, and `package.json`), installs the tarball with
+`--ignore-scripts` into a fresh project, and runs the installed `corpus check`,
+`corpus decisions check` (including a rejected record), and the `docs-kit`
+alias against a fixture corpus and against this repository. It then exports
+that same tarball with its SHA-256, and also passes that SHA-256 to the publish
+job as a job output, outside the artifact. The publish job, with
+`id-token: write` in the `npm-publish` environment, checks the tarball twice.
+Right after download it checks it against the artifact's `SHA256SUMS` and
+against the job-output hash. Immediately before `npm publish` it checks it
+against the job-output hash again. It then publishes that exact file with
+`--provenance --ignore-scripts`, without repacking. Run
+`npm run verify:pack` locally to exercise the same check; it fetches the
+tarball's dependencies from the registry.
+
+The root package has its own workflow because its stable releases and the
+workspaces' prereleases have different versions and cadences, and because an
+npm trusted publisher names one workflow file: the trusted publisher for
+`@kontourai/corpus` names `publish-npm-corpus.yml`, and the workspace packages
+name `publish-npm.yml`, so neither workflow can publish the other's packages.
+Configure it for organization `kontourai`, repository `corpus`, environment
+`npm-publish`, with direct `npm publish` allowed, after bootstrapping the name
+the same way as the workspaces below. The first CI release publishes to
+`latest`, which moves `latest` off any bootstrap placeholder.
 
 ## Publishing the store workspaces
 
 The [publish workflow](.github/workflows/publish-npm.yml) publishes only
 `@kontourai/corpus-store` and `@kontourai/corpus-conformance`. The root
-`@kontourai/corpus` package stays git-installed. Dispatch `publish-npm.yml`
+`@kontourai/corpus` package has its own workflow, described
+[above](#publishing-the-root-package). Dispatch `publish-npm.yml`
 on `main` with an exact `version` matching both workspace manifests;
 the initial candidate is `0.1.0-next.0`. Release-please does not manage these
 workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
-and uploads the two tested `npm pack` tarballs with SHA-256 hashes. A separate
-publish job checks those hashes after download and immediately before publishing
-the same tarballs with provenance. Only the publish job has OIDC permission;
+and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
+passes to the publish job as job outputs. A separate publish job checks each
+tarball right after download against the artifact's `SHA256SUMS` and against
+the job-output hashes, then against the job-output hash again immediately
+before each `npm publish`, and publishes those same tarballs with provenance. Only the publish job has OIDC permission;
 test and build steps use `contents: read`. Every prerelease
 uses `next`; stable versions use `latest`. Both versions must be absent on npm
 before either publish begins. An existing version, registry error other than
@@ -55,10 +108,11 @@ Configure the GitHub `npm-publish` environment
 for `main` and owner approval before dispatch. CI uses Node 24, pinned npm
 11.17.0, `id-token: write`, and no registry token or `setup-node` `registry-url`.
 
-Exercise the executable publish guard with fixture registry responses:
+Exercise the executable publish guard and the root release preflight with
+fixture registry responses and manifests:
 
 ```sh
-node --test test/npm-publish-guard.test.mjs
+node --test test/npm-publish-guard.test.mjs test/root-release-preflight.test.mjs
 ```
 
 ## Purpose and audience
@@ -337,7 +391,7 @@ The server has three sources:
 Claude Code:
 
 ```sh
-claude mcp add kontour-docs -- npx -y github:kontourai/corpus#<sha> corpus mcp
+claude mcp add kontour-docs -- npx -y --package=@kontourai/corpus@<version> -- corpus mcp
 ```
 
 Codex (`~/.codex/config.toml`):
@@ -345,19 +399,24 @@ Codex (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.kontour-docs]
 command = "npx"
-args = ["-y", "github:kontourai/corpus#<sha>", "corpus", "mcp"]
+args = ["-y", "--package=@kontourai/corpus@<version>", "--", "corpus", "mcp"]
 ```
 
 To serve local checkouts while you write docs, add `--workspace ~/dev/github/kontourai` or `--repo .` after `mcp`.
 
 ## Adopting corpus in a repo
 
-1. Pin a corpus commit. Use its full sha everywhere below as `<sha>`.
+1. Add Corpus as an exact-pinned dev dependency and commit the lockfile, so CI installs the same Corpus and the same dependency tree every time. For an unreleased commit, use `https://codeload.github.com/kontourai/corpus/tar.gz/<sha>` (full sha) as the spec instead.
+
+   ```sh
+   npm install --save-dev --save-exact @kontourai/corpus@<version>
+   ```
+
 2. Scaffold and review the manifest. Replace the `purpose` placeholder (`check` fails until you do), fill `builtOn` (or leave it empty), order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
 
    ```sh
-   npx -y github:kontourai/corpus#<sha> corpus init
-   npx -y github:kontourai/corpus#<sha> corpus check
+   npx --no-install corpus init
+   npx --no-install corpus check
    ```
 
 3. Add the gate to CI. On pull requests, `fetch-depth: 0` makes the base branch available for freshness. Drop `--advisory` once the `covers` globs are trusted.
@@ -369,15 +428,16 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
    - uses: actions/setup-node@v6
      with:
        node-version: 24
-   - run: npx -y github:kontourai/corpus#<sha> corpus check
+   - run: npm ci
+   - run: npx --no-install corpus check
    - if: github.event_name == 'pull_request'
-     run: npx -y github:kontourai/corpus#<sha> corpus check --base origin/${{ github.base_ref }} --advisory
+     run: npx --no-install corpus check --base origin/${{ github.base_ref }} --advisory
    ```
 
 4. Publish Pages from `main`. Set the repository's Pages source to GitHub Actions, then run:
 
    ```yaml
-   - run: npx -y github:kontourai/corpus#<sha> corpus build --out dist-pages
+   - run: npx --no-install corpus build --out dist-pages
    - uses: actions/upload-pages-artifact@v5
      with:
        path: dist-pages
