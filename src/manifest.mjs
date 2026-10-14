@@ -390,10 +390,11 @@ function validateDecisionsBlock(value, root, at, errors) {
     return !problem;
   };
   const dir = Object.hasOwn(value, 'dir') ? value.dir : DEFAULT_DECISIONS_DIR;
-  if (pathOk(dir, `${at}.dir`) && directoryState(root, dir) === 'other')
+  const dirOk = pathOk(dir, `${at}.dir`);
+  if (dirOk && directoryState(root, dir) === 'other')
     errors.push(`${at}.dir "${dir}" is not a directory inside the repository`);
   const index = Object.hasOwn(value, 'index') ? value.index : `${dir}/index.md`;
-  if (pathOk(index, `${at}.index`)) {
+  if (pathOk(index, `${at}.index`) && dirOk) {
     if (!index.endsWith('.md')) errors.push(`${at}.index must be a .md file, got "${index}"`);
     else if (path.posix.dirname(index) !== dir) errors.push(`${at}.index "${index}" must be directly inside decisions.dir "${dir}"`);
   }
@@ -403,7 +404,7 @@ function validateDecisionsBlock(value, root, at, errors) {
     if (pathOk(adrDir, `${at}.adr.dir`)) {
       // A frozen directory that does not exist would never refuse anything, so a typo must not pass.
       if (directoryState(root, adrDir) !== 'dir') errors.push(`${at}.adr.dir "${adrDir}" is not an existing directory inside the repository`);
-      if (adrDir === dir || adrDir.startsWith(`${dir}/`) || dir.startsWith(`${adrDir}/`))
+      if (dirOk && (adrDir === dir || adrDir.startsWith(`${dir}/`) || dir.startsWith(`${adrDir}/`)))
         errors.push(`${at}.adr.dir "${adrDir}" must not overlap decisions.dir "${dir}"`);
     }
     adr = { dir: adrDir };

@@ -350,6 +350,8 @@ test('the decisions block is validated strictly (exit 2)', async (t) => {
     [{ adr: { dir: 'docs/adr', policy: 'frozen' } }, /decisions\.adr: unknown key "policy" \(allowed: dir\)/],
     [{ dir: 'README.md' }, /decisions\.dir "README\.md" is not a directory inside the repository/],
     [[], /decisions must be an object/],
+    [{ dir: 5, adr: {} }, /decisions\.dir must be a non-empty string/],
+    [{ adr: { dir: 'docs' } }, /decisions\.adr\.dir "docs" must not overlap decisions\.dir "docs\/decisions"/],
   ];
   for (const [decisions, pattern] of cases) {
     const repo = registryRepo(t, { records: {}, decisions, git: false });
