@@ -9,7 +9,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { BIN, fixtureRepo, git, scratch } from './helpers.mjs';
 import { gitEnv } from '../src/git.mjs';
 import { bundleDigest, bundleFromCheckout } from '../src/bundle.mjs';
-import { bundleShapeError, staticSource } from '../src/mcp.mjs';
+import { bundleShapeError, hubSource, searchBundles, staticSource } from '../src/mcp.mjs';
 
 async function connect(t, args) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [BIN, 'mcp', ...args], stderr: 'pipe' });
@@ -142,6 +142,11 @@ test('mcp --bundle refuses a malformed, dangling, cyclic, unreadable, or combine
     [variant((topics) => (topics[1].tags = ['ok', ''])), /topics\[1\]\.tags must be an array of non-empty strings/],
     [variant((topics) => (topics[1].summary = 7)), /topics\[1\]\.summary must be a string/],
     [variant((topics) => (topics[1].parentId = '')), /topics\[1\]\.parentId must be a non-empty string/],
+    // [a<-b, b<-a, a, b]: a later duplicate must not paper over the cycle the first two make.
+    [
+      variant((topics) => topics.splice(0, topics.length, { ...topics[0], parentId: 'evidence-gates' }, { ...topics[1], parentId: 'workflows' }, { ...topics[0] }, { ...topics[1] })),
+      /topics\[2\]\.id "workflows" is used more than once/,
+    ],
   ];
   for (const [file, message] of cases) {
     const result = await runMcpClosed(['--bundle', file]);
@@ -169,7 +174,7 @@ test('mcp --bundle refuses a malformed, dangling, cyclic, unreadable, or combine
   assert.match(combined.stderr, /exactly one source; got --hub and --bundle/);
 });
 
-test('staticSource serves a validated private copy, and a hub bundle with a dangling parent is unavailable', async (t) => {
+test('staticSource serves a validated private copy, and the hub source reports a dangling parent as unavailable', async (t) => {
   const { bundle } = hierarchyBundle(t);
   const source = staticSource([bundle]);
   bundle.topics[1].summary = 'changed after the source was created';
@@ -182,10 +187,50 @@ test('staticSource serves a validated private copy, and a hub bundle with a dang
   assert.throws(() => staticSource([]), /at least one bundle is required/);
   assert.throws(() => staticSource([{ ...loaded.bundles.get('sample'), hook: () => {} }]), /bundles\[0\]: bundle is not plain data/);
 
-  // The same check guards every source: the hub reports such a bundle as unavailable.
+  const deep = structuredClone(loaded.bundles.get('sample'));
+  let at = deep;
+  for (let depth = 0; depth < 200_000; depth++) at = at.extra = {};
+  assert.throws(() => staticSource([deep]), /bundles\[0\]: bundle nesting too deep to copy/);
+
+  // The hub validates fetched bundles with the same check.
   const dangling = structuredClone(loaded.bundles.get('sample'));
   dangling.topics[2].parentId = 'ghost';
-  assert.equal(bundleShapeError(dangling, 'sample'), 'topics[2].parentId "ghost" is not a topic id in this bundle');
+  const routes = {
+    'https://hub.example/products.json': { schemaVersion: 1, products: [{ product: 'sample', repo: 'kontourai/sample' }] },
+    'https://hub.example/sample/docs-bundle.json': dangling,
+  };
+  const fetchImpl = async (url) => ({ ok: true, status: 200, json: async () => structuredClone(routes[url]) });
+  const hub = await hubSource('https://hub.example/', { fetchImpl }).load();
+  assert.equal(hub.bundles.size, 0);
+  assert.deepEqual(hub.unavailable, [{ product: 'sample', repo: 'kontourai/sample', error: 'topics[2].parentId "ghost" is not a topic id in this bundle' }]);
+});
+
+test('parent validation stays linear on a deep chain', (t) => {
+  const { bundle } = hierarchyBundle(t);
+  const [template] = bundle.topics;
+  // t0 <- t1 <- ... <- t19999. Walking each chain to the root costs about 2e8
+  // steps (over a minute); stopping at known-rooted ancestors costs 2e4.
+  const depth = 20_000;
+  bundle.topics = Array.from({ length: depth }, (_, index) => ({ ...template, id: `t${index}`, ...(index > 0 ? { parentId: `t${index - 1}` } : {}) }));
+  const started = performance.now();
+  assert.equal(bundleShapeError(bundle), null);
+  const elapsed = performance.now() - started;
+  // A wide margin: the linear walk takes milliseconds, the quadratic one over a minute.
+  assert.ok(elapsed < 5_000, `validating a ${depth}-deep chain took ${Math.round(elapsed)} ms`);
+  // The memo must not hide a cycle that closes on a chain already walked.
+  bundle.topics[0] = { ...bundle.topics[0], parentId: `t${depth - 1}` };
+  assert.match(bundleShapeError(bundle), /makes a cycle/);
+});
+
+test('search ignores a bundle topic\'s own kind or meta keys', (t) => {
+  const { bundle } = hierarchyBundle(t);
+  const evidence = bundle.topics.find((topic) => topic.id === 'evidence-gates');
+  evidence.kind = 'document';
+  evidence.meta = 'xyzzyspoof';
+  assert.deepEqual(searchBundles([bundle], 'xyzzyspoof'), [], 'a bundle-supplied meta is not searched');
+  const [hit] = searchBundles([bundle], 'wombatgate');
+  assert.equal(hit.kind, 'topic');
+  assert.equal(hit.id, 'evidence-gates');
 });
 
 test('bundleDigest covers hierarchy fields only when present, so existing digests are unchanged', (t) => {

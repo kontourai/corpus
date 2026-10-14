@@ -50,9 +50,13 @@ export function bundleShapeError(bundle, product) {
     if (document.lineOffset !== undefined && !(Number.isInteger(document.lineOffset) && document.lineOffset >= 0))
       return `documents[${index}].lineOffset must be a non-negative integer`;
   }
+  const ids = new Set();
   for (const [index, topic] of bundle.topics.entries()) {
     if (topic === null || typeof topic !== 'object') return `topics[${index}] is not an object`;
     for (const key of ['id', 'title', 'source', 'url', 'markdown']) if (!isString(topic[key])) return `topics[${index}].${key} must be a string`;
+    // A repeated id makes get_topic and parentId ambiguous, and can hide a parent cycle.
+    if (ids.has(topic.id)) return `topics[${index}].id "${topic.id}" is used more than once`;
+    ids.add(topic.id);
     // Hierarchy fields: optional, so bundles without them stay readable.
     if (topic.summary !== undefined && !isString(topic.summary)) return `topics[${index}].summary must be a string`;
     if (topic.tags !== undefined && !(Array.isArray(topic.tags) && topic.tags.every((tag) => isString(tag) && tag.trim())))
@@ -65,18 +69,22 @@ export function bundleShapeError(bundle, product) {
 /**
  * A `parentId` must name another topic in the same bundle, and following
  * parents must end at a root. A dangling parent would be a branch no tool can
- * list or read, so it is refused rather than served.
+ * list or read, so it is refused rather than served. Topic ids are unique by
+ * now. Each walk stops at a topic already known to reach a root, so the whole
+ * check is linear in the number of topics, however deep the tree.
  */
 function topicTreeError(topics) {
   const parentOf = new Map(topics.map((topic) => [topic.id, topic.parentId]));
+  const reachesRoot = new Set();
   for (const [index, topic] of topics.entries()) {
     if (topic.parentId === undefined) continue;
     if (!parentOf.has(topic.parentId)) return `topics[${index}].parentId "${topic.parentId}" is not a topic id in this bundle`;
-    const seen = new Set([topic.id]);
-    for (let at = topic.parentId; at !== undefined; at = parentOf.get(at)) {
-      if (seen.has(at)) return `topics[${index}].parentId "${topic.parentId}" makes a cycle through "${at}"`;
-      seen.add(at);
+    const walked = new Set([topic.id]);
+    for (let at = topic.parentId; at !== undefined && !reachesRoot.has(at); at = parentOf.get(at)) {
+      if (walked.has(at)) return `topics[${index}].parentId "${topic.parentId}" makes a cycle through "${at}"`;
+      walked.add(at);
     }
+    for (const id of walked) reachesRoot.add(id);
   }
   return null;
 }
@@ -340,6 +348,7 @@ export function staticSource(bundles, { describe = 'static bundles', label = (in
     try {
       copy = structuredClone(bundle);
     } catch (error) {
+      if (error instanceof RangeError) throw new UsageError(`${label(index)}: bundle nesting too deep to copy (${error.message})`);
       throw new UsageError(`${label(index)}: bundle is not plain data: ${error.message}`);
     }
     const problem = bundleShapeError(copy);
@@ -401,8 +410,9 @@ export function searchBundles(bundles, query, limit = 10) {
   const results = [];
   for (const bundle of bundles) {
     const items = [
-      ...bundle.topics.map((topic) => ({ kind: 'topic', id: topic.id, meta: [topic.id, topic.source, ...(topic.tags ?? [])].join(' '), ...topic })),
-      ...bundle.documents.map((document) => ({ kind: 'document', meta: document.source, ...document })),
+      // The bundle's own fields first, so a stray `kind` or `meta` key in a bundle cannot override the computed ones.
+      ...bundle.topics.map((topic) => ({ ...topic, kind: 'topic', id: topic.id, meta: [topic.id, topic.source, ...(topic.tags ?? [])].join(' ') })),
+      ...bundle.documents.map((document) => ({ ...document, kind: 'document', meta: document.source })),
     ];
     for (const item of items) {
       const title = item.title.toLowerCase();
