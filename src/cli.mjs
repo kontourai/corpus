@@ -10,8 +10,8 @@ export const HELP = `Corpus ${VERSION}: check, build, locate, and retrieve sourc
 Usage: corpus <command> [options]
 
 Commands:
-  check   Run the docs gates: manifest, links, reachability, topics, redirects,
-          paths, builtOn, covers, and freshness with --base
+  check   Run the docs gates: manifest, purpose, links, reachability, topics,
+          redirects, paths, builtOn, covers, and freshness with --base
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
