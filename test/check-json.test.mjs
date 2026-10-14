@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { GATE_NAMES, STALE_KIND, runChecks } from '../src/check.mjs';
-import { FIXTURES, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { BIN, FIXTURES, commitAll, fixtureRepo, git, runCli, scratch } from './helpers.mjs';
+import { gitEnv } from '../src/git.mjs';
 
 /** `check --json`: stdout must be exactly one JSON object. */
 async function checkJson(args) {
@@ -171,10 +173,11 @@ test('check --only keeps decisions and adr-freeze apart, and every gate check re
   writeFileSync(path.join(repo, 'docs', 'adr', '0002-second.md'), '# 2. Second\n');
   commitAll(repo, 'add an ADR');
 
-  // The freeze fails, but only decisions was asked for: its failure must not leak into the exit code.
-  const decisionsOnly = await checkJson(['--root', repo, '--base', base, '--only', 'decisions']);
+  // The freeze runs in the same pass as decisions (freshness supplies --base) and fails,
+  // but it was not asked for: its failure must not leak into the exit code.
+  const decisionsOnly = await checkJson(['--root', repo, '--base', base, '--only', 'decisions,freshness']);
   assert.equal(decisionsOnly.status, 0, decisionsOnly.output);
-  assert.deepEqual(decisionsOnly.report.gates.map((gate) => gate.name), ['manifest', 'decisions']);
+  assert.deepEqual(decisionsOnly.report.gates.map((gate) => gate.name), ['manifest', 'decisions', 'freshness']);
 
   const freezeOnly = await checkJson(['--root', repo, '--base', base, '--only', 'adr-freeze']);
   assert.equal(freezeOnly.status, 1, freezeOnly.output);
@@ -190,4 +193,69 @@ test('check --only keeps decisions and adr-freeze apart, and every gate check re
   const full = runChecks({ root: repo, base });
   assert.deepEqual(full.gates.map((gate) => gate.name).sort(), [...GATE_NAMES].sort());
   assert.deepEqual(GATE_NAMES, ['manifest', 'purpose', 'builtOn', 'links', 'reachability', 'topics', 'redirects', 'paths', 'covers', 'decisions', 'adr-freeze', 'freshness']);
+});
+
+/**
+ * The CLI with a preload that makes reading README.md throw a TypeError, a
+ * crash no gate catches: the unexpected-error path, not a DocsKitError.
+ */
+function runCrashing(t, args) {
+  const preload = path.join(scratch(t), 'crash-on-readme.mjs');
+  writeFileSync(
+    preload,
+    "import fs from 'node:fs';\nimport { syncBuiltinESMExports } from 'node:module';\nconst read = fs.readFileSync;\nfs.readFileSync = (file, ...rest) => {\n  if (String(file).endsWith('README.md')) throw new TypeError('injected crash');\n  return read(file, ...rest);\n};\nsyncBuiltinESMExports();\n",
+  );
+  return new Promise((resolve) => {
+    execFile(process.execPath, ['--import', preload, BIN, ...args], { env: gitEnv(), encoding: 'utf8' }, (error, stdout, stderr) => {
+      resolve({ status: error ? (typeof error.code === 'number' ? error.code : -1) : 0, stdout, stderr, output: `${stdout}\n${stderr}` });
+    });
+  });
+}
+
+test('check --json prints one fail object for option errors, --help, and crashes (exit 2)', async (t) => {
+  const root = path.join(FIXTURES, 'valid');
+  const cases = [
+    [['--only', ''], /--only needs a value/],
+    [['--only'], /^check: Option '--only <value>' argument missing/],
+    [['--bogus'], /^check: Unknown option '--bogus'/],
+    [['--help'], /--help prints text and cannot be combined with --json/],
+    [['-h'], /--help prints text and cannot be combined with --json/],
+  ];
+  for (const [args, message] of cases) {
+    const { status, stderr, report } = await checkJson(['--root', root, ...args]);
+    assert.equal(status, 2, `${args.join(' ')}: ${stderr}`);
+    assert.equal(report.verdict, 'fail', args.join(' '));
+    assert.equal(report.exitCode, 2);
+    assert.match(report.error, message, args.join(' '));
+    assert.match(stderr, /^docs-kit: /, 'the message still goes to stderr');
+  }
+
+  const crash = await runCrashing(t, ['check', '--root', root, '--json']);
+  assert.equal(crash.status, 2, crash.output);
+  let report;
+  assert.doesNotThrow(() => (report = JSON.parse(crash.stdout)), crash.output);
+  assert.equal(report.verdict, 'fail');
+  assert.equal(report.exitCode, 2);
+  assert.equal(report.error, 'internal error: injected crash');
+  assert.match(crash.stderr, /docs-kit: internal error: TypeError: injected crash\n\s+at /);
+
+  // Without --json the same crash prints no JSON, and help still prints help.
+  const textCrash = await runCrashing(t, ['check', '--root', root]);
+  assert.equal(textCrash.status, 2);
+  assert.equal(textCrash.stdout, '');
+  const help = await runCli(['check', '--help']);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /^Corpus /);
+});
+
+test('check --only refuses --base or --advisory that no selected gate reads (exit 2)', async () => {
+  const root = path.join(FIXTURES, 'valid');
+  // A typo in --base must not pass because nothing looked at it.
+  const base = await runCli(['check', '--root', root, '--only', 'links', '--base', 'no-such-ref']);
+  assert.equal(base.status, 2, base.output);
+  assert.match(base.stderr, /--base only applies to the freshness and adr-freeze gates; --only links selects neither/);
+
+  const advisory = await checkJson(['--root', root, '--only', 'adr-freeze', '--base', 'HEAD', '--advisory']);
+  assert.equal(advisory.status, 2, advisory.output);
+  assert.match(advisory.report.error, /--advisory only applies to the freshness gate; --only adr-freeze does not select it/);
 });

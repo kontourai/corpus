@@ -288,6 +288,11 @@ const ONLY_HINTS = {
  * dependent gates are reported as skipped.
  */
 export function runChecks({ root, base = null, advisory = false, freshness = true, only = null }) {
+  // A flag no selected gate reads would be silently ignored, and a typo in --base never checked.
+  if (only !== null && base !== null && !only.includes('freshness') && !only.includes('adr-freeze'))
+    throw new UsageError(`--base only applies to the freshness and adr-freeze gates; --only ${only.join(',')} selects neither`);
+  if (only !== null && advisory && !only.includes('freshness'))
+    throw new UsageError(`--advisory only applies to the freshness gate; --only ${only.join(',')} does not select it`);
   const result = runSelectedChecks({ root, base, advisory, freshness, only });
   // A selected gate that did not run must not read as a pass: a lane that
   // asks for one gate never passes by checking nothing.
@@ -506,9 +511,4 @@ export function checkReportJson({ gates, exitCode }, { base = null, advisory = f
       paths: [source, ...changed],
     })),
   };
-}
-
-/** `check --json` when the run could not start (a usage or configuration error before any gate ran). */
-export function checkErrorJson(error, { base = null, advisory = false, only = null } = {}) {
-  return { schemaVersion: 1, tool: 'corpus', command: 'check', verdict: 'fail', exitCode: error.exitCode, base, advisory, only, error: error.message };
 }
