@@ -10,7 +10,7 @@
 
 `@kontourai/corpus` gives every repository the same three things from one manifest:
 
-- **A docs gate for CI.** `corpus check` validates links, anchors, reachability, topics, redirects, local paths, v2 building-block declarations, and (on pull requests) freshness.
+- **A docs gate for CI.** `corpus check` validates links, anchors, reachability, topics, redirects, local paths, v2 purpose and building-block declarations, and (on pull requests) freshness.
 - **A GitHub Pages site.** `corpus build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 
@@ -116,7 +116,7 @@ Each repository has a preferred `corpus.json` at its root. Legacy `docs-kit.json
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `schemaVersion` | yes | `2` for new manifests; `1` remains supported with a deprecation warning. |
-| `purpose` | v2 | Non-empty sentence describing the promise to users. |
+| `purpose` | v2 | Non-empty sentence describing the promise to users. The exact sentence `corpus init` writes is refused by `check`. |
 | `builtOn` | v2 | Public-contract building blocks: `{ "product": "id", "via": "package or CLI (or non-empty array)", "for": "use" }`; may be empty. Optional `"evidence": "cli"` and bare `bin` describe command evidence (see below). |
 | `product` | yes | Lowercase slug. It must equal the repository name in `repo`, because the site lives at `https://kontourai.github.io/<product>/` and the hub fetches `/<product>/docs-bundle.json`. |
 | `title` | yes | Display name. |
@@ -205,8 +205,9 @@ If a scoped package's executable differs, use a bare `bin` string: `{ "product":
 4. **topics:** every topic anchor resolves to a heading outside blockquotes and lists.
 5. **redirects:** every [redirect](#redirects) target is published and its `#anchor` resolves, and no key repeats or collides with a file corpus generates.
 6. **paths:** no absolute home-directory path appears in the landing page or any listed document, bundle-only ones included: `/Users/<name>/`, `/home/<name>/`, or `C:\Users\<name>\` (any drive letter, either slash). The whole Markdown body is scanned as text, so prose, code, links, and raw HTML all count; front matter is not, because it is never published. Each hit is reported as `file:line`. A path inside a URL such as `https://host/home/x/` does not match, and neither does a placeholder name such as `<name>`, `$USER`, or `{user}`. Two non-personal directories are exempt: `/Users/Shared/` (the macOS shared folder) and `/home/runner/` (the GitHub Actions runner home). List a document in `allowLocalPaths` when it needs real example paths.
-7. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
-8. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
+7. **purpose:** a v2 manifest's `purpose` is not the exact placeholder sentence that `corpus init` writes (a v1 manifest has no `purpose`, and the gate is reported as skipped). This gate fails with exit `1`, not `2`, so a new adopter still sees every other gate. It compares the whole sentence, not a `TODO` substring.
+8. **covers:** every `covers` glob matches at least one tracked file. This gate fails with exit `1`.
+9. **freshness:** this gate runs only with `--base`. It reads the changed files from `git diff --name-only --no-renames <base>...HEAD`, which diffs from the merge base and lists both paths of a renamed file. If a document's `covers` globs match a changed file, the document's own `source` must also be in the changed set. Otherwise the document is stale. With `--advisory`, stale documents are printed as warnings and the exit code is `0`. A base that does not resolve, or a directory that is not a git checkout, gives exit `2`, never a silent pass.
 
 ### build
 
@@ -267,7 +268,7 @@ If more than one state applies, the first one in the table wins.
 corpus init [--root dir]
 ```
 
-`init` preserves the legacy scaffolding behavior: it writes a v1 `docs-kit.json`. Rename it to `corpus.json`, set `schemaVersion` to `2`, and add `purpose` and `builtOn`. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest.
+`init` writes a schema v2 `corpus.json` with a `purpose` placeholder sentence and an empty `builtOn`. Until you replace the placeholder, `check` fails its `purpose` gate with exit `1` (every other gate still runs), and `build` refuses to build. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest, whether it is named `corpus.json` or the legacy `docs-kit.json`.
 
 ## MCP server
 
@@ -309,7 +310,7 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 ## Adopting corpus in a repo
 
 1. Pin a corpus commit. Use its full sha everywhere below as `<sha>`.
-2. Scaffold and review the manifest. Order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
+2. Scaffold and review the manifest. Replace the `purpose` placeholder (`check` fails until you do), fill `builtOn` (or leave it empty), order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
 
    ```sh
    npx -y github:kontourai/corpus#<sha> corpus init

@@ -10,8 +10,8 @@ export const HELP = `Corpus ${VERSION}: check, build, locate, and retrieve sourc
 Usage: corpus <command> [options]
 
 Commands:
-  check   Run the docs gates: manifest, links, reachability, topics, redirects,
-          paths, builtOn, covers, and freshness with --base
+  check   Run the docs gates: manifest, purpose, links, reachability, topics,
+          redirects, paths, builtOn, covers, and freshness with --base
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
@@ -31,7 +31,8 @@ Commands:
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
-  init    Scaffold docs-kit.json from README.md and docs/**/*.md; never overwrites
+  init    Scaffold a v2 corpus.json from README.md and docs/**/*.md; never overwrites a
+          corpus.json or legacy docs-kit.json
             --root <dir>        repository root (default: .)
 
 Options:

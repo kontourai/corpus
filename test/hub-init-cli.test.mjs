@@ -3,7 +3,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import vm from 'node:vm';
+import { INIT_PURPOSE_PLACEHOLDER } from '../src/manifest.mjs';
 import { FIXTURES, REPO_ROOT, git, runCli, scratch } from './helpers.mjs';
+
+// The shipped wording is a contract: a committed placeholder must stay refused, so editing it must fail a test.
+const SHIPPED_PLACEHOLDER = 'TODO: replace with one sentence on the promise this product makes to its users.';
 
 test('hub writes index.html and a byte-identical copy of products.json', async (t) => {
   const out = path.join(scratch(t), 'hub');
@@ -104,7 +108,7 @@ test('hub refuses an invalid products.json (exit 2)', async (t) => {
   assert.ok(!existsSync(path.join(dir, 'out')));
 });
 
-test('init scaffolds a manifest that passes check, then refuses to overwrite it', async (t) => {
+test('init scaffolds a v2 corpus.json whose placeholder purpose fails check, then refuses to overwrite it', async (t) => {
   const root = path.join(scratch(t), 'widget');
   mkdirSync(path.join(root, 'docs', 'guides'), { recursive: true });
   writeFileSync(path.join(root, 'README.md'), '# Widget\n\nRead [the guide](docs/guides/setup.md).\n');
@@ -116,28 +120,104 @@ test('init scaffolds a manifest that passes check, then refuses to overwrite it'
 
   const result = await runCli(['init', '--root', root]);
   assert.equal(result.status, 0, result.output);
-  const manifest = JSON.parse(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'));
-  assert.equal(manifest.schemaVersion, 1);
+  assert.ok(!existsSync(path.join(root, 'docs-kit.json')), 'init must not write the legacy manifest');
+  const manifest = JSON.parse(readFileSync(path.join(root, 'corpus.json'), 'utf8'));
+  assert.equal(manifest.schemaVersion, 2);
   assert.equal(manifest.product, 'widget');
   assert.equal(manifest.repo, 'kontourai/widget');
   assert.equal(manifest.title, 'Widget');
   assert.equal(manifest.tagline, 'Widgets for everyone');
+  assert.equal(manifest.purpose, SHIPPED_PLACEHOLDER);
+  assert.equal(INIT_PURPOSE_PLACEHOLDER, SHIPPED_PLACEHOLDER);
+  assert.deepEqual(manifest.builtOn, []);
   assert.deepEqual(manifest.documents, [
     { source: 'docs/guides/setup.md', section: 'Guides' },
     { source: 'docs/overview.md', section: 'Documentation' },
   ]);
-  const check = await runCli(['check', '--root', root]);
-  assert.equal(check.status, 0, check.output);
+  assert.match(result.stdout, /next: replace the "purpose" placeholder, list the Kontour products you build on in "builtOn" \(or leave it empty\), review sections and order, move unpublished docs to "exclude", add "topics" and "covers", then run corpus check/);
 
+  // The placeholder is a gate failure (exit 1), not a configuration error, so every other gate still reports.
+  const check = await runCli(['check', '--root', root]);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /FAIL purpose/);
+  assert.match(check.stderr, /corpus\.json: purpose is still the init placeholder; replace it with one sentence saying what this product is for/);
+  for (const gate of ['manifest', 'builtOn', 'links', 'reachability', 'topics', 'redirects', 'paths', 'covers']) assert.match(check.stderr, new RegExp(`PASS ${gate}`));
+  assert.doesNotMatch(check.stderr, /SKIP|deprecated/);
+
+  // build runs check, so the placeholder cannot reach docs-bundle.json.
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', root, '--out', out]);
+  assert.equal(build.status, 1, build.output);
+  assert.match(build.stderr, /refusing to build until check passes/);
+  assert.ok(!existsSync(path.join(out, 'docs-bundle.json')));
+
+  const before = readFileSync(path.join(root, 'corpus.json'), 'utf8');
   const again = await runCli(['init', '--root', root]);
   assert.equal(again.status, 2, again.output);
-  assert.match(again.stderr, /already exists; refusing to overwrite it/);
+  assert.match(again.stderr, /corpus\.json already exists; refusing to overwrite it/);
+  assert.equal(readFileSync(path.join(root, 'corpus.json'), 'utf8'), before);
+});
+
+test('a scaffold with a filled-in purpose passes every gate', async (t) => {
+  const root = path.join(scratch(t), 'widget');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(path.join(root, 'README.md'), '# Widget\n');
+  git(root, ['init', '-q']);
+  git(root, ['remote', 'add', 'origin', 'git@github.com:kontourai/widget.git']);
+  const init = await runCli(['init', '--root', root]);
+  assert.equal(init.status, 0, init.output);
+  const file = path.join(root, 'corpus.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  writeFileSync(file, `${JSON.stringify({ ...manifest, purpose: 'Keep widgets documented for the people who build with them.' }, null, 2)}\n`);
+  const check = await runCli(['check', '--root', root]);
+  assert.equal(check.status, 0, check.output);
+  assert.match(check.stdout, /PASS purpose/);
+  assert.match(check.stdout, /check passed/);
+});
+
+test('a purpose that merely starts with TODO is not the placeholder and passes check', async (t) => {
+  const root = path.join(scratch(t), 'widget');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(path.join(root, 'README.md'), '# Widget\n');
+  git(root, ['init', '-q']);
+  git(root, ['remote', 'add', 'origin', 'git@github.com:kontourai/widget.git']);
+  assert.equal((await runCli(['init', '--root', root])).status, 0);
+  const file = path.join(root, 'corpus.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  for (const purpose of ['TODO list sync for teams.', `${SHIPPED_PLACEHOLDER} Really.`]) {
+    writeFileSync(file, `${JSON.stringify({ ...manifest, purpose }, null, 2)}\n`);
+    const check = await runCli(['check', '--root', root]);
+    assert.equal(check.status, 0, check.output);
+    assert.match(check.stdout, /PASS purpose/);
+  }
+});
+
+test('a v1 manifest skips the purpose gate without changing the exit code', async (t) => {
+  const root = scratch(t);
+  writeFileSync(path.join(root, 'README.md'), '# Sample\n');
+  writeFileSync(path.join(root, 'docs-kit.json'), JSON.stringify({ schemaVersion: 1, product: 'sample', title: 'Sample', repo: 'example/sample', documents: [] }));
+  const check = await runCli(['check', '--root', root]);
+  assert.equal(check.status, 0, check.output);
+  assert.match(check.stdout, /SKIP purpose \(v1 manifest has no purpose\)/);
+  assert.doesNotMatch(check.output, /FAIL/);
+});
+
+test('init refuses to overwrite a legacy docs-kit.json and does not add a second manifest', async (t) => {
+  const root = scratch(t);
+  const legacy = JSON.stringify({ schemaVersion: 1, product: 'old', title: 'Old', repo: 'example/old', documents: [] });
+  writeFileSync(path.join(root, 'docs-kit.json'), legacy);
+  const result = await runCli(['init', '--root', root]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /docs-kit\.json already exists; refusing to overwrite it/);
+  assert.equal(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'), legacy);
+  assert.ok(!existsSync(path.join(root, 'corpus.json')));
 });
 
 test('cli: help, version, unknown command and the npx leading program name', async () => {
   const help = await runCli(['--help']);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /^Corpus \d+\.\d+\.\d+: /);
+  assert.match(help.stdout, /Run the docs gates: manifest, purpose, links, /);
   for (const command of ['check', 'build', 'mcp', 'hub', 'init']) assert.match(help.stdout, new RegExp(`\\n  ${command} `));
 
   const version = await runCli(['--version']);
