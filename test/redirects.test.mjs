@@ -6,7 +6,7 @@ import { fixtureRepo, git, runCli, scratch } from './helpers.mjs';
 import { checkGeneratedSite, redirectStub, scriptString } from '../src/build.mjs';
 
 function setRedirects(repo, redirects) {
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   manifest.redirects = redirects;
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -139,7 +139,7 @@ test('redirects: a key that collides with a generated file, or repeats, fails (e
     'unrelated.html': 'README.md',
   });
   // JSON.parse would silently keep only the last of two equal keys.
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   writeFileSync(file, readFileSync(file, 'utf8').replace('"unrelated.html": "README.md"', '"unrelated.html": "README.md", "unrelated.html": "docs/concepts.md"'));
   const result = await runCli(['check', '--root', repo]);
   assert.equal(result.status, 1, result.output);
@@ -230,7 +230,7 @@ test('redirects: keys that differ only in Unicode normalization collide (exit 1)
   // The generated page side too: an NFD key against an NFC page path.
   mkdirSync(path.join(repo, 'docs'), { recursive: true });
   writeFileSync(path.join(repo, 'docs/r\u00e9sum\u00e9.md'), '# Resume\n');
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   manifest.documents.push({ source: 'docs/r\u00e9sum\u00e9.md', section: 'Reference' });
   manifest.redirects = { [nfc]: 'README.md', [nfd]: 'README.md', ['docs/re\u0301sume\u0301.html']: 'README.md' };
@@ -333,16 +333,12 @@ test('redirects: the generated-site check fails a stub whose script target diffe
   assert.match(checkGeneratedSite(out).failures.join('\n'), /old\.html: redirect stub needs exactly one redirect script, found 0/);
 });
 
-test('redirects: the duplicate-key scan reads corpus.json when that is the manifest', async (t) => {
+test('redirects: the duplicate-key scan reads corpus.json', async (t) => {
   const repo = fixtureRepo(t, 'valid');
   setRedirects(repo, { 'old.html': 'README.md', 'other.html': 'README.md' });
-  const legacy = path.join(repo, 'docs-kit.json');
-  const manifest = JSON.parse(readFileSync(legacy, 'utf8'));
   const corpus = path.join(repo, 'corpus.json');
-  writeFileSync(corpus, `${JSON.stringify({ ...manifest, schemaVersion: 2, purpose: 'Docs stay bound to their source.', builtOn: [] }, null, 2)}\n`);
-  rmSync(legacy);
   git(repo, ['add', '-A']);
-  git(repo, ['commit', '-q', '-m', 'corpus.json']);
+  git(repo, ['commit', '-q', '-m', 'redirects']);
   const clean = await runCli(['check', '--root', repo]);
   assert.equal(clean.status, 0, clean.output);
 

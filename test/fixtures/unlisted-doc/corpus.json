@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "unlisted-doc",
   "title": "unlisted-doc",
   "tagline": "Rejection fixture",
   "repo": "kontourai/unlisted-doc",
+  "purpose": "A fixture product for Corpus tests.",
+  "builtOn": [],
   "documents": [{ "source": "docs/a.md", "section": "Guide" }],
   "exclude": ["docs/drafts/**"]
 }

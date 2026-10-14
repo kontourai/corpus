@@ -8,7 +8,7 @@ import { commitAll, fixtureRepo, runCli, scratch } from './helpers.mjs';
 function repoWith(t, docs, { topics = [], titles = {} } = {}) {
   const repo = fixtureRepo(t, 'valid');
   for (const [name, content] of Object.entries(docs)) writeFileSync(path.join(repo, 'docs', name), content);
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   for (const name of Object.keys(docs))
     manifest.documents.push({ source: `docs/${name}`, section: 'Reference', ...(titles[name] ? { title: titles[name] } : {}) });

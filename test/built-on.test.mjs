@@ -54,7 +54,7 @@ for (const [name, status, message] of [
   ['workspace-missing', 1, /packages\/worker\/package.json dependencies: @kontourai\/knowledge is missing/],
   ['git-spec', 0, /PASS builtOn/],
   ['no-package', 0, /SKIP builtOn.*no package.json.*not verified/],
-  ['v1', 0, /SKIP builtOn.*v1/],
+  ['v1', 2, /corpus\.json: schemaVersion 1 is no longer supported/],
   ['invalid-evidence', 2, /evidence must be "cli"/],
   ['malformed-package', 2, /cannot read dependency evidence/],
 ]) {

@@ -271,7 +271,7 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   const purposeFailures = manifest.purpose === INIT_PURPOSE_PLACEHOLDER
     ? [`${manifestFile(root)}: purpose is still the init placeholder; replace it with one sentence saying what this product is for`]
     : [];
-  gates.push(manifest.purpose === undefined ? { name: 'purpose', skipped: 'v1 manifest has no purpose' } : { name: 'purpose', failures: purposeFailures });
+  gates.push({ name: 'purpose', failures: purposeFailures });
   if (purposeFailures.length > 0) raise(EXIT_GATE);
 
   const builtOn = checkBuiltOn(root, manifest);

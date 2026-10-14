@@ -148,7 +148,6 @@ function invokes(command, via, bin) {
 }
 
 export function checkBuiltOn(root, manifest) {
-  if (manifest.schemaVersion !== 2) return { skipped: 'v1 manifest has no builtOn contract' };
   const derived = deriveBuiltOn(root);
   if (derived.skipped) return derived;
   const { dependencies, packages, files } = derived;

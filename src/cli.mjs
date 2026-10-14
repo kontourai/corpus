@@ -26,13 +26,13 @@ Commands:
             --source <path>     optionally restrict to one document
   mcp     Serve docs bundles over stdio to MCP clients; at most one source
             --repo <dir>        build one bundle in memory from a checkout
-            --workspace <dir>   serve every immediate subdirectory that has corpus.json or docs-kit.json
+            --workspace <dir>   serve every immediate subdirectory that has corpus.json
             --hub <url>         fetch <url>/products.json and each bundle (default: https://kontourai.github.io/)
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
   init    Scaffold a v2 corpus.json from README.md and docs/**/*.md; never overwrites a
-          corpus.json or legacy docs-kit.json
+          corpus.json, and refuses while a retired v1 docs-kit.json is present
             --root <dir>        repository root (default: .)
 
 Options:

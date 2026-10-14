@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { FIXTURES, REPO_ROOT, scratch } from './helpers.mjs';
+import { FIXTURES, REPO_ROOT, commitAll, git, scratch } from './helpers.mjs';
 
 function fixture(t, change = {}) {
   const root = scratch(t, 'corpus-cli-');
@@ -34,12 +34,85 @@ for (const [name, change, message] of [
     assert.match(result.stderr, message);
   });
 }
-test('both manifest names are refused with a deletion instruction', (t) => {
+/** A v1 manifest exactly as the retired schema had it: no purpose, no builtOn. */
+const V1_MANIFEST = { schemaVersion: 1, product: 'sample', title: 'Sample', repo: 'example/sample', documents: [] };
+const RETIRED_ONLY = /docs-kit\.json is a retired v1 manifest and Corpus no longer reads it; rename it to corpus\.json, set "schemaVersion": 2, and add "purpose" \(one sentence on what the product is for\) and "builtOn" \(the Kontour products it builds on, or \[\]\)\. Or move it aside and run "corpus init" to scaffold a v2 corpus\.json/;
+const RETIRED_BESIDE = /docs-kit\.json is a retired v1 manifest and Corpus no longer reads it, but it sits next to corpus\.json; delete docs-kit\.json/;
+
+function retiredOnly(t, manifest = V1_MANIFEST) {
+  const root = scratch(t);
+  writeFileSync(path.join(root, 'README.md'), '# Sample\n');
+  writeFileSync(path.join(root, 'docs-kit.json'), JSON.stringify(manifest));
+  return root;
+}
+
+for (const bin of ['corpus', 'docs-kit']) {
+  test(`${bin} check and build refuse a repository whose only manifest is docs-kit.json (exit 2)`, (t) => {
+    const root = retiredOnly(t);
+    const check = cli(bin, ['check', '--root', root]);
+    assert.equal(check.status, 2, check.stderr);
+    assert.match(check.stderr, RETIRED_ONLY);
+    assert.equal(check.stdout, '', 'refused before any gate runs');
+    const out = path.join(scratch(t), 'site');
+    const build = cli(bin, ['build', '--root', root, '--out', out]);
+    assert.equal(build.status, 2, build.stderr);
+    assert.match(build.stderr, RETIRED_ONLY);
+    assert.ok(!existsSync(out), 'build writes nothing');
+  });
+}
+
+test('a docs-kit.json is refused even when it is a valid v2 manifest', (t) => {
   const root = fixture(t);
-  writeFileSync(path.join(root, 'docs-kit.json'), readFileSync(path.join(root, 'corpus.json')));
+  renameSync(path.join(root, 'corpus.json'), path.join(root, 'docs-kit.json'));
   const result = cli('corpus', ['check', '--root', root]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /delete docs-kit.json.*delete corpus.json/);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, RETIRED_ONLY);
+});
+
+test('a docs-kit.json next to corpus.json is refused with a deletion instruction (exit 2)', (t) => {
+  const root = fixture(t);
+  writeFileSync(path.join(root, 'docs-kit.json'), JSON.stringify(V1_MANIFEST));
+  for (const args of [['check', '--root', root], ['build', '--root', root, '--out', path.join(scratch(t), 'site')]]) {
+    const result = cli('corpus', args);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, RETIRED_BESIDE);
+    assert.doesNotMatch(result.stderr, /delete corpus\.json/, 'never suggests keeping the v1 file');
+  }
+});
+
+test('corpus.json with schemaVersion 1 is refused with the v2 remedy (exit 2)', (t) => {
+  const root = scratch(t);
+  writeFileSync(path.join(root, 'README.md'), '# Sample\n');
+  writeFileSync(path.join(root, 'corpus.json'), JSON.stringify(V1_MANIFEST));
+  const result = cli('corpus', ['check', '--root', root]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /FAIL manifest\n {4}- corpus\.json: schemaVersion 1 is no longer supported; set "schemaVersion": 2, and add "purpose" .* and "builtOn"/);
+  assert.match(result.stderr, /SKIP purpose \(corpus\.json is invalid\)/);
+  assert.doesNotMatch(result.stdout + result.stderr, /deprecated|v1 manifest has no/);
+
+  // Even with purpose and builtOn present, version 1 is not a v2 manifest.
+  writeFileSync(path.join(root, 'corpus.json'), JSON.stringify({ ...V1_MANIFEST, purpose: 'A fixture.', builtOn: [] }));
+  const filled = cli('corpus', ['check', '--root', root]);
+  assert.equal(filled.status, 2, filled.stderr);
+  assert.match(filled.stderr, /schemaVersion 1 is no longer supported/);
+});
+
+test('a v2 corpus.json passes check and build as a child process (exit 0)', (t) => {
+  const root = fixture(t);
+  const check = cli('corpus', ['check', '--root', root]);
+  assert.equal(check.status, 0, check.stderr);
+  assert.match(check.stdout, /PASS manifest/);
+  assert.match(check.stdout, /PASS purpose/);
+  assert.match(check.stdout, /check passed/);
+  assert.equal(check.stderr, '', 'no deprecation or other warning');
+  git(root, ['init', '-q']);
+  commitAll(root, 'v2 fixture');
+  const out = path.join(scratch(t), 'site');
+  const build = cli('corpus', ['build', '--root', root, '--out', out]);
+  assert.equal(build.status, 0, build.stderr);
+  const bundle = JSON.parse(readFileSync(path.join(out, 'docs-bundle.json'), 'utf8'));
+  assert.equal(bundle.schemaVersion, 2);
+  assert.equal(bundle.purpose, 'Serve source-bound documentation.');
 });
 test('packaged docs-kit alias has corpus byte and exit parity', (t) => {
   // Exercise the bin mappings npm installs, including npx's leading name.
@@ -52,14 +125,6 @@ test('packaged docs-kit alias has corpus byte and exit parity', (t) => {
     const alias = run('docs-kit');
     assert.deepEqual([alias.status, alias.stdout, alias.stderr], [corpus.status, corpus.stdout, corpus.stderr]);
   }
-});
-test('v1 legacy manifests still pass with a stderr deprecation warning', (t) => {
-  const root = scratch(t);
-  writeFileSync(path.join(root, 'README.md'), '# Sample\n');
-  writeFileSync(path.join(root, 'docs-kit.json'), JSON.stringify({ schemaVersion: 1, product: 'sample', title: 'Sample', repo: 'example/sample', documents: [] }));
-  const result = cli('docs-kit', ['check', '--root', root]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /v1 is deprecated/);
 });
 test('locate CLI reports a source-bound passage and rejects missing quote', (t) => {
   const root = fixture(t);

@@ -130,7 +130,7 @@ test('branch and selectionActions are validated strictly (exit 2) and default to
   ];
   for (const [patch, message] of cases) {
     const repo = fixtureRepo(t, 'selection');
-    const file = path.join(repo, 'docs-kit.json');
+    const file = path.join(repo, 'corpus.json');
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), ...patch }));
     const result = await runCli(['check', '--root', repo]);
     assert.equal(result.status, 2, `${JSON.stringify(patch)}: ${result.output}`);
@@ -139,7 +139,7 @@ test('branch and selectionActions are validated strictly (exit 2) and default to
 
   const { read } = await buildSelection(t, {
     edit: (repo) => {
-      const file = path.join(repo, 'docs-kit.json');
+      const file = path.join(repo, 'corpus.json');
       const manifest = JSON.parse(readFileSync(file, 'utf8'));
       delete manifest.branch;
       writeFileSync(file, JSON.stringify(manifest));
@@ -148,7 +148,7 @@ test('branch and selectionActions are validated strictly (exit 2) and default to
   assert.match(read('index.html'), /data-branch="main" data-selection-primary="ask">/);
   const challenge = await buildSelection(t, {
     edit: (repo) => {
-      const file = path.join(repo, 'docs-kit.json');
+      const file = path.join(repo, 'corpus.json');
       writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), branch: 'release/1.x', selectionActions: { primary: 'challenge-issue' } }));
     },
   });

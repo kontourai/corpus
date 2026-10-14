@@ -8,7 +8,7 @@ import { bundleFromCheckout, normalizeBaseUrl } from './bundle.mjs';
 import { UsageError } from './errors.mjs';
 import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
 import { locateInBundle } from './locate.mjs';
-import { MANIFEST_FILE, MANIFEST_FILES, PREFERRED_MANIFEST_FILE, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
+import { MANIFEST_FILE, RETIRED_MANIFEST_FILE, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
@@ -89,7 +89,8 @@ export function createCheckoutCache(build = bundleFromCheckout) {
         [
           headShaOrNull(root) ?? 'no-git',
           gitStatusPorcelain(root),
-          ...MANIFEST_FILES.map((name) => statKey(path.join(root, name))),
+          // The retired name too: one appearing mid-session must make the next build refuse.
+          ...[MANIFEST_FILE, RETIRED_MANIFEST_FILE].map((name) => statKey(path.join(root, name))),
           ...sources.map((source) => `${source}=${statKey(toFsPath(root, source))}`),
         ].join('\n'),
       )
@@ -139,18 +140,33 @@ function manifestProduct(dir, fallback) {
   }
 }
 
-function scanWorkspace(root) {
-  const entries = readdirSync(root, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && MANIFEST_FILES.some((name) => existsSync(path.join(root, entry.name, name))))
-    .map((entry) => entry.name)
-    .sort();
+/** The stderr note for a workspace subdirectory that has only a retired docs-kit.json. */
+const noteToStderr = (root, name) =>
+  process.stderr.write(
+    `Corpus: skipping ${path.join(root, name)}: it has a retired v1 ${RETIRED_MANIFEST_FILE} and no ${MANIFEST_FILE}; ` +
+      `rename it to ${MANIFEST_FILE} with schemaVersion 2, purpose and builtOn to serve it\n`,
+  );
+
+/**
+ * Immediate subdirectories with corpus.json. One with only a retired
+ * docs-kit.json is not a product: it is skipped and passed to `onRetired`, so
+ * one stale checkout neither takes the workspace down nor vanishes silently.
+ * One with both files is kept, and its build reports the conflict as unavailable.
+ */
+function scanWorkspace(root, onRetired) {
+  const names = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    if (existsSync(path.join(root, entry.name, MANIFEST_FILE))) names.push(entry.name);
+    else if (existsSync(path.join(root, entry.name, RETIRED_MANIFEST_FILE))) onRetired(root, entry.name);
+  }
+  return names.sort();
 }
 
 /** Build every product in a workspace. Unavailable entries are keyed by the manifest's product. */
-export function loadWorkspace(root, build = bundleFromCheckout) {
+export function loadWorkspace(root, build = bundleFromCheckout, onRetired = noteToStderr) {
   const byProduct = new Map();
-  for (const name of scanWorkspace(root)) {
+  for (const name of scanWorkspace(root, onRetired)) {
     const dir = path.join(root, name);
     const product = manifestProduct(dir, name);
     if (!byProduct.has(product)) byProduct.set(product, []);
@@ -174,22 +190,32 @@ export function loadWorkspace(root, build = bundleFromCheckout) {
   return snapshot(bundles, unavailable);
 }
 
-/** Every immediate subdirectory with corpus.json or legacy docs-kit.json, rescanned on every call; each product rebuilt only when its key changes. */
+/**
+ * Every immediate subdirectory with corpus.json, rescanned on every call; each
+ * product rebuilt only when its key changes. A subdirectory with only a retired
+ * docs-kit.json is noted on stderr once per server, not on every rescan.
+ */
 export function workspaceSource(dir) {
   const root = path.resolve(dir);
+  const noted = new Set();
+  const onRetired = (base, name) => {
+    if (noted.has(name)) return;
+    noted.add(name);
+    noteToStderr(base, name);
+  };
   let candidates;
   try {
-    candidates = scanWorkspace(root);
+    candidates = scanWorkspace(root, onRetired);
   } catch (error) {
     throw new UsageError(`--workspace ${dir}: ${error.message}`);
   }
-  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${PREFERRED_MANIFEST_FILE} or legacy ${MANIFEST_FILE}`);
+  if (candidates.length === 0) throw new UsageError(`--workspace ${dir}: no immediate subdirectory contains ${MANIFEST_FILE}`);
   const build = createCheckoutCache();
   return {
     describe: `workspace ${root}`,
     load: async () => {
       try {
-        return loadWorkspace(root, build);
+        return loadWorkspace(root, build, onRetired);
       } catch (error) {
         return snapshot([], [{ product: '*', error: `workspace ${root} unavailable: ${error.message}` }]);
       }

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { commitAll, fixtureRepo, runCli, scratch } from './helpers.mjs';
 
 function editManifest(repo, edit) {
-  const file = path.join(repo, 'docs-kit.json');
+  const file = path.join(repo, 'corpus.json');
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   edit(manifest);
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
