@@ -4,7 +4,7 @@ import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
 import picomatch from 'picomatch';
 import { createAssetPolicy } from './assets.mjs';
 import { changedFiles, trackedFiles } from './git.mjs';
-import { manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
+import { INIT_PURPOSE_PLACEHOLDER, manifestFile, duplicateRedirectKeys, globMatcher, outputPathFor, readManifestJson, splitTopicSource, validateManifest } from './manifest.mjs';
 import { analyzeMarkdown, resolveLink, splitFrontMatter } from './markdown.mjs';
 import { listFiles, listMarkdownFiles, statInRepo, toFsPath } from './paths.mjs';
 
@@ -261,10 +261,18 @@ export function runChecks({ root, base = null, advisory = false, freshness = tru
   gates.push({ name: 'manifest', failures: errors, failureExit: EXIT_USAGE });
   if (errors.length > 0) {
     raise(EXIT_USAGE);
-    for (const name of ['links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
+    for (const name of ['purpose', 'links', 'reachability', 'topics', 'redirects', 'paths', ...(freshness ? ['covers'] : []), ...(freshness && base ? ['freshness'] : [])])
       gates.push({ name, skipped: `${manifestFile(root)} is invalid` });
     return { exitCode, gates, manifest: null };
   }
+
+  // An exact match only: a heuristic on "TODO" would also refuse real sentences.
+  // A gate failure (exit 1), not a manifest error, so a new adopter still sees every other gate.
+  const purposeFailures = manifest.purpose === INIT_PURPOSE_PLACEHOLDER
+    ? [`${manifestFile(root)}: purpose is still the init placeholder; replace it with one sentence saying what this product is for`]
+    : [];
+  gates.push({ name: 'purpose', failures: purposeFailures, ...(manifest.purpose === undefined ? { note: 'v1 manifest has no purpose' } : {}) });
+  if (purposeFailures.length > 0) raise(EXIT_GATE);
 
   const builtOn = checkBuiltOn(root, manifest);
   gates.push({ name: 'builtOn', ...builtOn });

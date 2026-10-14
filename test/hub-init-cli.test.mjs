@@ -104,7 +104,7 @@ test('hub refuses an invalid products.json (exit 2)', async (t) => {
   assert.ok(!existsSync(path.join(dir, 'out')));
 });
 
-test('init scaffolds a v2 corpus.json that passes check, then refuses to overwrite it', async (t) => {
+test('init scaffolds a v2 corpus.json whose placeholder purpose fails check, then refuses to overwrite it', async (t) => {
   const root = path.join(scratch(t), 'widget');
   mkdirSync(path.join(root, 'docs', 'guides'), { recursive: true });
   writeFileSync(path.join(root, 'README.md'), '# Widget\n\nRead [the guide](docs/guides/setup.md).\n');
@@ -129,15 +129,45 @@ test('init scaffolds a v2 corpus.json that passes check, then refuses to overwri
     { source: 'docs/guides/setup.md', section: 'Guides' },
     { source: 'docs/overview.md', section: 'Documentation' },
   ]);
+  assert.match(result.stdout, /next: replace the "purpose" placeholder, list the Kontour products you build on in "builtOn" \(or leave it empty\), review sections and order, move unpublished docs to "exclude", add "topics" and "covers", then run corpus check/);
+
+  // The placeholder is a gate failure (exit 1), not a configuration error, so every other gate still reports.
   const check = await runCli(['check', '--root', root]);
-  assert.equal(check.status, 0, check.output);
-  assert.doesNotMatch(check.stderr, /deprecated/);
+  assert.equal(check.status, 1, check.output);
+  assert.match(check.stderr, /FAIL purpose/);
+  assert.match(check.stderr, /corpus\.json: purpose is still the init placeholder; replace it with one sentence saying what this product is for/);
+  for (const gate of ['manifest', 'builtOn', 'links', 'reachability', 'topics', 'redirects', 'paths', 'covers']) assert.match(check.stderr, new RegExp(`PASS ${gate}`));
+  assert.doesNotMatch(check.stderr, /SKIP|deprecated/);
+
+  // build runs check, so the placeholder cannot reach docs-bundle.json.
+  const out = path.join(scratch(t), 'site');
+  const build = await runCli(['build', '--root', root, '--out', out]);
+  assert.equal(build.status, 1, build.output);
+  assert.match(build.stderr, /refusing to build until check passes/);
+  assert.ok(!existsSync(path.join(out, 'docs-bundle.json')));
 
   const before = readFileSync(path.join(root, 'corpus.json'), 'utf8');
   const again = await runCli(['init', '--root', root]);
   assert.equal(again.status, 2, again.output);
   assert.match(again.stderr, /corpus\.json already exists; refusing to overwrite it/);
   assert.equal(readFileSync(path.join(root, 'corpus.json'), 'utf8'), before);
+});
+
+test('a scaffold with a filled-in purpose passes every gate', async (t) => {
+  const root = path.join(scratch(t), 'widget');
+  mkdirSync(root, { recursive: true });
+  writeFileSync(path.join(root, 'README.md'), '# Widget\n');
+  git(root, ['init', '-q']);
+  git(root, ['remote', 'add', 'origin', 'git@github.com:kontourai/widget.git']);
+  const init = await runCli(['init', '--root', root]);
+  assert.equal(init.status, 0, init.output);
+  const file = path.join(root, 'corpus.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  writeFileSync(file, `${JSON.stringify({ ...manifest, purpose: 'Keep widgets documented for the people who build with them.' }, null, 2)}\n`);
+  const check = await runCli(['check', '--root', root]);
+  assert.equal(check.status, 0, check.output);
+  assert.match(check.stdout, /PASS purpose/);
+  assert.match(check.stdout, /check passed/);
 });
 
 test('init refuses to overwrite a legacy docs-kit.json and does not add a second manifest', async (t) => {

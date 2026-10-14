@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { originRepo } from './git.mjs';
-import { DEFAULT_LANDING, PREFERRED_MANIFEST_FILE, manifestFile } from './manifest.mjs';
+import { DEFAULT_LANDING, INIT_PURPOSE_PLACEHOLDER, PREFERRED_MANIFEST_FILE, manifestFile } from './manifest.mjs';
 import { isRepoFile, listMarkdownFiles } from './paths.mjs';
 
 function titleCase(value) {
@@ -18,8 +18,6 @@ export function guessSection(source) {
   const parts = source.split('/');
   return parts.length > 2 ? titleCase(parts[1]) : 'Documentation';
 }
-
-const PURPOSE_PLACEHOLDER = 'TODO: replace with one sentence on the promise this product makes to its users.';
 
 function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '') || 'product';
@@ -47,7 +45,7 @@ export function runInit({ root }) {
     title: titleCase(product),
     tagline,
     repo,
-    purpose: PURPOSE_PLACEHOLDER,
+    purpose: INIT_PURPOSE_PLACEHOLDER,
     builtOn: [],
     landing: DEFAULT_LANDING,
     documents: listMarkdownFiles(root, 'docs').map((source) => ({ source, section: guessSection(source) })),

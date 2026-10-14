@@ -8,6 +8,9 @@ export const MANIFEST_FILE = 'docs-kit.json';
 export const PREFERRED_MANIFEST_FILE = 'corpus.json';
 export const MANIFEST_FILES = [PREFERRED_MANIFEST_FILE, MANIFEST_FILE];
 
+/** The `purpose` that `corpus init` writes. `check` refuses a manifest whose purpose is exactly this text. */
+export const INIT_PURPOSE_PLACEHOLDER = 'TODO: replace with one sentence on the promise this product makes to its users.';
+
 export function manifestFile(root) {
   const found = MANIFEST_FILES.filter((name) => existsSync(path.join(root, name)));
   if (found.length === 2) throw new UsageError('both corpus.json and docs-kit.json exist; delete docs-kit.json to use corpus.json, or delete corpus.json to keep docs-kit.json');
@@ -428,7 +431,7 @@ export function readManifestJson(root) {
     text = readFileSync(file, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT')
-      throw new UsageError(`no ${PREFERRED_MANIFEST_FILE} (or legacy ${MANIFEST_FILE}) in ${root} (run "docs-kit init" to scaffold one)`);
+      throw new UsageError(`no ${PREFERRED_MANIFEST_FILE} (or legacy ${MANIFEST_FILE}) in ${root} (run "corpus init" to scaffold one)`);
     throw new UsageError(`cannot read ${file}: ${error.message}`);
   }
   try {
