@@ -5,13 +5,35 @@ purpose is to give hosts one implementation of record identity, links,
 provenance, mutations and recoverable publication. Immutable docs bundles are
 separate. The docs CLI does not depend on this package and needs no build.
 
-This extraction preserves Station semantics at
-`2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`. The only planned codec change in this
-release preserves text scalars from old Knowledge Kit writers. Future working-set,
-expiry, compiled-source and proposal decisions are explicit expected failures,
-not implemented behavior. Version `0.1.0-next.0` is the first npm candidate,
-published only after owner bootstrap and trusted-publisher setup through the
+The extraction preserved Station semantics at
+`2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`; its only codec change preserves text
+scalars from old Knowledge Kit writers. Later changes implement the owner's
+decisions one at a time; see [Owner decisions](#owner-decisions). Version
+`0.1.0-next.0` is the first npm candidate, published only after owner bootstrap
+and trusted-publisher setup through the
 [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
+
+## Owner decisions
+
+The [conformance vectors](../conformance/README.md) encode the owner's
+2026-10-13 decisions. A decision not yet implemented is an explicit entry in
+[the expected-fail list](test/expected-fails.json), never silent behavior.
+
+Implemented:
+
+- **Proposals may target any record type.** `propose`, `apply` and `reject`
+  accept a target of every type, not only `concept`. The target and proposer
+  must exist (`NOT_FOUND`), evidence fields are still required
+  (`MISSING_EVIDENCE`), and `apply` and `reject` still require the proposer's
+  `proposes` link to the target. Mutation-log evidence keeps its stored
+  `concept_id` key.
+
+Not yet implemented, and listed as expected failures:
+
+- List results default to the working set, with one `includeHistory` flag.
+- One expiry rule (`created_at + ttl_seconds`, explicit `expires_at` first) and
+  an expiry-only stale filter.
+- A compiled record must link a raw source when it is created.
 
 ## Host composition
 

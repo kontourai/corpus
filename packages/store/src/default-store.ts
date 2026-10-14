@@ -606,11 +606,6 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
 
     const concept = this.readRecord(conceptId);
     if (!concept) throw new KnowledgeRecordNotFoundError(conceptId);
-    if (concept.type !== 'concept') {
-      throw new MissingEvidenceError(
-        `propose: concept_id ${conceptId} is not of type "concept" (got: ${concept.type})`,
-      );
-    }
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
@@ -694,11 +689,6 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
 
     const concept = this.readRecord(conceptId);
     if (!concept) throw new KnowledgeRecordNotFoundError(conceptId);
-    if (concept.type !== 'concept') {
-      throw new MissingEvidenceError(
-        `apply: concept_id ${conceptId} is not of type "concept" (got: ${concept.type})`,
-      );
-    }
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
@@ -761,11 +751,6 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
 
     const concept = this.readRecord(conceptId);
     if (!concept) throw new KnowledgeRecordNotFoundError(conceptId);
-    if (concept.type !== 'concept') {
-      throw new MissingEvidenceError(
-        `reject: concept_id ${conceptId} is not of type "concept" (got: ${concept.type})`,
-      );
-    }
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);

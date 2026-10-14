@@ -188,18 +188,24 @@ export interface KnowledgeStoreAdapter {
     links: KitLink[],
     evidence: LinkEvidence,
   ): Promise<void>;
+  /**
+   * Proposals, application and rejection may target a record of any type
+   * (owner decision, 2026-10-13). The target must exist, the proposer must
+   * exist, and apply/reject require the proposer's `proposes` link to the
+   * target. Mutation-log evidence keeps its stored `concept_id` key.
+   */
   propose(
-    conceptId: string,
+    targetId: string,
     proposerId: string,
     evidence: ProposeEvidence,
   ): Promise<void>;
   apply(
-    conceptId: string,
+    targetId: string,
     proposerId: string,
     evidence: ApplyEvidence,
   ): Promise<void>;
   reject(
-    conceptId: string,
+    targetId: string,
     proposerId: string,
     evidence: RejectEvidence,
   ): Promise<void>;
