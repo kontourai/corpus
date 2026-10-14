@@ -267,7 +267,7 @@ If more than one state applies, the first one in the table wins.
 corpus init [--root dir]
 ```
 
-`init` preserves the legacy scaffolding behavior: it writes a v1 `docs-kit.json`. Rename it to `corpus.json`, set `schemaVersion` to `2`, and add `purpose` and `builtOn`. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest.
+`init` writes a schema v2 `corpus.json` with a `purpose` placeholder (a `TODO` sentence that passes `check`, so replace it) and an empty `builtOn`. It uses `README.md` as the landing page, lists every `docs/**/*.md`, and guesses each section from the first directory under `docs/`. It takes the product and repo from the `origin` remote, and the tagline from `package.json`. It never overwrites an existing manifest, whether it is named `corpus.json` or the legacy `docs-kit.json`.
 
 ## MCP server
 
@@ -309,7 +309,7 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
 ## Adopting corpus in a repo
 
 1. Pin a corpus commit. Use its full sha everywhere below as `<sha>`.
-2. Scaffold and review the manifest. Order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
+2. Scaffold and review the manifest. Replace the `purpose` placeholder, fill `builtOn` (or leave it empty), order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
 
    ```sh
    npx -y github:kontourai/corpus#<sha> corpus init

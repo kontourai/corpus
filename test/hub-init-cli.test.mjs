@@ -104,7 +104,7 @@ test('hub refuses an invalid products.json (exit 2)', async (t) => {
   assert.ok(!existsSync(path.join(dir, 'out')));
 });
 
-test('init scaffolds a manifest that passes check, then refuses to overwrite it', async (t) => {
+test('init scaffolds a v2 corpus.json that passes check, then refuses to overwrite it', async (t) => {
   const root = path.join(scratch(t), 'widget');
   mkdirSync(path.join(root, 'docs', 'guides'), { recursive: true });
   writeFileSync(path.join(root, 'README.md'), '# Widget\n\nRead [the guide](docs/guides/setup.md).\n');
@@ -116,22 +116,39 @@ test('init scaffolds a manifest that passes check, then refuses to overwrite it'
 
   const result = await runCli(['init', '--root', root]);
   assert.equal(result.status, 0, result.output);
-  const manifest = JSON.parse(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'));
-  assert.equal(manifest.schemaVersion, 1);
+  assert.ok(!existsSync(path.join(root, 'docs-kit.json')), 'init must not write the legacy manifest');
+  const manifest = JSON.parse(readFileSync(path.join(root, 'corpus.json'), 'utf8'));
+  assert.equal(manifest.schemaVersion, 2);
   assert.equal(manifest.product, 'widget');
   assert.equal(manifest.repo, 'kontourai/widget');
   assert.equal(manifest.title, 'Widget');
   assert.equal(manifest.tagline, 'Widgets for everyone');
+  assert.match(manifest.purpose, /^TODO: /);
+  assert.deepEqual(manifest.builtOn, []);
   assert.deepEqual(manifest.documents, [
     { source: 'docs/guides/setup.md', section: 'Guides' },
     { source: 'docs/overview.md', section: 'Documentation' },
   ]);
   const check = await runCli(['check', '--root', root]);
   assert.equal(check.status, 0, check.output);
+  assert.doesNotMatch(check.stderr, /deprecated/);
 
+  const before = readFileSync(path.join(root, 'corpus.json'), 'utf8');
   const again = await runCli(['init', '--root', root]);
   assert.equal(again.status, 2, again.output);
-  assert.match(again.stderr, /already exists; refusing to overwrite it/);
+  assert.match(again.stderr, /corpus\.json already exists; refusing to overwrite it/);
+  assert.equal(readFileSync(path.join(root, 'corpus.json'), 'utf8'), before);
+});
+
+test('init refuses to overwrite a legacy docs-kit.json and does not add a second manifest', async (t) => {
+  const root = scratch(t);
+  const legacy = JSON.stringify({ schemaVersion: 1, product: 'old', title: 'Old', repo: 'example/old', documents: [] });
+  writeFileSync(path.join(root, 'docs-kit.json'), legacy);
+  const result = await runCli(['init', '--root', root]);
+  assert.equal(result.status, 2, result.output);
+  assert.match(result.stderr, /docs-kit\.json already exists; refusing to overwrite it/);
+  assert.equal(readFileSync(path.join(root, 'docs-kit.json'), 'utf8'), legacy);
+  assert.ok(!existsSync(path.join(root, 'corpus.json')));
 });
 
 test('cli: help, version, unknown command and the npx leading program name', async () => {

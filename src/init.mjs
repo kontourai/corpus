@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './errors.mjs';
 import { originRepo } from './git.mjs';
-import { DEFAULT_LANDING, MANIFEST_FILE, manifestFile } from './manifest.mjs';
+import { DEFAULT_LANDING, PREFERRED_MANIFEST_FILE, manifestFile } from './manifest.mjs';
 import { isRepoFile, listMarkdownFiles } from './paths.mjs';
 
 function titleCase(value) {
@@ -19,13 +19,15 @@ export function guessSection(source) {
   return parts.length > 2 ? titleCase(parts[1]) : 'Documentation';
 }
 
+const PURPOSE_PLACEHOLDER = 'TODO: replace with one sentence on the promise this product makes to its users.';
+
 function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '') || 'product';
 }
 
-/** `docs-kit init`: write a starter docs-kit.json; never overwrite one. */
+/** `corpus init`: write a starter v2 corpus.json; never overwrite a manifest of either name. */
 export function runInit({ root }) {
-  const target = path.join(root, MANIFEST_FILE);
+  const target = path.join(root, PREFERRED_MANIFEST_FILE);
   const existing = path.join(root, manifestFile(root));
   if (existsSync(existing)) throw new UsageError(`${existing} already exists; refusing to overwrite it`);
 
@@ -40,20 +42,22 @@ export function runInit({ root }) {
   }
 
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     product,
     title: titleCase(product),
     tagline,
     repo,
+    purpose: PURPOSE_PLACEHOLDER,
+    builtOn: [],
     landing: DEFAULT_LANDING,
     documents: listMarkdownFiles(root, 'docs').map((source) => ({ source, section: guessSection(source) })),
     topics: [],
     exclude: [],
   };
   writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`);
-  const notes = [`docs-kit init: wrote ${target} with ${manifest.documents.length} documents`];
+  const notes = [`corpus init: wrote ${target} with ${manifest.documents.length} documents`];
   if (!isRepoFile(root, DEFAULT_LANDING)) notes.push(`  note: ${DEFAULT_LANDING} does not exist; create it or set "landing"`);
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(product)) notes.push(`  note: product "${product}" is not a lowercase slug; adjust product and repo`);
-  notes.push('  next: review sections and order, move unpublished docs to "exclude", add "topics" and "covers", then run docs-kit check');
+  notes.push('  next: replace the "purpose" placeholder, list the Kontour products you build on in "builtOn" (or leave it empty), review sections and order, move unpublished docs to "exclude", add "topics" and "covers", then run corpus check');
   return notes.join('\n');
 }

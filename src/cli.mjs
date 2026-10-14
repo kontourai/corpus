@@ -31,7 +31,8 @@ Commands:
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
-  init    Scaffold docs-kit.json from README.md and docs/**/*.md; never overwrites
+  init    Scaffold a v2 corpus.json from README.md and docs/**/*.md; never overwrites a
+          corpus.json or legacy docs-kit.json
             --root <dir>        repository root (default: .)
 
 Options:
