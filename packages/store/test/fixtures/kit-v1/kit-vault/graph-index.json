@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "forward": {
+    "kit-raw-0001": [],
+    "kit-compiled-0001": [
+      {
+        "target_id": "kit-raw-0001",
+        "kind": "source"
+      }
+    ],
+    "kit-compiled-0002": [
+      {
+        "target_id": "kit-raw-0001",
+        "kind": "source"
+      },
+      {
+        "target_id": "kit-compiled-0001",
+        "kind": "supersedes"
+      }
+    ],
+    "kit-person-0001": [],
+    "kit-snapshot-0001": [],
+    "kit-concept-0001": [
+      {
+        "target_id": "kit-compiled-0002",
+        "kind": "derived-from"
+      },
+      {
+        "target_id": "kit-compiled-0002",
+        "kind": "related"
+      }
+    ]
+  },
+  "reverse": {
+    "kit-raw-0001": [
+      {
+        "source_id": "kit-compiled-0001",
+        "kind": "source"
+      },
+      {
+        "source_id": "kit-compiled-0002",
+        "kind": "source"
+      }
+    ],
+    "kit-compiled-0001": [
+      {
+        "source_id": "kit-compiled-0002",
+        "kind": "supersedes"
+      }
+    ],
+    "kit-compiled-0002": [
+      {
+        "source_id": "kit-concept-0001",
+        "kind": "derived-from"
+      },
+      {
+        "source_id": "kit-concept-0001",
+        "kind": "related"
+      }
+    ]
+  }
+}

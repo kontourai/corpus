@@ -1,0 +1,36 @@
+{
+  "by_id": {
+    "kit-raw-0001": {
+      "path": "research/interviews/sources/interview-notes.md",
+      "archived": false
+    },
+    "kit-compiled-0001": {
+      "path": "archive/research/interviews/sources/interview-summary.md",
+      "archived": true
+    },
+    "kit-compiled-0002": {
+      "path": "research/interviews/sources/interview-summary-v2.md",
+      "archived": false
+    },
+    "kit-concept-0001": {
+      "path": "research/onboarding-friction.md",
+      "archived": false
+    },
+    "kit-person-0001": {
+      "path": "people/example-interviewee.md",
+      "archived": false
+    },
+    "kit-snapshot-0001": {
+      "path": "research/reports/quarterly-snapshot.md",
+      "archived": false
+    }
+  },
+  "by_path": {
+    "research/interviews/sources/interview-notes.md": "kit-raw-0001",
+    "research/interviews/sources/interview-summary-v2.md": "kit-compiled-0002",
+    "archive/research/interviews/sources/interview-summary.md": "kit-compiled-0001",
+    "research/onboarding-friction.md": "kit-concept-0001",
+    "people/example-interviewee.md": "kit-person-0001",
+    "research/reports/quarterly-snapshot.md": "kit-snapshot-0001"
+  }
+}

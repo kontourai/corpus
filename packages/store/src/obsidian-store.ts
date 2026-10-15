@@ -35,6 +35,7 @@ import {
   KnowledgeRecordNotFoundError,
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
+  ReadOnlyStoreError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
@@ -324,12 +325,12 @@ function extractUnrecognizedTrailingContent(
   return unrecognized.join('\n\n').trimEnd();
 }
 
-interface PathIndexEntry {
+export interface PathIndexEntry {
   path: string;
   archived: boolean;
 }
 
-interface PathIndex {
+export interface PathIndex {
   by_id: Record<string, PathIndexEntry>;
   by_path: Record<string, string>;
 }
@@ -338,7 +339,7 @@ function emptyPathIndex(): PathIndex {
   return { by_id: {}, by_path: {} };
 }
 
-function assertPathIndex(value: unknown, source: string): PathIndex {
+export function assertPathIndex(value: unknown, source: string): PathIndex {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${source}: path index must be an object`);
   }
@@ -383,6 +384,17 @@ export interface KitObsidianStoreOptions extends StoreOptions {
   sourcesDir?: string;
 }
 
+/** The canonical vault path index. */
+export const PATH_INDEX_FILE = 'path-index.json';
+/**
+ * The Knowledge Kit's vault path index (`kit-v1`): same payload, different name.
+ * A vault that has only this file opens read-only; `corpus-store migrate`
+ * converts it to the canonical index.
+ */
+export const KIT_V1_PATH_INDEX_FILE = '.graph-index.json';
+/** Derived indexes whose presence proves records were written here. */
+const DERIVED_INDEX_FILES = ['graph-index.json', 'alias-index.json'];
+
 const CREATE_IDENTITY_MAX_ENTRIES = 10_000;
 const CREATE_IDENTITY_MAX_FILE_BYTES = 16 * 1024 * 1024;
 const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
@@ -393,6 +405,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
   private readonly sourcesDir: string;
   private readonly graphPath: string;
   private readonly pathIndexPath: string;
+  private readonly kitV1PathIndexPath: string;
   private readonly aliasPath: string;
   private readonly files: KnowledgeFileTransactions;
 
@@ -402,7 +415,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     this.root = resolve(options.storeRoot);
     this.sourcesDir = options.sourcesDir || 'sources';
     this.graphPath = join(this.root, 'graph-index.json');
-    this.pathIndexPath = join(this.root, 'path-index.json');
+    this.pathIndexPath = join(this.root, PATH_INDEX_FILE);
+    this.kitV1PathIndexPath = join(this.root, KIT_V1_PATH_INDEX_FILE);
     this.aliasPath = join(this.root, 'alias-index.json');
     mkdirSync(this.root, { recursive: true });
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
@@ -411,19 +425,95 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
 
   // ── Internal: path index (id -> {path, archived}) ─────────────────────────
 
+  /**
+   * Selects the vault's path index. `path-index.json` is canonical. A vault with
+   * only the Knowledge Kit's `.graph-index.json` (`kit-v1`) is read with it and
+   * refuses writes. Both files at once is a conflict, and an occupied vault with
+   * neither is refused rather than read as empty: either would silently hide
+   * records.
+   */
+  private readPathIndexSource(): { raw: string | null; path: string; format: 'path-index' | 'kit-v1' } {
+    const canonical = this.files.readText(this.pathIndexPath);
+    const kitV1 = this.files.readText(this.kitV1PathIndexPath);
+    if (canonical !== null && kitV1 !== null) {
+      throw new KnowledgeStoreCorruptionError(
+        `vault has both ${PATH_INDEX_FILE} and ${KIT_V1_PATH_INDEX_FILE}; refusing to choose one. Resolve it with corpus-store migrate.`,
+      );
+    }
+    if (canonical !== null) return { raw: canonical, path: this.pathIndexPath, format: 'path-index' };
+    if (kitV1 !== null) return { raw: kitV1, path: this.kitV1PathIndexPath, format: 'kit-v1' };
+    if (this.occupiedWithoutIndex()) {
+      throw new KnowledgeStoreCorruptionError(
+        `vault holds records but has no ${PATH_INDEX_FILE}; refusing to open it as empty. Convert a Knowledge Kit vault with corpus-store migrate.`,
+      );
+    }
+    return { raw: null, path: this.pathIndexPath, format: 'path-index' };
+  }
+
+  /**
+   * True when the root already holds store data: a derived index, or a markdown
+   * note whose frontmatter has an `id` or a `type`. Plain notes do not count.
+   * Unreadable frontmatter or an exceeded bound counts as occupied (fail closed).
+   */
+  private occupiedWithoutIndex(): boolean {
+    if (DERIVED_INDEX_FILES.some((name) => this.files.readText(join(this.root, name)) !== null)) {
+      return true;
+    }
+    const directories = [this.root];
+    let entries = 0;
+    let remainingBytes = CREATE_IDENTITY_MAX_TOTAL_BYTES;
+    while (directories.length > 0) {
+      const directory = directories.pop()!;
+      for (const entry of this.files.listDirectoryEntries(directory)) {
+        if (++entries > CREATE_IDENTITY_MAX_ENTRIES) return true;
+        const path = join(directory, entry.name);
+        if (entry.kind === 'directory') {
+          directories.push(path);
+          continue;
+        }
+        if (!entry.name.toLowerCase().endsWith('.md')) continue;
+        const text = this.files.readText(path, Math.min(CREATE_IDENTITY_MAX_FILE_BYTES, remainingBytes));
+        if (text === null) return true;
+        remainingBytes -= Buffer.byteLength(text);
+        if (remainingBytes < 0) return true;
+        if (!/^(?:\uFEFF)?---\r?\n/.test(text)) continue;
+        try {
+          const { meta } = parseMarkdown(text, { maxDepth: 32, maxAliases: 50, maxTotalMergeKeys: 1000 });
+          if (meta.id !== undefined || meta.type !== undefined) return true;
+        } catch {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private loadPathIndex(): PathIndex {
+    const source = this.readPathIndexSource();
+    if (source.raw === null) return emptyPathIndex();
     try {
-      const raw = this.files.readText(this.pathIndexPath);
-      if (raw === null) return emptyPathIndex();
-      return assertPathIndex(JSON.parse(raw), this.pathIndexPath);
+      return assertPathIndex(JSON.parse(source.raw), source.path);
     } catch (error) {
       throw new KnowledgeStoreCorruptionError(
-        'path-index.json is corrupt; refusing to mutate the vault',
+        `${basename(source.path)} is corrupt; refusing to mutate the vault`,
         {
           cause: error,
         },
       );
     }
+  }
+
+  /** Every mutation runs here, so a `kit-v1` vault refuses writes before any I/O. */
+  private mutate<T>(operation: string, body: () => T): Promise<T> {
+    return this.files.mutate(operation, () => {
+      if (this.readPathIndexSource().format === 'kit-v1') {
+        throw new ReadOnlyStoreError(
+          operation,
+          `this vault uses the Knowledge Kit index ${KIT_V1_PATH_INDEX_FILE} and opens read-only; convert it with corpus-store migrate.`,
+        );
+      }
+      return body();
+    });
   }
 
   private savePathIndex(index: PathIndex): void {
@@ -919,7 +1009,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
    * flagged here for whichever future wave (K3+) needs archive-aware reindexing.
    */
   async reindex(): Promise<ReindexResult> {
-    return this.files.mutate('reindex', () => this.reindexLocked());
+    return this.mutate('reindex', () => this.reindexLocked());
   }
 
   private reindexLocked(): ReindexResult {
@@ -964,7 +1054,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
   // ── create (§6.1) ──────────────────────────────────────────────────────
 
   async create(input: CreateInput): Promise<string> {
-    return this.files.mutate('create', () => this.createLocked(input));
+    return this.mutate('create', () => this.createLocked(input));
   }
 
   private createLocked(input: CreateInput): string {
@@ -1156,7 +1246,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     fields: UpdateFields,
     evidence: UpdateEvidence,
   ): Promise<void> {
-    return this.files.mutate('update', () =>
+    return this.mutate('update', () =>
       this.updateLocked(id, fields, evidence),
     );
   }
@@ -1271,7 +1361,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     links: KitLink[],
     evidence: LinkEvidence,
   ): Promise<void> {
-    return this.files.mutate('link', () =>
+    return this.mutate('link', () =>
       this.linkLocked(sourceId, links, evidence),
     );
   }
@@ -1335,7 +1425,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     proposerId: string,
     evidence: ProposeEvidence,
   ): Promise<void> {
-    return this.files.mutate('propose', () =>
+    return this.mutate('propose', () =>
       this.proposeLocked(conceptId, proposerId, evidence),
     );
   }
@@ -1415,7 +1505,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     proposerId: string,
     evidence: ApplyEvidence,
   ): Promise<void> {
-    return this.files.mutate('apply', () =>
+    return this.mutate('apply', () =>
       this.applyLocked(conceptId, proposerId, evidence),
     );
   }
@@ -1484,7 +1574,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     proposerId: string,
     evidence: RejectEvidence,
   ): Promise<void> {
-    return this.files.mutate('reject', () =>
+    return this.mutate('reject', () =>
       this.rejectLocked(conceptId, proposerId, evidence),
     );
   }
@@ -1546,7 +1636,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     supersededIds: string[],
     evidence: SupersedeEvidence,
   ): Promise<void> {
-    return this.files.mutate('supersede', () =>
+    return this.mutate('supersede', () =>
       this.supersedeLocked(newId, supersededIds, evidence),
     );
   }
@@ -1650,7 +1740,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     targetStatus: 'implemented' | 'retired',
     evidence: RetireEvidence,
   ): Promise<void> {
-    return this.files.mutate('retire', () =>
+    return this.mutate('retire', () =>
       this.retireLocked(id, targetStatus, evidence),
     );
   }

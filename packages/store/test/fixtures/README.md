@@ -29,3 +29,17 @@ folded block; Station's lineWidth:-1 writer does not emit folded blocks.
 `kit-sequence.md` models the old Kit's unindented sequence layout in log entries;
 `flow.md` models a valid externally authored flow collection. Each places a
 subsequent key after the collection to expose delimiter/indentation data loss.
+
+`kit-v1/kit-vault/` and `kit-v1/hybrid-store/` were written by the Knowledge
+Kit's own `ObsidianKnowledgeStore` and `DefaultKnowledgeStore` from Flow Agents
+commit `d2ebd6349c485d51b328a6eb2888ede08fd82b7b`
+(`kits/knowledge/adapters/`), running `kit-v1/generate.mjs` against an
+extracted copy of that directory. Content is neutral and invented. The vault
+holds every record type, a superseded (archived) compiled record, a retired
+snapshot, an alias, a TTL and an explicit expiry, with the Kit's
+`.graph-index.json` path index and no `path-index.json`. `hybrid-store/` has
+the shape of a store that one root shares between a Kit default store
+(`records/`, `cache-version.json`) and a Kit vault: `graph-index.json` and
+`alias-index.json` are shared, and only the vault notes are in
+`.graph-index.json`. Tests copy these directories; they never write the
+committed bytes.
