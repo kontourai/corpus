@@ -140,8 +140,10 @@ export async function makeHarness(profile) {
       return { check: true };
     },
     async 'physical-id-archived'() {
-      await adapter.create(input('archived-record', { type: 'compiled' }));
-      await adapter.create(input('replacement-record', { type: 'compiled' }));
+      await adapter.create(input('archive-source'));
+      const sourced = { type: 'compiled', links: [{ target_id: 'archive-source', kind: 'source' }] };
+      await adapter.create(input('archived-record', sourced));
+      await adapter.create(input('replacement-record', sourced));
       await adapter.supersede('replacement-record', ['archived-record'], { agent: 'editor', rationale: 'obsolete' });
       const path = await recordPath(profile, root, 'archived-record');
       const before = await readFile(path, 'utf8');

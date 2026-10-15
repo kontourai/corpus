@@ -293,8 +293,7 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
-specific error patterns.
+The expected-fail list is empty.
 
 ### Host vectors
 
@@ -359,3 +358,19 @@ list.
 
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 122 passing and
 1 expected failure, with no unexpected result, for both default and vault.
+
+### A compiled record must link a raw source
+
+`create` of a compiled record requires a `source` link to an existing raw
+record (`shared/compiled-source.ts`), checked before any write in both
+profiles. Provenance IDs, `related` links and wikilinks do not satisfy it.
+Fixtures that created source-less compiled records now create a raw source
+first, including the conformance harness's `physical-id-archived` probe. A
+Station-written source-less compiled record is kept readable by writing its
+exact legacy bytes (`fixtures/station/contract-record.md`) into a default store
+rather than creating it. `compiled-without-source` leaves the list, which is
+now `{}`.
+
+EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, all 123
+passing, with no expected failure and no unexpected result, for both default
+and vault.

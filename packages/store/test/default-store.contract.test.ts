@@ -118,6 +118,13 @@ describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §
   );
 
   test('record files are literal YAML-frontmatter + markdown, parseable by a plain YAML reader', async () => {
+    const source = await adapter.create({
+      type: 'raw',
+      title: 'Fixture source',
+      body: 'source evidence',
+      category: 'engineering.inputs',
+      provenance: { agent: 'agent-1' },
+    });
     const id = await adapter.create({
       type: 'compiled',
       title: 'Fixture record',
@@ -125,6 +132,7 @@ describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §
       category: 'engineering.fixtures',
       tags: ['fixture', 'proof'],
       aliases: ['engineering.fixtures/proof-record'],
+      links: [{ target_id: source, kind: 'source' }],
       provenance: { agent: 'fixture-agent', note: 'contract fixture' },
     });
 
@@ -164,6 +172,19 @@ describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §
         }),
       ]),
     );
+  });
+
+  test('a legacy Station-written compiled record without a source link stays readable, listable and updatable', async () => {
+    // Exact bytes Station wrote before the compiled-source rule; never created through the constructor.
+    const legacy = readFileSync(new URL('./fixtures/station/contract-record.md', import.meta.url), 'utf8');
+    expect(legacy).not.toMatch(/kind: source/);
+    writeFileSync(join(dir, 'records', 'station-fixture-record.md'), legacy);
+    const record = await adapter.get('station-fixture-record');
+    expect(record?.type).toBe('compiled');
+    expect(record?.links).toEqual([{ target_id: 'wikilink-target', kind: 'related' }]);
+    expect((await adapter.listByType('compiled')).map((r) => r.id)).toEqual(['station-fixture-record']);
+    await adapter.update('station-fixture-record', { body: 'Edited after the rule.' }, { agent: 'agent-1' });
+    expect((await adapter.get('station-fixture-record'))?.body).toBe('Edited after the rule.');
   });
 
   test('graph-index.json matches the §5.1 schema shape on disk', async () => {
@@ -289,7 +310,7 @@ describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §
       provenance: { agent: 'agent-1' },
     });
     const b = await adapter.create({
-      type: 'compiled',
+      type: 'concept',
       title: 'B',
       body: 'b',
       category: 'engineering',

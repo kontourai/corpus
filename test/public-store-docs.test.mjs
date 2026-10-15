@@ -12,5 +12,11 @@ test('public expected-fail binding counts match the actual list', () => {
   const assertions = entries.filter((entry) => entry.assertions).length;
   const patterns = entries.filter((entry) => entry.errorPattern).length;
   const text = readFileSync(new URL('../docs/store-extraction.md', import.meta.url), 'utf8');
-  assert.ok(text.includes(`${assertions} of the ${entries.length} expected failures are bound to ref/kind/expected/actual, and ${patterns} to\nspecific error patterns.`));
+  const counts = /^\d+ of the \d+ expected failures are bound to ref\/kind\/expected\/actual, and \d+ to$/m;
+  if (entries.length === 0) {
+    assert.ok(text.includes('The expected-fail list is empty.'));
+    assert.doesNotMatch(text, counts);
+  } else {
+    assert.ok(text.includes(`${assertions} of the ${entries.length} expected failures are bound to ref/kind/expected/actual, and ${patterns} to\nspecific error patterns.`));
+  }
 });
