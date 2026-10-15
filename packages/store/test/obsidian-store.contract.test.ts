@@ -173,17 +173,17 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
       ),
     ).toBe(true);
 
-    // Still gettable and still excluded from the active listing (Addendum J.3: the
-    // cross-adapter supersession surface is get()/getLinks().reverse, not listByType —
-    // see contract-suite.ts's header note for why listByType inclusion isn't asserted
-    // identically across adapters).
+    // Still gettable, excluded from the working set, and reachable through history,
+    // which walks archived notes.
     const record = await adapter.get(oldId);
     expect(record).not.toBeNull();
     expect(record?.body).toBe('stale');
-    const listed = await adapter.listByType('compiled', {
-      includeRetired: true,
-    });
-    expect(listed.find((r) => r.id === oldId)).toBeUndefined();
+    expect((await adapter.listByType('compiled')).map((r) => r.id)).toEqual([newId]);
+    const history = await adapter.listByType('compiled', { includeHistory: true });
+    expect(history.map((r) => r.id).sort()).toEqual([newId, oldId].sort());
+    expect(history.find((r) => r.id === oldId)?.body).toBe('stale');
+    const categoryHistory = await adapter.listByCategory('engineering.decisions', { includeHistory: true });
+    expect(categoryHistory.map((r) => r.id).sort()).toEqual([newId, oldId].sort());
   });
 
   test('a record file is genuinely Obsidian-readable: frontmatter excludes body; body renders below the fence with the sentinel', async () => {

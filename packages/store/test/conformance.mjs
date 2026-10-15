@@ -36,7 +36,8 @@ export function adjudicate(report, profile, expected, { selected = false } = {})
   return { passed: unexpected.length === 0, unexpected };
 }
 if (process.argv[1] === new URL(import.meta.url).pathname) {
-  const expected = JSON.parse(await readFile(new URL('./expected-fails.json', import.meta.url)));
+  // CORPUS_EXPECTED_FAILS lets tests adjudicate the real CLI against a fixture list.
+  const expected = JSON.parse(await readFile(process.env.CORPUS_EXPECTED_FAILS ?? new URL('./expected-fails.json', import.meta.url)));
   const reports = [];
   const selected = process.argv.slice(2);
   const cases = packageCases(selected);

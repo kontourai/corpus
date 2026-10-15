@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type {
   ApplyEvidence,
+  CategoryListOptions,
   CreateInput,
   KitLink,
   KitRecord,
@@ -21,6 +22,7 @@ import type {
   KitReverseLink,
   KnowledgeStoreAdapter,
   LinkEvidence,
+  ListOptions,
   ProposeEvidence,
   RejectEvidence,
   RetireEvidence,
@@ -37,6 +39,7 @@ import {
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { freshnessPatch } from './shared/freshness.js';
+import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
 import {
   addLinksToGraph,
@@ -824,12 +827,9 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
   }
 
   /**
-   * Records with `archived: true` (superseded — A.5) are intentionally excluded here:
-   * they remain fully `get`/`getLinks`-able (Addendum J.3's cross-adapter supersession
-   * surface), but drop out of the working-set listing surface the same way this
-   * adapter physically removes them from the active vault tree. This mirrors the
-   * Kit's own reference Obsidian adapter and is distinct from — and independent of —
-   * the `status`-based `retired` exclusion below, which both adapters share.
+   * Every active (non-archived) record, for `reindex()`. Archived records remain
+   * `get`/`getLinks`-able; lists reach them only with `includeHistory` (see
+   * `listed`).
    */
   private allRecords(pathIndex: PathIndex): KitRecord[] {
     const records: KitRecord[] = [];
@@ -1744,40 +1744,40 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     });
   }
 
-  // ── listByCategory / listByType (§7, B.3/B.5) ─────────────────────────
+  // ── listByCategory / listByType (§7, B.3/B.5; working set by default) ──
 
   async listByCategory(
     category: string,
-    options: { prefix?: boolean; includeRetired?: boolean } = {},
+    options: CategoryListOptions = {},
   ): Promise<KitRecord[]> {
-    return this.files.read(() => {
-      const includeRetired = options.includeRetired === true;
-      const keep = (r: KitRecord) =>
-        includeRetired || (r.status ?? 'active') !== 'retired';
-      const records = this.allRecords(this.loadPathIndex());
-      if (options.prefix) {
-        return records.filter(
-          (r) =>
-            (r.category === category ||
-              r.category.startsWith(`${category}.`)) &&
-            keep(r),
-        );
-      }
-      return records.filter((r) => r.category === category && keep(r));
-    });
+    return this.files.read(() =>
+      this.listed(options).filter((r) =>
+        options.prefix
+          ? r.category === category || r.category.startsWith(`${category}.`)
+          : r.category === category,
+      ),
+    );
   }
 
   async listByType(
     type: KitRecordType,
-    options: { includeRetired?: boolean } = {},
+    options: ListOptions = {},
   ): Promise<KitRecord[]> {
-    return this.files.read(() => {
-      const includeRetired = options.includeRetired === true;
-      return this.allRecords(this.loadPathIndex()).filter(
-        (r) =>
-          r.type === type &&
-          (includeRetired || (r.status ?? 'active') !== 'retired'),
-      );
-    });
+    return this.files.read(() => this.listed(options).filter((r) => r.type === type));
+  }
+
+  /** History walks archived notes too; the working set excludes them. */
+  private listed(options: ListOptions): KitRecord[] {
+    const history = includesHistory(options);
+    const pathIndex = this.loadPathIndex();
+    const records: KitRecord[] = [];
+    for (const [id, entry] of Object.entries(pathIndex.by_id)) {
+      if (!history && entry.archived) continue;
+      const record = this.readRecord(id, pathIndex);
+      if (record && (history || !isHistorical(record, { archived: entry.archived }))) {
+        records.push(record);
+      }
+    }
+    return records;
   }
 }
