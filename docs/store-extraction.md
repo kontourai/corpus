@@ -418,4 +418,5 @@ Names must be unique identifiers and cannot replace identity, evidence or
 bookkeeping fields. Invalid settings refuse before creating the store directory.
 The vault contract tests read actual on-disk frontmatter after create and category
 changes, check obsolete-field removal and the returned record, and exercise
-reserved and invalid names. This option does not migrate or rewrite a live vault.
+reserved and invalid names. Existing files change only when an operation writes
+them; setting this option alone does not rewrite the vault.
