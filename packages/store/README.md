@@ -169,7 +169,15 @@ hashes every other file under the root, saves the original index as
 `.corpus-store-migration/manifest.json`, writes `path-index.json` with the same
 mappings, and removes `.graph-index.json`. It then re-hashes every file, opens
 every indexed record through the vault adapter, re-hashes again, and marks the
-manifest `verified`. Only the index file changes; markdown files the Kit index
+manifest `verified`.
+
+If the process stops after committing the conversion, rerunning `migrate`
+resumes verification against the recorded hashes and leaves the manifest
+`migrated` on refusal. `--check` refuses an incomplete verification and directs
+the caller to rerun the conversion command. A verified migration remains
+`already-migrated` even after ordinary store writes.
+
+Only the index file changes; markdown files the Kit index
 did not list (for example a default store's `records/` sharing the root) are
 listed in the manifest and left alone. `--reverse` restores the saved index only
 while `path-index.json` and every hashed file are byte-for-byte as the manifest

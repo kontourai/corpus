@@ -11,6 +11,7 @@ import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutation
 const fixtures = fileURLToPath(new URL('./fixtures/kit-v1/', import.meta.url));
 const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const tsx = createRequire(import.meta.url).resolve('tsx/cli');
+const tsxLoader = createRequire(import.meta.url).resolve('tsx');
 const KIT_IDS = ['kit-compiled-0001', 'kit-compiled-0002', 'kit-concept-0001', 'kit-person-0001', 'kit-raw-0001', 'kit-snapshot-0001'];
 
 const temporary: string[] = [];
@@ -127,6 +128,45 @@ describe('vault index selection', () => {
 });
 
 describe('corpus-store migrate', () => {
+  test('resumes verification after a process dies after conversion, and refuses changed bytes', () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-migration-crash-'));
+    temporary.push(base);
+    const runner = join(base, 'interrupt.mjs');
+    const migrationModule = new URL('../src/migrate.ts', import.meta.url).href;
+    const lockModule = new URL('../src/standalone-lock.ts', import.meta.url).href;
+    writeFileSync(runner, `import { migrateVaultIndex } from ${JSON.stringify(migrationModule)};
+import { standaloneFileMutationLock } from ${JSON.stringify(lockModule)};
+import { join } from 'node:path';
+const root = process.argv[2];
+await migrateVaultIndex({ root, coordinationDirectory: join(root, '.corpus-store-migration/coordination'),
+  coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock,
+  transactionObserver(operation, outcome) {
+    if (operation === 'migrate-vault-index' && outcome === 'applied') process.kill(process.pid, 'SIGKILL');
+  },
+});
+`);
+    for (const damage of ['none', 'record', 'saved-index']) {
+      const root = copy('kit-vault');
+      const interrupted = spawnSync(process.execPath, ['--import', tsxLoader, runner, root], { encoding: 'utf8', timeout: 120_000 });
+      expect(interrupted.signal, interrupted.stderr).toBe('SIGKILL');
+      const manifestPath = join(root, '.corpus-store-migration/manifest.json');
+      expect(JSON.parse(readFileSync(manifestPath, 'utf8')).state).toBe('migrated');
+      expect(existsSync(join(root, 'path-index.json'))).toBe(true);
+      expect(existsSync(join(root, '.graph-index.json'))).toBe(false);
+      const checked = migrate(root, '--check');
+      expect(checked.status).toBe(1);
+      expect(checked.json.problems.join('\n')).toContain('verification is incomplete');
+      if (damage === 'record') writeFileSync(join(root, 'research/onboarding-friction.md'), 'later edit');
+      if (damage === 'saved-index') writeFileSync(join(root, '.corpus-store-migration/kit-v1-path-index.json'), '{}');
+      const before = tree(root);
+      const resumed = migrate(root);
+      expect(resumed.status, resumed.stderr).toBe(damage === 'none' ? 0 : 1);
+      expect(JSON.parse(readFileSync(manifestPath, 'utf8')).state).toBe(damage === 'none' ? 'verified' : 'migrated');
+      if (damage !== 'none') expect(resumed.json.problems.join('\n')).toMatch(/changed|does not match/);
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('converts a Kit vault, changes only the index, and the package reads every record identically', async () => {
     const root = copy('kit-vault');
     const originalIndex = readFileSync(join(root, '.graph-index.json'));

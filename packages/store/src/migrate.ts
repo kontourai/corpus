@@ -203,6 +203,7 @@ function summary(manifest: MigrationManifest, outcome: MigrationOutcome, text: s
 
 type Plan =
   | { kind: 'done'; result: MigrationResult }
+  | { kind: 'verify'; manifest: MigrationManifest }
   | { kind: 'convert'; legacy: Buffer; index: PathIndex; inventory: { files: Record<string, string>; markdown: string[] } };
 
 function plan(migration: Migration): Plan {
@@ -213,6 +214,7 @@ function plan(migration: Migration): Plan {
     throw new MigrationRefusal([`both ${PATH_INDEX_FILE} and ${KIT_V1_PATH_INDEX_FILE} exist; review both and remove the one that is not authoritative`]);
   }
   if (canonical !== null) {
+    if (manifest?.state === 'migrated') return { kind: 'verify', manifest };
     if (manifest && manifest.state !== 'reversed') {
       return { kind: 'done', result: summary(manifest, 'already-migrated', migration.bytes(MANIFEST_FILE)!.toString('utf8')) };
     }
@@ -235,6 +237,9 @@ export async function checkVaultIndexMigration(options: MigrationOptions): Promi
   return migration.files.read(() => {
     const planned = plan(migration);
     if (planned.kind === 'done') return planned.result;
+    if (planned.kind === 'verify') {
+      throw new MigrationRefusal(['the index conversion is committed but verification is incomplete; rerun corpus-store migrate without --check to verify the recorded bytes']);
+    }
     const { index, inventory } = planned;
     return {
       outcome: 'checked',
@@ -251,7 +256,7 @@ export async function migrateVaultIndex(options: MigrationOptions): Promise<Migr
   const clock = options.clock ?? Date.now;
   const converted = await migration.files.mutate('migrate-vault-index', () => {
     const planned = plan(migration);
-    if (planned.kind === 'done') return planned;
+    if (planned.kind !== 'convert') return planned;
     const { legacy, index, inventory } = planned;
     const canonicalText = serialize({ by_id: index.by_id, by_path: index.by_path });
     const manifest: MigrationManifest = {
