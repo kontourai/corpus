@@ -187,6 +187,13 @@ refusal, 2 a usage error.
 
 ## Public exports
 
+The vault constructor accepts `dimensions`, an ordered list of names for category
+segments after the domain. For example, `['territory', 'customer', 'initiative']`
+projects `sales.east.acme.renewal` as those three frontmatter fields. Each write
+recomputes them from `category`; shortening a category removes obsolete fields.
+They stay out of returned records. Names must be unique identifiers and may not
+replace record fields. Omit the option to preserve ordinary unknown frontmatter.
+
 - `@kontourai/corpus-store`: constructors, record/evidence/interface types,
   service option types, reindex result type and standalone lock.
 - `@kontourai/corpus-store/errors`: the unchanged domain and persistence error
