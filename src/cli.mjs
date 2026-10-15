@@ -32,6 +32,7 @@ Commands:
             --repo <dir>        build one bundle in memory from a checkout
             --workspace <dir>   serve every immediate subdirectory that has corpus.json
             --hub <url>         fetch <url>/products.json and each bundle (default: https://kontourai.github.io/)
+            --bundle <file>     serve a prebuilt docs-bundle.json as is; repeat for more products
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
@@ -56,7 +57,7 @@ const COMMAND_OPTIONS = {
   check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' }, only: { type: 'string' }, json: { type: 'boolean' } },
   build: { root: { type: 'string' }, out: { type: 'string' }, 'base-url': { type: 'string' } },
   locate: { root: { type: 'string' }, quote: { type: 'string' }, source: { type: 'string' } },
-  mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' } },
+  mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' }, bundle: { type: 'string', multiple: true } },
   hub: { products: { type: 'string' }, out: { type: 'string' } },
   init: { root: { type: 'string' } },
   'decisions check': { root: { type: 'string' }, base: { type: 'string' } },
@@ -78,7 +79,8 @@ function parse(command, args) {
 }
 
 function requireValue(values, name) {
-  if (values[name] !== undefined && values[name].trim() === '') throw new UsageError(`--${name} needs a value`);
+  // A `multiple` option parses to an array; every occurrence needs a value.
+  if ([values[name] ?? []].flat().some((value) => value.trim() === '')) throw new UsageError(`--${name} needs a value`);
 }
 
 /** `check --json` when the run did not reach a gate result: a usage or configuration error, or a crash. */
@@ -163,7 +165,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       }
       case 'mcp': {
         const { runMcp } = await import('./mcp.mjs');
-        await runMcp({ repo: values.repo, workspace: values.workspace, hub: values.hub });
+        await runMcp({ repo: values.repo, workspace: values.workspace, hub: values.hub, bundle: values.bundle });
         return EXIT_OK;
       }
       case 'hub': {
