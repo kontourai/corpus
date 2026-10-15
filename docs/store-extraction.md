@@ -293,7 +293,7 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-6 of the 19 expected failures are bound to ref/kind/expected/actual, and 13 to
+6 of the 7 expected failures are bound to ref/kind/expected/actual, and 1 to
 specific error patterns.
 
 ### Host vectors
@@ -311,3 +311,15 @@ route and must pass them.
 
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 104 passing and
 19 expected failures, with no unexpected result, for both default and vault.
+
+### Proposals may target any record type
+
+`propose`, `apply` and `reject` no longer require a `concept` target. Only the
+type guard was removed; the evidence, existence and `proposes`-link checks
+remain. The 12 `propose-target-*`, `apply-target-*` and `reject-target-*`
+vectors now pass on both profiles and leave the list. The contract suite's
+three wrong-type rejection tests are replaced by an every-type acceptance test
+and a test that the kept checks still reject.
+
+EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 116 passing and
+7 expected failures, with no unexpected result, for both default and vault.

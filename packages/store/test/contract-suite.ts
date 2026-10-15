@@ -469,91 +469,85 @@ export function runAdapterContractSuite(options: ContractSuiteOptions): void {
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
 
-    // propose/apply/reject: concept_id must resolve to a `concept`-typed record
-    // (store-contract.md §6.4/§6.5/§6.6: "concept_id does not exist or is not of type
-    // 'concept'." — a wrong-type-but-existing id must reject with MISSING_EVIDENCE).
+    // propose/apply/reject may target a record of any type (owner decision,
+    // 2026-10-13). The evidence, existence and proposes-link checks still apply.
 
-    test('propose rejects when concept_id resolves to a non-concept record', async () => {
-      const notAConcept = await adapter.create({
+    test('propose and apply accept a target of every record type; reject accepts a non-concept target', async () => {
+      const source = await adapter.create({
         type: 'raw',
-        title: 'Just a raw record',
-        body: 'not a concept',
+        title: 'Compiled source',
+        body: 'source evidence',
         category: 'engineering',
         provenance: { agent: 'agent-1' },
       });
       const proposer = await adapter.create({
         type: 'raw',
-        title: 'Proposal source',
+        title: 'Proposer',
         body: 'evidence',
         category: 'engineering',
         provenance: { agent: 'agent-1' },
       });
-
-      await expect(
-        adapter.propose(notAConcept, proposer, {
-          agent: 'agent-1',
-          proposal: 'Broaden the definition',
-        }),
-      ).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
-    });
-
-    test('apply rejects when concept_id resolves to a non-concept record', async () => {
-      const notAConcept = await adapter.create({
-        type: 'compiled',
-        title: 'Just a compiled record',
-        body: 'not a concept',
-        category: 'engineering',
-        provenance: { agent: 'agent-1' },
-      });
-      const proposer = await adapter.create({
-        type: 'raw',
-        title: 'Proposal source',
-        body: 'evidence',
-        category: 'engineering',
-        provenance: { agent: 'agent-1' },
-      });
-      await adapter.link(
-        proposer,
-        [{ target_id: notAConcept, kind: 'proposes' }],
-        { agent: 'agent-1' },
-      );
-
-      await expect(
-        adapter.apply(notAConcept, proposer, {
-          agent: 'agent-1',
-          new_body: 'x',
-          rationale: 'y',
-        }),
-      ).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
-    });
-
-    test('reject rejects when concept_id resolves to a non-concept record', async () => {
-      const notAConcept = await adapter.create({
+      for (const type of ['raw', 'compiled', 'concept', 'snapshot', 'person'] as const) {
+        const target = await adapter.create({
+          type,
+          title: `Target ${type}`,
+          body: 'Original body',
+          category: 'engineering',
+          provenance: { agent: 'agent-1' },
+          ...(type === 'compiled' ? { links: [{ target_id: source, kind: 'source' }] } : {}),
+        });
+        await adapter.propose(target, proposer, { agent: 'agent-1', proposal: 'Change it' });
+        await adapter.apply(target, proposer, { agent: 'agent-1', new_body: `Applied ${type}`, rationale: 'Evidence supports it' });
+        const record = await adapter.get(target);
+        expect(record?.type).toBe(type);
+        expect(record?.body).toBe(`Applied ${type}`);
+        expect(record?.mutation_log?.map((entry) => entry.op)).toEqual(['propose', 'apply']);
+        expect((await adapter.getLinks(target)).reverse).toEqual([{ source_id: proposer, kind: 'proposes' }]);
+      }
+      const snapshot = await adapter.create({
         type: 'snapshot',
-        title: 'Just a snapshot record',
-        body: 'not a concept',
+        title: 'Rejected target',
+        body: 'Original body',
+        category: 'engineering',
+        provenance: { agent: 'agent-1' },
+      });
+      await adapter.propose(snapshot, proposer, { agent: 'agent-1', proposal: 'Revert it' });
+      await adapter.reject(snapshot, proposer, { agent: 'agent-1', reason: 'Not enough evidence' });
+      const rejected = await adapter.get(snapshot);
+      expect(rejected?.body).toBe('Original body');
+      expect(rejected?.mutation_log?.map((entry) => entry.op)).toEqual(['propose', 'reject']);
+    }, 60_000);
+
+    test('apply and reject on a non-concept target still require the proposer\'s proposes link', async () => {
+      const target = await adapter.create({
+        type: 'snapshot',
+        title: 'Snapshot target',
+        body: 'Original body',
         category: 'engineering',
         provenance: { agent: 'agent-1' },
       });
       const proposer = await adapter.create({
         type: 'raw',
-        title: 'Proposal source',
+        title: 'Unlinked proposer',
         body: 'evidence',
         category: 'engineering',
         provenance: { agent: 'agent-1' },
       });
-      await adapter.link(
-        proposer,
-        [{ target_id: notAConcept, kind: 'proposes' }],
-        { agent: 'agent-1' },
-      );
-
       await expect(
-        adapter.reject(notAConcept, proposer, {
-          agent: 'agent-1',
-          reason: 'Not applicable',
-        }),
+        adapter.apply(target, proposer, { agent: 'agent-1', new_body: 'x', rationale: 'y' }),
       ).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      await expect(
+        adapter.reject(target, proposer, { agent: 'agent-1', reason: 'no' }),
+      ).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      await expect(
+        adapter.propose(target, proposer, { agent: 'agent-1', proposal: '   ' }),
+      ).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      await expect(
+        adapter.propose(target, 'nonexistent-proposer', { agent: 'agent-1', proposal: 'Change it' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      const record = await adapter.get(target);
+      expect(record?.body).toBe('Original body');
+      expect(record?.mutation_log ?? []).toEqual([]);
     });
 
     test('propose rejects a nonexistent concept_id with NOT_FOUND', async () => {
