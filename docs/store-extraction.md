@@ -403,3 +403,19 @@ The phase plan asked for the conformance vectors on "both vault formats".
 `kit-v1` is read-only by design, and the vectors write, so they run against the
 canonical format only; `kit-v1` is covered by the read and conversion tests
 above.
+
+## Named vault dimensions
+
+The optional vault constructor `dimensions` setting names category segments after
+the domain. For example, `['territory', 'customer', 'initiative']` projects
+`sales.east.acme.renewal` into those three frontmatter fields. Every write
+recomputes the configured fields; shortening the category removes fields whose
+segments are absent. Configured dimension fields stay out of returned record
+envelopes. Omitting the setting preserves unknown frontmatter without projecting
+named dimensions.
+
+Names must be unique identifiers and cannot replace identity, evidence or
+bookkeeping fields. Invalid settings refuse before creating the store directory.
+The vault contract tests read actual on-disk frontmatter after create and category
+changes, check obsolete-field removal and the returned record, and exercise
+reserved and invalid names. This option does not migrate or rewrite a live vault.
