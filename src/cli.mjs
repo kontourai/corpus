@@ -16,6 +16,9 @@ Commands:
             --root <dir>        repository root (default: .)
             --base <git-ref>    also check freshness against the changes in <git-ref>...HEAD
             --advisory          report stale documents as warnings and exit 0
+            --only <gates>      run only these comma-separated gates (and the manifest);
+                                a selected gate that cannot run is a usage error
+            --json              print the result as one JSON object on stdout
   build   Run check (without freshness), render the site, write docs-bundle.json,
           and verify every internal link of the generated site
             --root <dir>        repository root (default: .)
@@ -29,6 +32,7 @@ Commands:
             --repo <dir>        build one bundle in memory from a checkout
             --workspace <dir>   serve every immediate subdirectory that has corpus.json
             --hub <url>         fetch <url>/products.json and each bundle (default: https://kontourai.github.io/)
+            --bundle <file>     serve a prebuilt docs-bundle.json as is; repeat for more products
   hub     Build the organization hub page from products.json
             --products <file>   product list (default: products.json)
             --out <dir>         output directory (default: dist-hub)
@@ -50,10 +54,10 @@ Exit codes: 0 ok, 1 gate failure, 2 usage or configuration error.
 Manifest reference: https://github.com/kontourai/corpus#manifest-reference`;
 
 const COMMAND_OPTIONS = {
-  check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' } },
+  check: { root: { type: 'string' }, base: { type: 'string' }, advisory: { type: 'boolean' }, only: { type: 'string' }, json: { type: 'boolean' } },
   build: { root: { type: 'string' }, out: { type: 'string' }, 'base-url': { type: 'string' } },
   locate: { root: { type: 'string' }, quote: { type: 'string' }, source: { type: 'string' } },
-  mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' } },
+  mcp: { repo: { type: 'string' }, workspace: { type: 'string' }, hub: { type: 'string' }, bundle: { type: 'string', multiple: true } },
   hub: { products: { type: 'string' }, out: { type: 'string' } },
   init: { root: { type: 'string' } },
   'decisions check': { root: { type: 'string' }, base: { type: 'string' } },
@@ -75,7 +79,13 @@ function parse(command, args) {
 }
 
 function requireValue(values, name) {
-  if (values[name] !== undefined && values[name].trim() === '') throw new UsageError(`--${name} needs a value`);
+  // A `multiple` option parses to an array; every occurrence needs a value.
+  if ([values[name] ?? []].flat().some((value) => value.trim() === '')) throw new UsageError(`--${name} needs a value`);
+}
+
+/** `check --json` when the run did not reach a gate result: a usage or configuration error, or a crash. */
+function checkErrorJson(message, exitCode, { base, advisory, only }) {
+  return { schemaVersion: 1, tool: 'corpus', command: 'check', verdict: 'fail', exitCode, base, advisory, only, error: message };
 }
 
 /** Run the CLI and return the exit code. Output goes to stdout; diagnostics to stderr. */
@@ -101,6 +111,10 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
     return EXIT_OK;
   }
 
+  // `check --json`: stdout must hold one JSON object on every exit, so any
+  // failure before or outside the gates is printed as a fail object too.
+  const jsonCheck = command === 'check' && rest.includes('--json');
+  const checkRun = { base: null, advisory: false, only: null };
   try {
     if (command === 'decisions') {
       const [sub, ...subArgs] = rest;
@@ -116,6 +130,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw new UsageError(`unknown command "${command}"\n\n${HELP}`);
     const values = parse(command, rest);
     if (values.help) {
+      if (jsonCheck) throw new UsageError('--help prints text and cannot be combined with --json; run "corpus check --help"');
       say(HELP);
       return EXIT_OK;
     }
@@ -124,10 +139,14 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
 
     switch (command) {
       case 'check': {
+        const { runChecks, formatCheckReport, parseOnly, checkReportJson } = await import('./check.mjs');
+        checkRun.base = values.base ?? null;
+        checkRun.advisory = Boolean(values.advisory);
         if (values.advisory && values.base === undefined) throw new UsageError('--advisory only applies to the freshness gate; pass --base <git-ref>');
-        const { runChecks, formatCheckReport } = await import('./check.mjs');
-        const result = runChecks({ root, base: values.base ?? null, advisory: Boolean(values.advisory) });
-        (result.exitCode === EXIT_OK ? say : warn)(formatCheckReport(result, root));
+        if (values.only !== undefined) checkRun.only = parseOnly(values.only);
+        const result = runChecks({ root, ...checkRun });
+        if (values.json) say(JSON.stringify(checkReportJson(result, checkRun), null, 2));
+        else (result.exitCode === EXIT_OK ? say : warn)(formatCheckReport(result, root));
         return result.exitCode;
       }
       case 'build': {
@@ -146,7 +165,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       }
       case 'mcp': {
         const { runMcp } = await import('./mcp.mjs');
-        await runMcp({ repo: values.repo, workspace: values.workspace, hub: values.hub });
+        await runMcp({ repo: values.repo, workspace: values.workspace, hub: values.hub, bundle: values.bundle });
         return EXIT_OK;
       }
       case 'hub': {
@@ -177,13 +196,12 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       }
     }
   } catch (error) {
-    if (error instanceof DocsKitError) {
-      warn(`docs-kit: ${error.message}`);
-      return error.exitCode;
-    }
+    const known = error instanceof DocsKitError;
     // Not a gate result: never let an unexpected crash read as "docs failed" (1).
-    warn(`docs-kit: internal error: ${error?.stack ?? error}`);
-    return EXIT_USAGE;
+    const exitCode = known ? error.exitCode : EXIT_USAGE;
+    if (jsonCheck) say(JSON.stringify(checkErrorJson(known ? error.message : `internal error: ${error?.message ?? error}`, exitCode, checkRun), null, 2));
+    warn(known ? `docs-kit: ${error.message}` : `docs-kit: internal error: ${error?.stack ?? error}`);
+    return exitCode;
   }
   return EXIT_USAGE;
 }

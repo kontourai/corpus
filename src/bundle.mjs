@@ -30,12 +30,22 @@ export function normalizeBaseUrl(value, flag = '--base-url') {
 /**
  * Digest of the canonical content: documents (landing first) and topics, in manifest order,
  * without URLs, sha, or build time. Two builds of the same docs at different
- * commits or base URLs share a digest.
+ * commits or base URLs share a digest. A topic's optional `parentId`, `tags`,
+ * and `summary` are content a reader sees, so they join its entry when present;
+ * a topic without them hashes exactly as before they existed.
  */
 export function bundleDigest(documents, topics) {
   const canonical = JSON.stringify({
     documents: documents.map(({ source, section, title, landing, markdown }) => ({ source, section, title, landing, markdown })),
-    topics: topics.map(({ id, title, source, markdown }) => ({ id, title, source, markdown })),
+    topics: topics.map(({ id, title, source, markdown, parentId, tags, summary }) => ({
+      id,
+      title,
+      source,
+      markdown,
+      ...(parentId !== undefined ? { parentId } : {}),
+      ...(tags !== undefined ? { tags } : {}),
+      ...(summary !== undefined ? { summary } : {}),
+    })),
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
