@@ -34,7 +34,7 @@ import {
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
-import { freshnessPatch } from './shared/freshness.js';
+import { expiryFilter, freshnessPatch } from './shared/freshness.js';
 import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
 import {
@@ -1009,6 +1009,9 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter {
 
   private listed(options: ListOptions): KitRecord[] {
     const history = includesHistory(options);
-    return this.allRecords().filter((r) => history || !isHistorical(r));
+    const expiry = expiryFilter(options, this.services.clock);
+    return this.allRecords().filter(
+      (r) => (history || !isHistorical(r)) && (!expiry || expiry(r)),
+    );
   }
 }

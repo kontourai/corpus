@@ -38,7 +38,7 @@ import {
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
-import { freshnessPatch } from './shared/freshness.js';
+import { expiryFilter, freshnessPatch } from './shared/freshness.js';
 import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
 import {
@@ -1769,12 +1769,17 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
   /** History walks archived notes too; the working set excludes them. */
   private listed(options: ListOptions): KitRecord[] {
     const history = includesHistory(options);
+    const expiry = expiryFilter(options, this.services.clock);
     const pathIndex = this.loadPathIndex();
     const records: KitRecord[] = [];
     for (const [id, entry] of Object.entries(pathIndex.by_id)) {
       if (!history && entry.archived) continue;
       const record = this.readRecord(id, pathIndex);
-      if (record && (history || !isHistorical(record, { archived: entry.archived }))) {
+      if (
+        record &&
+        (history || !isHistorical(record, { archived: entry.archived })) &&
+        (!expiry || expiry(record))
+      ) {
         records.push(record);
       }
     }

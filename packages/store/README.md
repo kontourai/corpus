@@ -38,10 +38,19 @@ Implemented:
   records; removing the alias is a separate, owner-approved change. `get` and
   `getLinks` always reach history.
 
+- **One expiry rule and an expiry-only stale filter.** A record expires at its
+  explicit `expires_at`, otherwise `ttl_seconds` after `created_at`; a record
+  with neither never expires. The TTL anchor is creation, so an update never
+  extends it, and a record is expired from its expiry instant onward. List
+  option `stale: true` keeps only expired records and `stale: false` only
+  unexpired ones; without `stale` there is no expiry filter. `now` (epoch
+  milliseconds) defaults to the injected `clock`. A non-boolean `stale` or a
+  non-finite `now` is refused with `MISSING_EVIDENCE`. The filter composes with
+  the working set. This is record expiry only: no `stale` status is stored,
+  and maintenance age and trust freshness are separate signals.
+
 Not yet implemented, and listed as expected failures:
 
-- One expiry rule (`created_at + ttl_seconds`, explicit `expires_at` first) and
-  an expiry-only stale filter.
 - A compiled record must link a raw source when it is created.
 
 ## Host composition
@@ -71,8 +80,9 @@ locked reads may repair derived indexes or recover a journal. Lists return the
 working set; `includeHistory: true` adds retired and superseded records, and
 category lists also take `prefix` (see [Owner decisions](#owner-decisions)).
 Retired and superseded records are always gettable. Vault superseded files move
-to `archive/`. No stale filter, search, capabilities object, alternate vault
-index format or public storage API is claimed by this package.
+to `archive/`. Lists also take an expiry filter, `{stale, now}`. No search,
+capabilities object, alternate vault index format or public storage API is
+claimed by this package.
 
 The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or

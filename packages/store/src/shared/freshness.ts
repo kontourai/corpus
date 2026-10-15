@@ -1,11 +1,53 @@
 /**
  * Record-carried freshness fields (store-contract.md Addendum J.2): optional
  * `expires_at` (ISO-8601) / `ttl_seconds` (positive number). Validated at the
- * mutation boundary so a malformed value never reaches disk. K2 stores and
- * round-trips these fields; deriving `stale`/`superseded` status from them is a
- * Knowledge Kit flow-runner concern, out of scope for the store adapter contract.
+ * mutation boundary so a malformed value never reaches disk.
+ *
+ * One expiry rule (owner decision, 2026-10-13): an explicit `expires_at` wins;
+ * otherwise a record expires `ttl_seconds` after `created_at`; a record with
+ * neither never expires. The TTL anchor is creation, so an update never extends
+ * it. A record is expired from its expiry instant onward (`now >= expiry`). This is
+ * record expiry only. Maintenance age and trust freshness are other signals, and
+ * no `stale` status is ever stored.
  */
+import type { KitRecord, ListOptions } from '../contracts.js';
 import { MissingEvidenceError } from '../errors.js';
+
+/** Epoch milliseconds at which the record expires, or `undefined` if it never does. */
+export function expiresAtMs(record: KitRecord): number | undefined {
+  if (record.expires_at !== undefined) return Date.parse(record.expires_at);
+  if (record.ttl_seconds !== undefined) {
+    return Date.parse(record.created_at) + record.ttl_seconds * 1000;
+  }
+  return undefined;
+}
+
+export function isExpired(record: KitRecord, now: number): boolean {
+  const expiry = expiresAtMs(record);
+  return expiry !== undefined && now >= expiry;
+}
+
+/**
+ * The list expiry filter. `stale: true` keeps only expired records and
+ * `stale: false` only unexpired ones; without `stale` there is no expiry filter.
+ * `now` (epoch milliseconds) defaults to the injected clock. Malformed options
+ * are refused rather than ignored.
+ */
+export function expiryFilter(
+  options: ListOptions,
+  clock: () => number,
+): ((record: KitRecord) => boolean) | undefined {
+  if (options.stale !== undefined && typeof options.stale !== 'boolean') {
+    throw new MissingEvidenceError(`list: stale must be a boolean; got: ${JSON.stringify(options.stale)}`);
+  }
+  if (options.now !== undefined && (typeof options.now !== 'number' || !Number.isFinite(options.now))) {
+    throw new MissingEvidenceError(`list: now must be finite epoch milliseconds; got: ${JSON.stringify(options.now)}`);
+  }
+  if (options.stale === undefined) return undefined;
+  const now = options.now ?? clock();
+  const stale = options.stale;
+  return (record) => isExpired(record, now) === stale;
+}
 
 interface FreshnessInput {
   expires_at?: string | null;
