@@ -382,7 +382,15 @@ export function assertPathIndex(value: unknown, source: string): PathIndex {
 export interface KitObsidianStoreOptions extends StoreOptions {
   /** Subfolder name for raw/compiled (source-level) records under each category. Default "sources". */
   sourcesDir?: string;
+  /** Names for category segments after the domain, written as vault frontmatter only. */
+  dimensions?: readonly string[];
 }
+
+const RESERVED_DIMENSIONS = new Set([
+  'id', 'type', 'title', 'body', 'category', 'tags', 'aliases', 'links', 'provenance',
+  'created_at', 'updated_at', 'expires_at', 'ttl_seconds', 'status', 'mutation_log',
+  '_body_sentinel', '__proto__', 'constructor', 'prototype',
+]);
 
 /** The canonical vault path index. */
 export const PATH_INDEX_FILE = 'path-index.json';
@@ -403,6 +411,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly sourcesDir: string;
+  private readonly dimensions: readonly string[];
   private readonly graphPath: string;
   private readonly pathIndexPath: string;
   private readonly kitV1PathIndexPath: string;
@@ -414,6 +423,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     this.services = resolveServices(options);
     this.root = resolve(options.storeRoot);
     this.sourcesDir = options.sourcesDir || 'sources';
+    const dimensions = options.dimensions ?? [];
+    if (!Array.isArray(dimensions) || new Set(dimensions).size !== dimensions.length
+      || dimensions.some((name) => typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || RESERVED_DIMENSIONS.has(name))) {
+      throw new MissingEvidenceError('vault dimensions must be unique identifier names that do not replace record fields');
+    }
+    this.dimensions = [...dimensions];
     this.graphPath = join(this.root, 'graph-index.json');
     this.pathIndexPath = join(this.root, PATH_INDEX_FILE);
     this.kitV1PathIndexPath = join(this.root, KIT_V1_PATH_INDEX_FILE);
@@ -672,6 +687,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
     // code review iteration 2).
     const { [BODY_SENTINEL_FRONTMATTER_KEY]: _sentinelKey, ...publicMeta } =
       meta as Record<string, unknown>;
+    for (const name of this.dimensions) delete publicMeta[name];
 
     const record = assertKitRecord(publicMeta, body, absPath);
     if (record.id !== id) {
@@ -751,6 +767,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter {
       [BODY_SENTINEL_FRONTMATTER_KEY]: _staleSentinel,
       ...frontmatterFields
     } = record as unknown as Record<string, unknown>;
+    const segments = record.category.split('.').slice(1);
+    this.dimensions.forEach((name, index) => {
+      delete frontmatterFields[name];
+      if (segments[index] !== undefined) frontmatterFields[name] = segments[index];
+    });
     const { text: obsidianBody, sentinel } = this.renderObsidianBody(
       record,
       pathIndex,

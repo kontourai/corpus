@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { load } from 'js-yaml';
 import {
   KitObsidianStoreAdapter as SourceAdapter,
 } from '../src/obsidian-store.js';
@@ -56,6 +57,29 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('vault dimensions follow category changes without changing the record envelope', async () => {
+    const dimensions = ['territory', 'customer', 'initiative'];
+    const projected = new KitObsidianStoreAdapter({ storeRoot: dir, dimensions });
+    const id = await projected.create({ type: 'raw', title: 'Renewal', body: 'Notes', category: 'sales.east.acme.renewal', provenance: { agent: 'tester' } });
+    const metadata = () => load(readFileSync(findObsidianRecordFilePath(dir, id), 'utf8').split('---')[1]) as Record<string, unknown>;
+    expect(metadata()).toMatchObject({ territory: 'east', customer: 'acme', initiative: 'renewal' });
+    for (const name of dimensions) expect(await projected.get(id)).not.toHaveProperty(name);
+    await projected.update(id, { category: 'sales.west.beta.expansion' }, { agent: 'tester' });
+    expect(metadata()).toMatchObject({ territory: 'west', customer: 'beta', initiative: 'expansion' });
+    await projected.update(id, { category: 'sales.west' }, { agent: 'tester' });
+    expect(metadata()).toHaveProperty('territory', 'west');
+    expect(metadata()).not.toHaveProperty('customer');
+    expect(metadata()).not.toHaveProperty('initiative');
+    expect((await projected.get(id))?.category).toBe('sales.west');
+    expect((await projected.get(id))?.body).toBe('Notes');
+  });
+
+  test('vault dimension names cannot replace identity, evidence, or bookkeeping fields', () => {
+    for (const dimensions of [['id'], ['category'], ['provenance'], ['_body_sentinel'], ['constructor'], ['x', 'x'], ['bad-name']]) {
+      expect(() => new KitObsidianStoreAdapter({ storeRoot: dir, dimensions })).toThrow(/vault dimensions/);
+    }
   });
 
   test('person records land in people/ regardless of the supplied category', async () => {
