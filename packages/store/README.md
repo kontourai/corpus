@@ -116,14 +116,17 @@ npm run verify:pack --workspace=@kontourai/corpus-store
 
 Builds emit package-local ESM JS and declarations. No root prepare/build step
 is added. Pack verification installs tarballs in isolated JS and TS consumers,
-checks exports and declarations, executes all conformance vectors on both
-profiles against installed code, and runs the installed docs CLI without a
+checks exports and declarations, executes every store conformance vector on
+both profiles against installed code, and runs the installed docs CLI without a
 build. CI runs this on Node 22 and 24.
 
 [The expected-fail list](test/expected-fails.json) is keyed by public vector ID,
 profile, deferred owner decision and either an exact failing assertion or a specific error pattern. Unknown failures,
-missing probes and listed vectors that pass fail the run. Search is a host
-integration obligation. [The extraction record](../../docs/store-extraction.md)
+missing probes and listed vectors that pass fail the run. Vectors with
+`"scope": "host"` (today only `search-working-set`) need search, which this
+package does not implement: the runner skips them, refuses to select them, and
+fails if the expected-fail list names one. Every host that mounts this store
+must run `hostVectors` from `@kontourai/corpus-conformance` and pass them. [The extraction record](../../docs/store-extraction.md)
 contains source mapping and executed evidence. The ported transaction suite
 retains internal crash hooks; the conformance crash subprocesses use those
 existing internal hooks without adding a public storage seam.
