@@ -307,7 +307,7 @@ Returns JSON source locations using the same quote matcher as MCP. Exit `1` mean
 ### mcp
 
 ```sh
-corpus mcp [--repo dir | --workspace dir | --hub url]
+corpus mcp [--repo dir | --workspace dir | --hub url | --bundle file...]
 ```
 
 `mcp` starts a stdio MCP server. Give it at most one source; with none, it uses `--hub https://kontourai.github.io/`. See [MCP server](#mcp-server).
@@ -345,19 +345,20 @@ The server exposes six read-only tools. Every result carries the source commit `
 | Tool | Arguments | Returns |
 | --- | --- | --- |
 | `list_products` | none | product, title, tagline, sha, builtAt, siteUrl, topicCount, docCount (not counting the landing page); failed products are listed as `unavailable` |
-| `list_topics` | `product?` | topics with product, id, title, source, url, sha |
+| `list_topics` | `product?`, `parentId?` | topics with product, id, title, source, url, sha, and `parentId`, `tags`, and `summary` when the bundle has them; `parentId` lists only that topic's children, and an id that is no topic in the selected products is an error |
 | `get_topic` | `product`, `id` | the topic's Markdown section |
 | `get_document` | `product`, `source` | one whole document, including the landing page (`landing: true`) |
-| `search` | `query`, `product?`, `limit?` (1-50, default 10) | ranked matches over topics and documents, with snippet, product, source, url, sha |
+| `search` | `query`, `product?`, `limit?` (1-50, default 10) | ranked matches over topics and documents, with snippet, product, source, url, sha; topic matches also carry `parentId`, `tags`, and `summary` when present |
 | `locate` | `product`, `quote`, `source?` | where a quoted passage lives: `source`, `repoPath`, 1-based file `startLine` and `endLine`, sha, the enclosing `heading` and `anchor`, the page `url`, the surrounding `markdown` blocks, a GitHub `blobUrl` ending in `#Lstart-Lend`, `match`, `confidence`, and, when the quote matches more than one place, `ambiguous: true`, `matchCount`, and up to 10 `alternatives` |
 
 `locate` is what the site's Ask and Challenge prompts tell an agent to call. It compares letters and digits only, lowercased and with accents removed (NFKD), so whitespace, punctuation, and Markdown formatting (emphasis, code marks, link destinations, HTML tags, list and table markers, fence lines) do not matter. Numeric entities and `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, and `&nbsp;` are decoded; other named entities (such as `&eacute;`) are ignored, so a quote containing their character falls back to the surrounding words. Text inside code blocks and code spans is compared as the page shows it, so `<dir>` in a code sample still matches. `match` is `verbatim` (confidence 1) when the quote also appears as written, `normalized` (0.9) when it matched only after that normalization, or `head-and-tail` (0.5) when only its first and last four words matched within a nearby window, for example across an image. With more than one candidate, the confidence is divided by their number (minimum 0.01); verbatim candidates rank before normalized ones, each in document order, and the best is returned with up to 10 others as `alternatives` and the total as `matchCount`. No match, a quote with fewer than 3 letters or digits, or an unknown `source` is an error result. Line numbers are file lines, after front matter; a bundle built before 0.6.0 does not record front matter, so `locate` adds a `note` saying it assumes none.
 
-The server has three sources:
+The server has four sources:
 
 - `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds whenever the checkout changes, so a long session sees current docs. The cache key is HEAD, a hash of `git status --porcelain`, and the mtime and size of the manifest and each published source. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
 - `--workspace dir` does the same for every immediate subdirectory that contains `corpus.json`. A subdirectory with only a retired `docs-kit.json` is skipped, with one note on stderr per server, so a stale checkout neither stops the workspace nor disappears silently; one with both files is reported as unavailable. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
 - `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed or malformed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
+- `--bundle file` serves a prebuilt `docs-bundle.json` exactly as written: from `corpus build`, or from a host's own generator. Repeat it to serve more products. Each file is read and validated once at startup and held in memory; nothing is rebuilt, refetched, or reread, so results always carry the sha the bundle was built at. A malformed bundle, an unreadable file, or two bundles for the same product is a usage error (exit `2`). Programs that embed the server get the same source from `staticSource(bundles)`, passed to `createDocsServer`.
 
 Claude Code:
 
