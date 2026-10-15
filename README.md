@@ -14,25 +14,78 @@
 - **A GitHub Pages site.** `corpus build` renders `https://kontourai.github.io/<repo>/` and checks every link it generated.
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 
-The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. Corpus Store builds TypeScript only within `packages/store`. Run it straight from git, pinned to a commit:
+The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. Corpus Store builds TypeScript only within `packages/store`. Install it from npm as an exact-pinned dev dependency, so your lockfile covers Corpus and every package it depends on:
 
 ```sh
-npx -y github:kontourai/corpus#<sha> corpus check
+npm install --save-dev --save-exact @kontourai/corpus@<version>
+npx --no-install corpus check
 ```
+
+Run it through a package script (`"docs:check": "corpus check"`) or `npx --no-install`, which use only the installed bin. A bare `npx corpus` would fetch the unrelated unscoped `corpus` package when Corpus is not installed. For a one-off run without installing, name the package and exact version: `npx -y --package=@kontourai/corpus@<version> -- corpus check`. That form resolves Corpus's own dependencies afresh on every run, with no lockfile behind them, so CI should use the dev dependency.
+
+Until the first npm release, and for an unreleased commit, pin the commit's GitHub tarball by its full sha instead, either as the dev dependency spec or directly:
+
+```sh
+npx -y --package=https://codeload.github.com/kontourai/corpus/tar.gz/<sha> -- corpus check
+```
+
+## Publishing the root package
+
+The [root publish workflow](.github/workflows/publish-npm-corpus.yml) publishes
+only `@kontourai/corpus`. Dispatch `publish-npm-corpus.yml` on `main` with an
+exact `version`. Before anything is packed,
+[`scripts/root-release-preflight.mjs`](scripts/root-release-preflight.mjs)
+requires that version to equal the root `package.json` version and to be the
+first section of `CHANGELOG.md`, with no `Unreleased` section left. A release
+pull request that sets the version and moves the unreleased entries under it
+therefore lands first. Stable versions publish to `latest` and prereleases to
+`next`, and the version must be absent from npm; the same
+[guard](scripts/npm-publish-guard.mjs) as the workspaces refuses an existing
+version, a registry error other than E404, or an unconfirmed response.
+
+The verification job, with `contents: read`, runs the tests and the dogfood
+check, then `npm run verify:pack`. That packs the root once, checks the
+tarball's file list against an allow-list (`bin/`, `src/`, `schemas/`,
+`README.md`, `LICENSE`, and `package.json`), installs the tarball with
+`--ignore-scripts` into a fresh project, and runs the installed `corpus check`,
+`corpus decisions check` (including a rejected record), and the `docs-kit`
+alias against a fixture corpus and against this repository. It then exports
+that same tarball with its SHA-256, and also passes that SHA-256 to the publish
+job as a job output, outside the artifact. The publish job, with
+`id-token: write` in the `npm-publish` environment, checks the tarball twice.
+Right after download it checks it against the artifact's `SHA256SUMS` and
+against the job-output hash. Immediately before `npm publish` it checks it
+against the job-output hash again. It then publishes that exact file with
+`--provenance --ignore-scripts`, without repacking. Run
+`npm run verify:pack` locally to exercise the same check; it fetches the
+tarball's dependencies from the registry.
+
+The root package has its own workflow because its stable releases and the
+workspaces' prereleases have different versions and cadences, and because an
+npm trusted publisher names one workflow file: the trusted publisher for
+`@kontourai/corpus` names `publish-npm-corpus.yml`, and the workspace packages
+name `publish-npm.yml`, so neither workflow can publish the other's packages.
+Configure it for organization `kontourai`, repository `corpus`, environment
+`npm-publish`, with direct `npm publish` allowed, after bootstrapping the name
+the same way as the workspaces below. The first CI release publishes to
+`latest`, which moves `latest` off any bootstrap placeholder.
 
 ## Publishing the store workspaces
 
 The [publish workflow](.github/workflows/publish-npm.yml) publishes only
 `@kontourai/corpus-store` and `@kontourai/corpus-conformance`. The root
-`@kontourai/corpus` package stays git-installed. Dispatch `publish-npm.yml`
+`@kontourai/corpus` package has its own workflow, described
+[above](#publishing-the-root-package). Dispatch `publish-npm.yml`
 on `main` with an exact `version` matching both workspace manifests;
 the initial candidate is `0.1.0-next.0`. Release-please does not manage these
 workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
-and uploads the two tested `npm pack` tarballs with SHA-256 hashes. A separate
-publish job checks those hashes after download and immediately before publishing
-the same tarballs with provenance. Only the publish job has OIDC permission;
+and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
+passes to the publish job as job outputs. A separate publish job checks each
+tarball right after download against the artifact's `SHA256SUMS` and against
+the job-output hashes, then against the job-output hash again immediately
+before each `npm publish`, and publishes those same tarballs with provenance. Only the publish job has OIDC permission;
 test and build steps use `contents: read`. Every prerelease
 uses `next`; stable versions use `latest`. Both versions must be absent on npm
 before either publish begins. An existing version, registry error other than
@@ -55,10 +108,11 @@ Configure the GitHub `npm-publish` environment
 for `main` and owner approval before dispatch. CI uses Node 24, pinned npm
 11.17.0, `id-token: write`, and no registry token or `setup-node` `registry-url`.
 
-Exercise the executable publish guard with fixture registry responses:
+Exercise the executable publish guard and the root release preflight with
+fixture registry responses and manifests:
 
 ```sh
-node --test test/npm-publish-guard.test.mjs
+node --test test/npm-publish-guard.test.mjs test/root-release-preflight.test.mjs
 ```
 
 ## Purpose and audience
@@ -184,10 +238,39 @@ Exit codes: `0` ok, `1` a gate failed, `2` a usage or configuration error. An in
 ### check
 
 ```sh
-corpus check [--root dir] [--base <git-ref>] [--advisory]
+corpus check [--root dir] [--base <git-ref>] [--advisory] [--only <gates>] [--json]
 ```
 
 `check` runs the gates below and reports every failure, not only the first.
+
+- `--only <gates>` runs only the named gates, comma-separated, using the names in the list below (`builtOn`, `adr-freeze`, and so on). The manifest always runs, because every other gate depends on it. An unknown name is a usage error (exit `2`). So is a selected gate that does not run, such as `freshness` without `--base`, `decisions` without a `decisions` block, or `adr-freeze` without `--base` and `decisions.adr`: a lane that asks for one gate never passes by checking nothing. So is a flag that no selected gate reads: `--base` unless `freshness` or `adr-freeze` is selected, and `--advisory` unless `freshness` is, so a mistyped ref is never silently ignored. A gate that runs but has nothing to examine still passes: `--only manifest` runs only the manifest, and `--only freshness` passes in a repository whose documents declare no `covers`.
+- `--json` prints one JSON object on stdout instead of the text report. Exit codes are unchanged. Whenever `--json` appears among `check`'s arguments, stdout holds exactly one JSON object, whatever happens. A run that does not reach a gate result still prints `{ "verdict": "fail", "exitCode": 2, "error": "…" }` (plus `schemaVersion`, `tool`, `command`, `base`, `advisory`, and `only`), with the message also on stderr. That covers an unknown option, an option with a missing or blank value, a bad `--only`, a missing `corpus.json`, and an unexpected internal error. `--help` prints text, so it cannot be combined with `--json`; together they are refused the same way. A gate result is:
+
+  ```json
+  {
+    "schemaVersion": 1,
+    "tool": "corpus",
+    "command": "check",
+    "verdict": "fail",
+    "exitCode": 1,
+    "base": "origin/main",
+    "advisory": false,
+    "only": ["freshness"],
+    "summary": { "failures": 1, "warnings": 0, "errors": 0, "staleDocuments": 1 },
+    "gates": [
+      { "name": "manifest", "status": "pass", "failures": [], "warnings": [] },
+      { "name": "freshness", "status": "fail", "note": "3 changed files since origin/main", "failures": ["docs/cli.md is stale: …"], "warnings": [] }
+    ],
+    "staleDocuments": [
+      { "source": "docs/cli.md", "kind": "docs-covers", "gate": "freshness", "severity": "failure", "changed": ["src/cli.js"] }
+    ],
+    "actions": [
+      { "type": "docs-covers", "description": "docs/cli.md is stale: 1 covered file changed since origin/main but the document did not", "paths": ["docs/cli.md", "src/cli.js"] }
+    ]
+  }
+  ```
+
+  `verdict` is `pass`, `warn` (exit `0` with warnings, as under `--advisory`), or `fail` (exit `1` or `2`; `exitCode` tells them apart). A gate's `status` is `pass`, `warn`, `fail`, `skip` (with `skipped`, the reason), or `error` (with `error`). `summary` holds only numbers. Every stale document carries the `kind` of staleness, never a bare stale flag. Today the only kind is `docs-covers`: a file matched by the document's `covers` changed and the document did not. `changed` lists every such file, and `severity` is `warning` under `--advisory`. `actions` has one entry per stale document, with `type` set to its kind. A broken link and a stale document therefore no longer look the same: both exit `1`, but only a stale document is listed in `staleDocuments` and `actions`. The shape matches the external-tool artifact that a [Veritas](https://github.com/kontourai/veritas) evidence check reads (`verdict`, numeric `summary`, `actions`), so `corpus check --base origin/main --only freshness --json` can be bound as evidence.
 
 For v2 manifests, the **builtOn** gate compares declarations with root and workspace `package.json` dependencies, peer dependencies, and optional dependencies. Dependencies are verified by their exact package keys in `via`. `via` accepts a string or a non-empty array, allowing `{ "product": "console", "via": ["@kontourai/console-core", "@kontourai/console-ui"], "for": "Console integration" }`. All names in an entry are declared to belong to that product. **Product ids and package-to-product ownership are declared by the owner and cannot be verified offline.** The gate does not derive product identity from a scope, package name, or GitHub repository name. Missing-package suggestions use `OWNER_PRODUCT_ID`, which the owner must replace.
 
@@ -253,7 +336,7 @@ Returns JSON source locations using the same quote matcher as MCP. Exit `1` mean
 ### mcp
 
 ```sh
-corpus mcp [--repo dir | --workspace dir | --hub url]
+corpus mcp [--repo dir | --workspace dir | --hub url | --bundle file...]
 ```
 
 `mcp` starts a stdio MCP server. Give it at most one source; with none, it uses `--hub https://kontourai.github.io/`. See [MCP server](#mcp-server).
@@ -291,24 +374,25 @@ The server exposes six read-only tools. Every result carries the source commit `
 | Tool | Arguments | Returns |
 | --- | --- | --- |
 | `list_products` | none | product, title, tagline, sha, builtAt, siteUrl, topicCount, docCount (not counting the landing page); failed products are listed as `unavailable` |
-| `list_topics` | `product?` | topics with product, id, title, source, url, sha |
+| `list_topics` | `product?`, `parentId?` | topics with product, id, title, source, url, sha, and `parentId`, `tags`, and `summary` when the bundle has them; `parentId` lists only that topic's children, and an id that is no topic in the selected products is an error |
 | `get_topic` | `product`, `id` | the topic's Markdown section |
 | `get_document` | `product`, `source` | one whole document, including the landing page (`landing: true`) |
-| `search` | `query`, `product?`, `limit?` (1-50, default 10) | ranked matches over topics and documents, with snippet, product, source, url, sha |
+| `search` | `query`, `product?`, `limit?` (1-50, default 10) | ranked matches over topics and documents, with snippet, product, source, url, sha; topic matches also carry `parentId`, `tags`, and `summary` when present |
 | `locate` | `product`, `quote`, `source?` | where a quoted passage lives: `source`, `repoPath`, 1-based file `startLine` and `endLine`, sha, the enclosing `heading` and `anchor`, the page `url`, the surrounding `markdown` blocks, a GitHub `blobUrl` ending in `#Lstart-Lend`, `match`, `confidence`, and, when the quote matches more than one place, `ambiguous: true`, `matchCount`, and up to 10 `alternatives` |
 
 `locate` is what the site's Ask and Challenge prompts tell an agent to call. It compares letters and digits only, lowercased and with accents removed (NFKD), so whitespace, punctuation, and Markdown formatting (emphasis, code marks, link destinations, HTML tags, list and table markers, fence lines) do not matter. Numeric entities and `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, and `&nbsp;` are decoded; other named entities (such as `&eacute;`) are ignored, so a quote containing their character falls back to the surrounding words. Text inside code blocks and code spans is compared as the page shows it, so `<dir>` in a code sample still matches. `match` is `verbatim` (confidence 1) when the quote also appears as written, `normalized` (0.9) when it matched only after that normalization, or `head-and-tail` (0.5) when only its first and last four words matched within a nearby window, for example across an image. With more than one candidate, the confidence is divided by their number (minimum 0.01); verbatim candidates rank before normalized ones, each in document order, and the best is returned with up to 10 others as `alternatives` and the total as `matchCount`. No match, a quote with fewer than 3 letters or digits, or an unknown `source` is an error result. Line numbers are file lines, after front matter; a bundle built before 0.6.0 does not record front matter, so `locate` adds a `note` saying it assumes none.
 
-The server has three sources:
+The server has four sources:
 
 - `--repo dir` builds the bundle in memory from a checkout and writes nothing. It rebuilds whenever the checkout changes, so a long session sees current docs. The cache key is HEAD, a hash of `git status --porcelain`, and the mtime and size of the manifest and each published source. It needs a valid manifest and resolvable topics at startup; a later breakage is reported as unavailable.
 - `--workspace dir` does the same for every immediate subdirectory that contains `corpus.json`. A subdirectory with only a retired `docs-kit.json` is skipped, with one note on stderr per server, so a stale checkout neither stops the workspace nor disappears silently; one with both files is reported as unavailable. It rescans the directory on every call and rebuilds only the products that changed. A subdirectory that fails is reported as unavailable under the `product` its manifest declares (the directory name if the manifest does not parse). If two directories declare the same product, both are unavailable.
 - `--hub url` fetches `<url>/products.json` and then each `<url>/<product>/docs-bundle.json`. It keeps successful fetches in memory for 10 minutes and retries failed or malformed ones after 30 seconds. A product whose fetch fails, or whose bundle is malformed, is reported as unavailable; this is not fatal.
+- `--bundle file` serves a prebuilt `docs-bundle.json` exactly as written: from `corpus build`, or from a host's own generator. Repeat it to serve more products. Each file is read and validated once at startup and held in memory; nothing is rebuilt, refetched, or reread, so results always carry the sha the bundle was built at. A malformed bundle, an unreadable file, or two bundles for the same product is a usage error (exit `2`). Programs that embed the server get the same source from `staticSource(bundles)`, passed to `createDocsServer`.
 
 Claude Code:
 
 ```sh
-claude mcp add kontour-docs -- npx -y github:kontourai/corpus#<sha> corpus mcp
+claude mcp add kontour-docs -- npx -y --package=@kontourai/corpus@<version> -- corpus mcp
 ```
 
 Codex (`~/.codex/config.toml`):
@@ -316,19 +400,24 @@ Codex (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.kontour-docs]
 command = "npx"
-args = ["-y", "github:kontourai/corpus#<sha>", "corpus", "mcp"]
+args = ["-y", "--package=@kontourai/corpus@<version>", "--", "corpus", "mcp"]
 ```
 
 To serve local checkouts while you write docs, add `--workspace ~/dev/github/kontourai` or `--repo .` after `mcp`.
 
 ## Adopting corpus in a repo
 
-1. Pin a corpus commit. Use its full sha everywhere below as `<sha>`.
+1. Add Corpus as an exact-pinned dev dependency and commit the lockfile, so CI installs the same Corpus and the same dependency tree every time. For an unreleased commit, use `https://codeload.github.com/kontourai/corpus/tar.gz/<sha>` (full sha) as the spec instead.
+
+   ```sh
+   npm install --save-dev --save-exact @kontourai/corpus@<version>
+   ```
+
 2. Scaffold and review the manifest. Replace the `purpose` placeholder (`check` fails until you do), fill `builtOn` (or leave it empty), order the documents, name the sections, move internal docs to `exclude`, and add `topics` and `covers`.
 
    ```sh
-   npx -y github:kontourai/corpus#<sha> corpus init
-   npx -y github:kontourai/corpus#<sha> corpus check
+   npx --no-install corpus init
+   npx --no-install corpus check
    ```
 
 3. Add the gate to CI. On pull requests, `fetch-depth: 0` makes the base branch available for freshness. Drop `--advisory` once the `covers` globs are trusted.
@@ -340,15 +429,16 @@ To serve local checkouts while you write docs, add `--workspace ~/dev/github/kon
    - uses: actions/setup-node@v6
      with:
        node-version: 24
-   - run: npx -y github:kontourai/corpus#<sha> corpus check
+   - run: npm ci
+   - run: npx --no-install corpus check
    - if: github.event_name == 'pull_request'
-     run: npx -y github:kontourai/corpus#<sha> corpus check --base origin/${{ github.base_ref }} --advisory
+     run: npx --no-install corpus check --base origin/${{ github.base_ref }} --advisory
    ```
 
 4. Publish Pages from `main`. Set the repository's Pages source to GitHub Actions, then run:
 
    ```yaml
-   - run: npx -y github:kontourai/corpus#<sha> corpus build --out dist-pages
+   - run: npx --no-install corpus build --out dist-pages
    - uses: actions/upload-pages-artifact@v5
      with:
        path: dist-pages

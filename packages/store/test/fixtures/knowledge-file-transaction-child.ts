@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import { KnowledgeFileTransactions } from '../transaction-support.js';
 
 const [root, mode, readyPath, releasePath] = process.argv.slice(2);
@@ -38,7 +38,8 @@ if (
   await files.mutate('child-hold', async () => {
     if (!readyPath) throw new Error('readyPath is required');
     if (!releasePath) throw new Error('releasePath is required');
-    writeFileSync(readyPath, String(process.pid), 'utf8');
+    writeFileSync(`${readyPath}.tmp`, String(process.pid), 'utf8');
+    renameSync(`${readyPath}.tmp`, readyPath);
     while (!(await import('node:fs')).existsSync(releasePath)) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -47,7 +48,8 @@ if (
 } else if (mode === 'write-external') {
   if (!readyPath) throw new Error('readyPath is required');
   if (!releasePath) throw new Error('releasePath is required');
-  writeFileSync(readyPath, String(process.pid), 'utf8');
+  writeFileSync(`${readyPath}.tmp`, String(process.pid), 'utf8');
+  renameSync(`${readyPath}.tmp`, readyPath);
   while (!(await import('node:fs')).existsSync(releasePath)) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

@@ -32,7 +32,8 @@
   "scripts": {
     "test": "node --test --test-concurrency=4 \"test/**/*.test.mjs\"",
     "check": "node bin/docs-kit.mjs check",
-    "test:browser": "node --test --test-concurrency=1 \"test/browser/*.browser.mjs\""
+    "test:browser": "node --test --test-concurrency=1 \"test/browser/*.browser.mjs\"",
+    "verify:pack": "node scripts/verify-root-pack.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",

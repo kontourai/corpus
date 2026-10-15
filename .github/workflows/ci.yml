@@ -36,6 +36,9 @@ jobs:
       - name: Docs gate (dogfood)
         run: node bin/docs-kit.mjs check
 
+      - name: Packed root CLI consumer (corpus and docs-kit bins, decisions gate)
+        run: npm run verify:pack
+
       - name: Build store package
         run: npm run build --workspace=@kontourai/corpus-store
 
