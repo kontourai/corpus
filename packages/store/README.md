@@ -211,6 +211,11 @@ Runtime dependency: js-yaml, retained for Station-identical writing.
 
 ## Development and evidence
 
+The development harness pins Vitest 4.1.11. Vitest and its mock/worker tooling
+are development dependencies; the published store runtime does not depend on
+them. The lockfile retains the existing Vite and Rollup versions. Build the
+store before testing or packing so consumers exercise compiled entry points.
+
 ```sh
 npm ci
 npm run build --workspace=@kontourai/corpus-store
