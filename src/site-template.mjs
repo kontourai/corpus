@@ -69,7 +69,7 @@ export const SITE_CSS = `${BASE_CSS}
 .site-nav li a[aria-current="page"] { background: var(--code-bg); color: var(--accent); font-weight: 600; }
 main.content { padding: 1.5rem; min-width: 0; }
 @media (min-width: 900px) { main.content { padding: 2rem 3rem; } }
-.doc { max-width: 78ch; }
+.doc { max-width: 78ch; overflow-wrap: anywhere; }
 .doc h1 { font-size: 2rem; line-height: 1.25; margin-top: 0; }
 .doc h2 { margin-top: 2.25rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
 .doc h1, .doc h2, .doc h3, .doc h4 { scroll-margin-top: 1rem; }
@@ -78,7 +78,7 @@ main.content { padding: 1.5rem; min-width: 0; }
 .doc img { max-width: 100%; height: auto; }
 .doc pre.mermaid { background: transparent; text-align: center; }
 .doc blockquote { margin: 1rem 0; padding: .25rem 1rem; border-left: 4px solid var(--border); color: var(--muted); }
-.doc table { border-collapse: collapse; width: 100%; }
+.doc table { border-collapse: collapse; width: 100%; overflow-wrap: normal; }
 .doc th, .doc td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
 .doc th { background: var(--code-bg); }
 .table-scroll { overflow-x: auto; margin: 1rem 0; }

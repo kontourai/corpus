@@ -18,6 +18,8 @@
 
 The landing page's `<title>` is `<title> — <tagline>`, or `<title> documentation` without a tagline. Each document page's `<title>` is `<document title> · <title>`. Every page has the product title and tagline, navigation grouped by `section` in manifest order, a link to the hub, a link to the repository, and the source file at the built commit. Headings get GitHub-compatible `id`s, so anchors that work on GitHub also work on the site.
 
+Long inline identifiers and URLs wrap within the document column, including on narrow screens. Code blocks preserve their lines and scroll horizontally within the column. Wide tables also scroll within their own container, so their content remains reachable without widening the page.
+
 ## Link rewriting
 
 | Link in Markdown | On the site |
