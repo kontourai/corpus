@@ -1,5 +1,5 @@
-// Headless Chromium checks of the selection toolbar and WebMCP tools against a
-// built fixture site. Run with `npm run test:browser`; it needs a Chromium for
+// Headless Chromium checks of page layout, the selection toolbar, and WebMCP
+// tools against a built fixture site. Run with `npm run test:browser`; it needs a Chromium for
 // playwright-core (`npx playwright-core install chromium`). A missing browser
 // fails the run: it is never reported as a pass.
 import assert from 'node:assert/strict';
@@ -13,6 +13,9 @@ import { FIXTURES, commitAll, git, runCli } from '../helpers.mjs';
 
 const SCREENSHOT_DIR = process.env.DOCS_KIT_SCREENSHOT_DIR ?? path.join(tmpdir(), 'docs-kit-selection-screenshots');
 const ISSUE_URL_MAX = 8000;
+const MOBILE_IDENTIFIER = 'corpus_record_identifier_'.repeat(12) + 'record_end';
+const MOBILE_URL = 'https://example.invalid/' + 'documentationsegment'.repeat(12);
+const MOBILE_CODE = 'corpus locate --record ' + 'unbroken_code_'.repeat(20) + 'code_end';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
 
 let work;
@@ -38,6 +41,22 @@ before(async () => {
   writeFileSync(manifestFile, JSON.stringify({ ...JSON.parse(readFileSync(manifestFile, 'utf8')), selectionActions: { primary: 'challenge-issue' } }));
   commitAll(repo, 'challenge primary');
   await buildSite(repo, path.join(work, 'site', 'challenge'));
+
+  const columns = Array.from({ length: 12 }, (_, index) => `Column ${index + 1}`);
+  writeFileSync(path.join(repo, 'docs', 'mobile.md'), [
+    '# Mobile content', '',
+    `Identifier: \`${MOBILE_IDENTIFIER}\``, '',
+    `Link: [${MOBILE_URL}](${MOBILE_URL})`, '',
+    '```text', MOBILE_CODE, '```', '',
+    `| ${columns.join(' | ')} |`,
+    `| ${columns.map(() => '---').join(' | ')} |`,
+    `| ${columns.map((_, index) => `Value ${index + 1}`).join(' | ')} |`, '',
+  ].join('\n'));
+  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  manifest.documents.push({ source: 'docs/mobile.md', section: 'Guide' });
+  writeFileSync(manifestFile, JSON.stringify(manifest));
+  commitAll(repo, 'mobile overflow fixture');
+  await buildSite(repo, path.join(work, 'site', 'mobile'));
 
   const root = path.join(work, 'site');
   server = createServer((request, response) => {
@@ -290,6 +309,53 @@ test('touch: a selection on a phone shows the toolbar below it, and a tap on Ask
   await page.locator('.dk-toast.dk-visible').waitFor();
   assert.ok((await clipboard(page)).includes(`Source: docs/guide.md:13-13@${sha}`));
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'toolbar-touch.png') });
+});
+
+for (const width of [390, 320]) test(`mobile content wraps inline text and scrolls wide blocks locally at ${width}px`, async (t) => {
+  const page = await openPage(t, { url: '/mobile/docs/mobile.html', context: { viewport: { width, height: 844 }, hasTouch: true, isMobile: true } });
+  assert.equal(await page.locator('.doc p code').textContent(), MOBILE_IDENTIFIER);
+  assert.equal(await page.locator('.doc p a').textContent(), MOBILE_URL);
+  assert.equal(await page.locator('.doc pre code').textContent(), MOBILE_CODE + '\n');
+  assert.equal(await page.locator('.doc tbody td').last().textContent(), 'Value 12');
+  const layout = await page.evaluate(() => {
+    const doc = document.querySelector('.doc');
+    return { viewport: document.documentElement.clientWidth, page: document.documentElement.scrollWidth, article: doc.clientWidth, articleScroll: doc.scrollWidth };
+  });
+  t.diagnostic(JSON.stringify(layout));
+  assert.equal(layout.viewport, width);
+  assert.ok(layout.page <= width + 1, `document width ${layout.page} exceeds ${width}px viewport`);
+  assert.ok(layout.articleScroll <= layout.article + 1, 'wide blocks do not overflow the article');
+  for (const selector of ['.doc p code', '.doc p a']) {
+    const wrapped = await page.locator(selector).evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const bounds = element.closest('.doc').getBoundingClientRect();
+      const lines = [...range.getClientRects()];
+      return { lines: lines.length, inside: lines.every((line) => line.left >= bounds.left - 1 && line.right <= bounds.right + 1) };
+    });
+    assert.ok(wrapped.lines > 1 && wrapped.inside, `${selector} wraps into readable lines inside the article`);
+  }
+  const headerWordLines = await page.locator('.doc th').first().evaluate((element) => {
+    const range = document.createRange();
+    range.setStart(element.firstChild, 0);
+    range.setEnd(element.firstChild, 'Column'.length);
+    return range.getClientRects().length;
+  });
+  assert.equal(headerWordLines, 1, 'table header words stay intact rather than wrapping into individual letters');
+  for (const selector of ['.doc pre', '.doc .table-scroll']) {
+    const scrolled = await page.locator(selector).evaluate((element) => {
+      const overflow = element.scrollWidth - element.clientWidth;
+      element.scrollLeft = element.scrollWidth;
+      const last = element.matches('pre') ? element.querySelector('code').lastChild : element.querySelector('tbody td:last-child').firstChild;
+      const range = document.createRange();
+      range.setStart(last, Math.max(0, last.length - 8));
+      range.setEnd(last, last.length);
+      const end = range.getBoundingClientRect(), bounds = element.getBoundingClientRect();
+      return { overflow, moved: element.scrollLeft, endVisible: end.left >= bounds.left && end.right <= bounds.right + 1 };
+    });
+    assert.ok(scrolled.overflow > 0 && scrolled.moved > 0 && scrolled.endVisible, `${selector} scrolls to its readable final content: ${JSON.stringify(scrolled)}`);
+  }
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, `mobile-content-${width}.png`), fullPage: true });
 });
 
 test('the challenge-issue primary action leads the toolbar when the manifest asks for it', async (t) => {
