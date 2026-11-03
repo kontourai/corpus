@@ -10,6 +10,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { startsLikeJournal } from '../src/shared/file-transactions.js';
 import {
   KitDefaultStoreAdapter,
   KitObsidianStoreAdapter,
@@ -269,6 +270,7 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     ['escaped quotes', 'tx"quoted"id', 'op"erat\\ion'],
     ['newlines and unicode', 'tx\nid-\u2028-é', 'purge\r\n'],
     ['a very long id and operation', 'x'.repeat(5000), 'o'.repeat(3000)],
+    ['control characters and lone surrogates', 'a\u0001b\ud800c\udc00d', 'op\u001f\udbffz'],
   ])('every cut of a journal with %s is recognised as a journal temporary', async (_name, transactionId, operation) => {
     await raw('recognised');
     const full = JSON.stringify({ version: 1, transactionId, operation, phase: 'prepared', entries: [{ path: 'x.md', before: Buffer.from('ENTRY-NEEDLE').toString('base64'), after: null }] });
@@ -291,6 +293,20 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     expect(existsSync(join(root, '.big.tmp'))).toBe(false);
     expect(readFileSync(join(root, '.unterminated.tmp'), 'utf8')).toBe(foreign);
     await expect(store.get('big')).resolves.toMatchObject({ id: 'big' });
+  });
+
+  test.each([
+    ['an escape the engine never writes for t', '{"version":1,"transactionId":"\\u0074","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['an unknown escape', '{"version":1,"transactionId":"a\\qb","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['an escaped slash', '{"version":1,"transactionId":"a\\/b","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a raw newline', '{"version":1,"transactionId":"a\nb","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['uppercase hex', '{"version":1,"transactionId":"a\\u000Ab","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['an escaped surrogate pair', '{"version":1,"transactionId":"\\ud83d\\ude00","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+  ])('a foreign file whose journal-like header uses %s is left alone', async (_name, content) => {
+    await raw('foreign');
+    writeFileSync(join(root, '.foreign-user-data.tmp'), content);
+    await store.get('foreign');
+    expect(readFileSync(join(root, '.foreign-user-data.tmp'), 'utf8')).toBe(content);
   });
 
   test('a journal temporary that cannot be removed fails the operation instead of being skipped', async () => {
@@ -464,6 +480,22 @@ describe('purge — default layout', () => {
       expect((await open('default', root).get('src'))?.status).toBe('purged');
     } finally {
       rmSync(base, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('startsLikeJournal', () => {
+  test('recognises the start of every journal JSON.stringify can write, for random ids and operation names', () => {
+    let seed = 12345;
+    const random = (limit: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % limit;
+    const units = [0x22, 0x5c, 0x0a, 0x00, 0x1f, 0x7f, 0x2028, 0xd800, 0xdbff, 0xdc00, 0xdfff, 0x41, 0xe9, 0x4e2d];
+    const word = () => Array.from({ length: random(12) }, () => String.fromCharCode(random(3) === 0 ? random(0x10000) : units[random(units.length)])).join('');
+    for (let i = 0; i < 20000; i++) {
+      const journal = JSON.stringify({ version: 1, transactionId: word(), operation: word(), phase: random(2) ? 'prepared' : 'committed', entries: [{ path: 'x', before: 'QQ==', after: null }] });
+      const start = journal.indexOf('"entries":[') + '"entries":['.length;
+      expect(startsLikeJournal(journal)).toBe(true);
+      expect(startsLikeJournal(journal.slice(0, start))).toBe(true);
+      expect(startsLikeJournal(journal.slice(0, start - 1))).toBe(false);
     }
   });
 });

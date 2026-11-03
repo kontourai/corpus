@@ -100,6 +100,12 @@ const controls = [
   // The regular-expression form of the same check overflows the stack on a multi-megabyte header.
   { id: 'journal-temp-regexp-recursion', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'startsLikeJournal(text)) {', '/^\\{"version":1,"transactionId":"(?:[^"\\\\]|\\\\.)*","operation"/s.test(text)) {'),
     args: focused('test/purge.test.ts'), reason: /multi-megabyte journal header/ },
+  // Accept any escape sequence, as the old pattern did.
+  { id: 'foreign-unknown-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "if (next !== 'u') return false;", "if (next !== 'u') { at += 2; continue; }"),
+    args: focused('test/purge.test.ts'), reason: /left alone/ },
+  // Accept a \\u escape for a character JSON.stringify would write raw.
+  { id: 'foreign-needless-unicode-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (!control && !surrogate) return false;', ''),
+    args: focused('test/purge.test.ts'), reason: /left alone/ },
 ];
 
 function run(label, args, success) {

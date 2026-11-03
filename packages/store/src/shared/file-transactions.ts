@@ -38,13 +38,15 @@ const JOURNAL_VERSION = 1;
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
 /**
  * True when `text` starts the way every journal this engine writes does:
- * JSON.stringify of a Journal, in key order, up to the `entries` array. A string is
- * scanned to its closing quote, skipping escapes, so an id or operation name with
- * escaped quotes, newlines or unicode matches at any length. This is a loop, not a
- * regular expression: a pattern with a repeated group overflows the stack on a
- * multi-megabyte id, and an unreadable classifier would block the whole store.
+ * JSON.stringify of a Journal, in key order, up to the `entries` array. Strings are
+ * checked against what JSON.stringify can emit, so an id or operation name with
+ * escaped quotes, newlines or unicode matches at any length, and a file whose header
+ * uses an encoding the engine never produces (`\u0074` for `t`, `\/`, a raw newline)
+ * is not ours. This is a loop, not a regular expression: a pattern with a repeated
+ * group overflows the stack on a multi-megabyte id, and an unreadable classifier would
+ * block the whole store.
  */
-function startsLikeJournal(text: string): boolean {
+export function startsLikeJournal(text: string): boolean {
   let at = 0;
   const literal = (value: string): boolean => {
     if (!text.startsWith(value, at)) return false;
@@ -52,13 +54,37 @@ function startsLikeJournal(text: string): boolean {
     return true;
   };
   const string = (): boolean => {
+    let highEscape = false; // the previous token was an escaped high surrogate
     while (at < text.length) {
       const code = text.charCodeAt(at);
       if (code === 0x22) {
         at += 1;
         return true;
       }
-      at += code === 0x5c ? 2 : 1;
+      if (code < 0x20) return false; // JSON.stringify always escapes controls
+      if (code !== 0x5c) {
+        at += 1;
+        highEscape = false;
+        continue;
+      }
+      const next = text[at + 1];
+      if (next !== undefined && '"\\bfnrt'.includes(next)) {
+        at += 2;
+        highEscape = false;
+        continue;
+      }
+      if (next !== 'u') return false;
+      const hex = text.slice(at + 2, at + 6);
+      if (!/^[0-9a-f]{4}$/.test(hex)) return false;
+      const unit = parseInt(hex, 16);
+      const control = unit < 0x20;
+      const surrogate = unit >= 0xd800 && unit <= 0xdfff;
+      if (!control && !surrogate) return false;
+      // Well-formed JSON.stringify escapes only a lone surrogate, never a pair.
+      if (unit >= 0xdc00 && highEscape) return false;
+      if (unit >= 0xd800 && unit <= 0xdbff && /^\\ud[c-f][0-9a-f]{2}/.test(text.slice(at + 6, at + 12))) return false;
+      highEscape = unit >= 0xd800 && unit <= 0xdbff;
+      at += 6;
     }
     return false;
   };
