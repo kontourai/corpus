@@ -440,24 +440,90 @@ describe('purge — vault layout', () => {
     expect((await open('vault', root).listByType('raw', { includeHistory: true })).length).toBe(2);
   });
 
-  test('refuses, writing nothing, a purge that would push a survivor note past the vault note bound', async () => {
-    await store.create({ id: 's1', type: 'raw', title: 's1', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
-    await store.create({ id: 's2', type: 'raw', title: 's2', body: 'y', category: 'engineering', provenance: { agent: 'creator' } });
-    // A concept note is its body plus about 1 KiB of frontmatter; leave less room than the purge's log entry needs.
-    const slack = 1500;
-    const body = 'b'.repeat(VAULT_NOTE_MAX_BYTES - 1300 - slack);
-    await store.create({ id: 'big', type: 'concept', title: 'big', body, category: 'engineering', provenance: { agent: 'creator', source_ids: ['s1', 's2'] } });
-    const before = files(root);
-    await expect(store.purge(['s1'], { agent: 'privacy-officer', rationale: 'r'.repeat(4000) })).rejects.toMatchObject({
-      code: 'MISSING_EVIDENCE',
-      message: expect.stringContaining('limited to 16777216 bytes'),
+  describe('a survivor near the vault note bound', () => {
+    // A concept note is its body plus its frontmatter; size the body so the note leaves exactly `slack` bytes.
+    async function survivorWithRoom(slack: number): Promise<void> {
+      await store.create({ id: 's1', type: 'raw', title: 's1', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+      await store.create({ id: 's2', type: 'raw', title: 's2', body: 'y', category: 'engineering', provenance: { agent: 'creator' } });
+      const scratch = open('vault', join(base, 'scratch'));
+      await scratch.create({ id: 's1', type: 'raw', title: 's1', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+      await scratch.create({ id: 's2', type: 'raw', title: 's2', body: 'y', category: 'engineering', provenance: { agent: 'creator' } });
+      const make = (adapter: Store, length: number) =>
+        adapter.create({ id: 'big', type: 'concept', title: 'big', body: 'b'.repeat(length), category: 'engineering', provenance: { agent: 'creator', source_ids: ['s1', 's2'] } });
+      await make(scratch, 1);
+      const scratchIndex = JSON.parse(readFileSync(join(base, 'scratch', 'path-index.json'), 'utf8')) as { by_id: Record<string, { path: string }> };
+      const probe = Buffer.byteLength(readFileSync(join(base, 'scratch', scratchIndex.by_id.big.path), 'utf8'));
+      await make(store, 1 + VAULT_NOTE_MAX_BYTES - slack - probe);
+    }
+    const bigBytes = () => Buffer.byteLength(readFileSync(join(root, index().by_id.big.path), 'utf8'));
+
+    test('gets the purge entry without its prose when the full entry would not fit', async () => {
+      await survivorWithRoom(600);
+      expect(VAULT_NOTE_MAX_BYTES - bigBytes()).toBe(600);
+      await expect(store.purge(['s1'], { agent: 'privacy-officer', rationale: 'r'.repeat(4000) })).resolves.toMatchObject({ survivors: ['big'] });
+      const log = (await store.get('big'))!.mutation_log!;
+      expect(log.at(-1)).toEqual({ op: 'support-purged', at: expect.any(String), agent: 'privacy-officer', evidence: { purged_ids: ['s1'], compact: true } });
+      expect(bigBytes()).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+      expect((await store.get('s1'))?.status).toBe('purged');
+      await expect(store.create({ type: 'raw', title: 'after', body: 'z', category: 'engineering', provenance: { agent: 'creator' } })).resolves.toEqual(expect.any(String));
     });
-    expect(files(root)).toEqual(before);
-    expect((await store.get('s1'))?.status).toBe('active');
-    // With room, the same purge goes through and the note stays within the bound.
-    await expect(store.purge(['s1'], { agent: 'privacy-officer', rationale: 'short' })).resolves.toMatchObject({ survivors: ['big'] });
-    expect(Buffer.byteLength(readFileSync(join(root, index().by_id.big.path), 'utf8'))).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
-    await expect(store.create({ type: 'raw', title: 'after', body: 'z', category: 'engineering', provenance: { agent: 'creator' } })).resolves.toEqual(expect.any(String));
+
+    test('refuses, writing nothing, when not even that fits, and names the record to shrink', async () => {
+      await survivorWithRoom(20);
+      const before = files(root);
+      await expect(store.purge(['s1'], evidence)).rejects.toMatchObject({
+        code: 'MISSING_EVIDENCE',
+        message: expect.stringMatching(/record big; shrink it.*limited to 16777216 bytes/),
+      });
+      expect(files(root)).toEqual(before);
+      expect((await store.get('s1'))?.status).toBe('active');
+    });
+
+    test('is not purged around: a survivor that fits gets the full entry', async () => {
+      await survivorWithRoom(100_000);
+      await store.purge(['s1'], evidence);
+      expect((await store.get('big'))!.mutation_log!.at(-1)).toMatchObject({ op: 'support-purged', rationale: 'erasure request 42' });
+    });
+  });
+
+  describe('a tombstone near the vault note bound', () => {
+    // A note made almost entirely of provenance ids keeps them in its tombstone, so the tombstone
+    // plus its audit entry can pass the bound that the note itself met.
+    const chunk = 'i'.repeat(2_000_000);
+    async function noteNearBound(id: string, slack: number): Promise<void> {
+      const scratch = open('vault', join(base, `scratch-${id}`));
+      const ids = (pad: number) => [...Array.from({ length: 8 }, (_, n) => `${n}${chunk}`), 'p'.repeat(pad)];
+      const create = (adapter: Store, pad: number) =>
+        adapter.create({ id, type: 'concept', title: 't', body: 'b', category: 'engineering', provenance: { agent: 'creator', source_ids: ids(pad) } });
+      await create(scratch, 1);
+      const probe = Buffer.byteLength(readFileSync(join(base, `scratch-${id}`, JSON.parse(readFileSync(join(base, `scratch-${id}`, 'path-index.json'), 'utf8')).by_id[id].path), 'utf8'));
+      await create(store, 1 + (VAULT_NOTE_MAX_BYTES - slack - probe));
+    }
+    const noteBytes = (id: string) => Buffer.byteLength(readFileSync(join(root, index().by_id[id].path), 'utf8'));
+
+    test('drops the prose of its purge entry when the full entry would not fit', async () => {
+      await noteNearBound('near', 200);
+      await store.purge(['near'], { agent: 'privacy-officer', rationale: 'r'.repeat(600) });
+      const stone = (await store.get('near'))!;
+      expect(stone.status).toBe('purged');
+      expect(stone.mutation_log!.at(-1)).toEqual({ op: 'purged', at: expect.any(String), agent: 'privacy-officer', evidence: { cause: 'requested', compact: true } });
+      expect(stone.provenance.source_ids).toHaveLength(9);
+      expect(noteBytes('near')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+    });
+
+    test('keeps identity and the purge entry, with counts of what it dropped, when even the compact entry would not fit', async () => {
+      await noteNearBound('edge', 5);
+      await store.purge(['edge'], { agent: 'privacy-officer', rationale: 'erasure request 42' });
+      const stone = (await store.get('edge'))!;
+      expect(stone).toMatchObject({ id: 'edge', status: 'purged', provenance: { agent: 'creator' }, links: [] });
+      expect(stone.provenance).not.toHaveProperty('source_ids');
+      expect(stone.mutation_log).toEqual([
+        { op: 'purged', at: expect.any(String), agent: 'privacy-officer', evidence: { cause: 'requested', compact: true, omitted_source_ids: 9, omitted_links: 0, omitted_log_entries: 0 } },
+      ]);
+      expect(noteBytes('edge')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+      // The vault is still usable: a later create scans every note with the bound.
+      await expect(store.create({ type: 'raw', title: 'after', body: 'z', category: 'engineering', provenance: { agent: 'creator' } })).resolves.toEqual(expect.any(String));
+    });
   });
 
   test('removes the emptied category folders, and only those', async () => {

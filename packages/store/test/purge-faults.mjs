@@ -140,6 +140,10 @@ const controls = [
     args: focused('test/purge-proposals.test.ts'), reason: /empty link (target|kind)/ },
   { id: 'purge-ignores-note-bound', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });", 'this.writeRecord(kept, pathIndex);'),
     args: focused('test/purge.test.ts'), reason: /past the vault note bound/ },
+  { id: 'tombstone-not-shortened', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "for (const shape of TOMBSTONE_SHAPES) {", "for (const shape of TOMBSTONE_SHAPES.slice(0, 1)) {"),
+    args: focused('test/purge.test.ts'), reason: /near the vault note bound/ },
+  { id: 'survivor-prose-not-dropped', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'kept = survivor(true);', 'throw error;'),
+    args: focused('test/purge.test.ts'), reason: /without its prose/ },
 ];
 
 function run(label, args, success) {

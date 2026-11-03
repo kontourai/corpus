@@ -76,6 +76,7 @@ import {
   assertNotPurged,
   planPurge,
   survivorOf,
+  TOMBSTONE_SHAPES,
   tombstoneOf,
   validatePurgeInput,
 } from './shared/purge.js';
@@ -2063,6 +2064,26 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     }
   }
 
+  /**
+   * The fullest tombstone whose note fits the vault note bound. A tombstone keeps provenance and
+   * link ids that a note near the bound can be mostly made of, and nothing the host does to the
+   * record changes that, so unlike a survivor it is shortened instead of refusing the erasure.
+   */
+  private fittingTombstone(
+    record: KitRecord,
+    at: string,
+    evidence: PurgeEvidence,
+    via: string[] | undefined,
+    pathIndex: PathIndex,
+  ): KitRecord {
+    let stone = tombstoneOf(record, at, evidence, via);
+    for (const shape of TOMBSTONE_SHAPES) {
+      stone = tombstoneOf(record, at, evidence, via, shape);
+      if (Buffer.byteLength(this.renderNote(stone, pathIndex)) <= VAULT_NOTE_MAX_BYTES) break;
+    }
+    return stone;
+  }
+
   private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
     // `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and
     // path, so it would keep the erased titles. (The names are fixed by that command.)
@@ -2088,7 +2109,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     // Every tombstone moves before anything renders, so no survivor's generated
     // link section can still name an erased title.
     for (const id of [...plan.purged, ...plan.cascaded]) {
-      const stone = tombstoneOf(records.get(id)!, now, evidence, plan.via.get(id));
+      const stone = this.fittingTombstone(records.get(id)!, now, evidence, plan.via.get(id), pathIndex);
       const entry = pathIndex.by_id[id];
       const target = this.tombstonePath(id, pathIndex);
       this.files.remove(this.resolveStorePath(entry.path));
@@ -2102,13 +2123,23 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     }
     for (const [op, ids] of [['support-purged', plan.survivors], ['reference-purged', plan.referrers]] as const) {
       for (const id of ids) {
-        const kept = survivorOf(op, records.get(id)!, now, evidence, plan.erased, plan.lost.get(id)!);
+        const survivor = (compact: boolean) =>
+          survivorOf(op, records.get(id)!, now, evidence, plan.erased, plan.lost.get(id)!, compact);
+        let kept = survivor(false);
+        // The log entry and the re-render can grow a near-limit note past the bound that every
+        // identity scan reads with. Try the entry without its prose first. A survivor is the
+        // host's content, so beyond that the purge is refused rather than shortening it, and
+        // everything purge writes is staged, so a refusal writes nothing.
+        try {
+          this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });
+        } catch (error) {
+          if (!(error instanceof MissingEvidenceError)) throw error;
+          kept = survivor(true);
+          this.writeRecord(kept, pathIndex, { enforceNoteBound: `purge (record ${id}; shrink it, then purge again)` });
+        }
         // The graph mirrors link labels, so it follows the stripped labels.
         removeLinksFromGraph(graph, id);
         addLinksToGraph(graph, id, kept.links ?? []);
-        // The log entry and the re-render can grow a near-limit note past the bound that every
-        // identity scan reads with. Everything purge writes is staged, so a refusal writes nothing.
-        this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });
       }
     }
 

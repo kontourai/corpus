@@ -203,13 +203,53 @@ function auditEntry(
   };
 }
 
+/**
+ * How much of a tombstone's audit trail is kept. Erasure must always be possible, and a tombstone
+ * keeps provenance and link ids that a note near a size limit can be mostly made of, so the vault
+ * tries `full`, then `compact` (the purge entry without prose or `via`), then `minimal` (identity
+ * and the purge entry, with counts of what was dropped). The default layout has no such limit and
+ * always writes `full`.
+ */
+export type TombstoneShape = 'full' | 'compact' | 'minimal';
+export const TOMBSTONE_SHAPES: readonly TombstoneShape[] = ['full', 'compact', 'minimal'];
+
 /** The tombstone that replaces `record`. `via` is set for a cascaded record. */
 export function tombstoneOf(
   record: KitRecord,
   at: string,
   evidence: PurgeEvidence,
   via?: string[],
+  shape: TombstoneShape = 'full',
 ): KitRecord {
+  const cause = via ? 'sole-support-purged' : 'requested';
+  if (shape === 'minimal') {
+    return {
+      id: record.id,
+      type: record.type,
+      title: PURGED_TITLE,
+      body: '',
+      category: PURGED_CATEGORY,
+      status: 'purged',
+      created_at: record.created_at,
+      updated_at: at,
+      provenance: { agent: record.provenance.agent },
+      links: [],
+      mutation_log: [
+        {
+          op: 'purged',
+          at,
+          agent: evidence.agent,
+          evidence: {
+            cause,
+            compact: true,
+            omitted_source_ids: record.provenance.source_ids?.length ?? 0,
+            omitted_links: record.links?.length ?? 0,
+            omitted_log_entries: record.mutation_log?.length ?? 0,
+          },
+        },
+      ],
+    };
+  }
   const links: KitLink[] = (record.links ?? []).map(({ target_id, kind }) => ({ target_id, kind }));
   const { provenance } = record;
   return {
@@ -229,7 +269,9 @@ export function tombstoneOf(
     links,
     mutation_log: [
       ...(record.mutation_log ?? []).map(scrubEntry),
-      auditEntry('purged', at, evidence, via ? { cause: 'sole-support-purged', via } : { cause: 'requested' }),
+      shape === 'compact'
+        ? { op: 'purged', at, agent: evidence.agent, evidence: { cause, compact: true } }
+        : auditEntry('purged', at, evidence, via ? { cause, via } : { cause }),
     ],
   };
 }
@@ -248,6 +290,7 @@ export function survivorOf(
   evidence: PurgeEvidence,
   erased: ReadonlySet<string>,
   purgedIds: string[],
+  compact = false,
 ): KitRecord {
   return {
     ...record,
@@ -258,7 +301,10 @@ export function survivorOf(
     }),
     mutation_log: [
       ...(record.mutation_log ?? []).map((entry) => unlabelErased(entry, erased)),
-      auditEntry(op, at, evidence, { purged_ids: purgedIds }),
+      // `compact` drops the prose (rationale, note) for a note with no room for it.
+      compact
+        ? { op, at, agent: evidence.agent, evidence: { purged_ids: purgedIds, compact: true } }
+        : auditEntry(op, at, evidence, { purged_ids: purgedIds }),
     ],
   };
 }

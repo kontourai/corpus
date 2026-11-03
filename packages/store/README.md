@@ -108,10 +108,19 @@ silent behavior.
     reproductions.
     In a vault, a survivor or referrer is re-rendered and gains a log entry, which
     can grow a note that already sits near the vault note limit (16 MiB, see the
-    note-limit decision). A purge that would write any note past it is refused
-    with `MISSING_EVIDENCE` and writes nothing, so the erasure waits until the
-    host shrinks that note; the alternative, a note every later `create` cannot
-    scan past, is worse. Tombstones are small and stay far inside it.
+    note-limit decision), and every note a purge writes is held to that limit
+    because a note over it breaks each later `create`. A survivor is the host's
+    content, so the purge never shortens it: it first tries the entry without its
+    `rationale` and `note` (`compact: true`), and if even that does not fit it
+    refuses the whole purge with `MISSING_EVIDENCE`, names the record, and writes
+    nothing, so the erasure waits until the host shrinks that note. A tombstone is
+    different, because nothing the host does to a record changes what the
+    tombstone must keep, and erasure must always be possible. A tombstone that
+    would pass the limit (a note made mostly of provenance ids) falls back to a
+    `purged` entry without prose or `via` (`compact: true`), and then to identity
+    plus that entry with counts of what it dropped (`omitted_source_ids`,
+    `omitted_links`, `omitted_log_entries`). The default layout has no such limit
+    and always writes the full tombstone.
   - **A tombstone is permanent and read-only.** `update`, `link`, `propose`,
     `apply`, `reject`, `supersede` and `retire` refuse it with `PURGED`, so do
     new `source` links, `source_ids` and compiled sources that name it, and its
