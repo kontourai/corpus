@@ -54,6 +54,29 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   count. Only creation is checked: existing compiled records without a source
   stay readable, listable and updatable.
 
+- **A vault note is limited to 16 MiB.** The vault reads each note with a
+  16 MiB bound (`VAULT_NOTE_MAX_BYTES`, 16777216 bytes) when it checks a new
+  record's identity, so a larger note would make every later `create` fail.
+  `create` and `applyCreate` therefore refuse a record whose serialized note
+  (frontmatter plus the rendered body; a `raw` body grows by the callout
+  quoting) exceeds it, and `proposeCreate` refuses such a candidate up front.
+  The refusal is `MISSING_EVIDENCE`, and nothing is written: a refused
+  `applyCreate` leaves the proposal `pending`. `proposeCreate` sizes the note as
+  `applyCreate` would write it, including the first mutation-log entry with the
+  proposal's evidence, so large evidence counts. What is only known at apply
+  is stood in for by its largest form (the reviewer id with the largest YAML
+  expansion, the longest proposal id), and a link to the record itself renders
+  as its file name. In the tested cases the estimate was never below the
+  applied note and ran about 4 KiB above it for a plain reviewer, so a
+  candidate that close to the limit can be refused by `proposeCreate` that
+  `create` would accept. It is a margin, not a proof: a custom id generator
+  with ids longer than a UUID, a link that names the id `create` will generate,
+  or another record taking or renaming a destination or link target between
+  propose and apply, can still move the applied note. `applyCreate` is the authoritative check: a
+  proposal that passed can still be refused there for size, and then stays
+  `pending`. Only creation is checked: `update` and the other writes are
+  unchanged.
+
 - **A new record can be proposed, then applied or rejected (2026-11-03).**
   Decided by the delivery orchestrator under the owner's standing direction to
   deliver flow-agents#669–#673 ([corpus#40](https://github.com/kontourai/corpus/issues/40));
@@ -85,7 +108,8 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     A proposal over 16 MiB (less headroom for settlement), with blank evidence, or
     with an explicit id or a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
     accepted proposal can break `listProposals` or be left unsettleable. The size
-    of the record a proposal creates is `create`'s concern, not bounded here.
+    of the note the record becomes is checked too, as for `create` (see the vault
+    note limit above): `proposeCreate` refuses a candidate that would exceed it.
     Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
     is `pending`, `applied`, `rejected` or a list of them (omitted means all).
   - The create-proposal verbs are separate from the concept-proposal `apply` and
