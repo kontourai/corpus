@@ -300,6 +300,11 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     ['an unknown escape', '{"version":1,"transactionId":"a\\qb","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
     ['an escaped slash', '{"version":1,"transactionId":"a\\/b","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
     ['a raw newline', '{"version":1,"transactionId":"a\nb","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a long escape for a control that has a short one (\\u000a)', '{"version":1,"transactionId":"a\\u000ab","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a long escape for a tab (\\u0009)', '{"version":1,"transactionId":"a\\u0009b","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a long escape for a backspace in the operation (\\u0008)', '{"version":1,"transactionId":"a","operation":"pu\\u0008rge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a long escape for a form feed (\\u000c)', '{"version":1,"transactionId":"a\\u000cb","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
+    ['a long escape for a carriage return (\\u000d)', '{"version":1,"transactionId":"a\\u000db","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
     ['uppercase hex', '{"version":1,"transactionId":"a\\u000Ab","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
     ['an escaped surrogate pair', '{"version":1,"transactionId":"\\ud83d\\ude00","operation":"purge","phase":"prepared","entries":["USER-DATA"]}'],
   ])('a foreign file whose journal-like header uses %s is left alone', async (_name, content) => {

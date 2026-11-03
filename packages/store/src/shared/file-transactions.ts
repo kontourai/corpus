@@ -77,7 +77,8 @@ export function startsLikeJournal(text: string): boolean {
       const hex = text.slice(at + 2, at + 6);
       if (!/^[0-9a-f]{4}$/.test(hex)) return false;
       const unit = parseInt(hex, 16);
-      const control = unit < 0x20;
+      // JSON.stringify writes \b \t \n \f \r as short escapes and the rest of the controls as \u00xx.
+      const control = unit < 0x20 && ![0x08, 0x09, 0x0a, 0x0c, 0x0d].includes(unit);
       const surrogate = unit >= 0xd800 && unit <= 0xdfff;
       if (!control && !surrogate) return false;
       // Well-formed JSON.stringify escapes only a lone surrogate, never a pair.

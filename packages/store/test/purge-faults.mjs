@@ -103,6 +103,9 @@ const controls = [
   // Accept any escape sequence, as the old pattern did.
   { id: 'foreign-unknown-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "if (next !== 'u') return false;", "if (next !== 'u') { at += 2; continue; }"),
     args: focused('test/purge.test.ts'), reason: /left alone/ },
+  // Accept \u000a (and the other controls that have a short escape) as the long form.
+  { id: 'foreign-long-control-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, ' && ![0x08, 0x09, 0x0a, 0x0c, 0x0d].includes(unit)', ''),
+    args: focused('test/purge.test.ts'), reason: /left alone/ },
   // Accept a \\u escape for a character JSON.stringify would write raw.
   { id: 'foreign-needless-unicode-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (!control && !surrogate) return false;', ''),
     args: focused('test/purge.test.ts'), reason: /left alone/ },
