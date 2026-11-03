@@ -131,6 +131,32 @@ describe.each([
     await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
   });
 
+  test('partial content scrub retires its request digest and refuses reuse', async () => {
+    const input = candidate({ id: 'partial', links: [{ target_id: 'erased-source', kind: 'related', label: 'erased-label' }] });
+    const options = { requestKey: 'partial-request' };
+    const id = await store.proposeCreate(input, 'agent-a', evidence, options);
+    const internal = store as unknown as {
+      files: { mutate<T>(op: string, body: () => T): Promise<T> };
+      proposals: { get(id: string): Record<string, unknown>; write(value: Record<string, unknown>): void };
+    };
+    // Simulates #41's partial scrub: a label is removed without full erasure.
+    await internal.files.mutate('simulate-label-scrub', () => {
+      const proposal = internal.proposals.get(id);
+      internal.proposals.write({ ...proposal, candidate: { ...input, links: [{ target_id: 'erased-source', kind: 'related' }] } });
+    });
+    const path = join(root, '.corpus-proposals', `${id}.json`); const bytes = readFileSync(path, 'utf8'); const scrubbed = JSON.parse(bytes);
+    expect(scrubbed.request_key_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(scrubbed.request_key_retired).toBe(true);
+    expect(await store.getProposal(id)).toMatchObject({ request_key_retired: true });
+    expect(scrubbed).not.toHaveProperty('request_digest'); expect(scrubbed).not.toHaveProperty('request_digest_version');
+    expect(bytes).not.toContain('erased-label');
+    const before = tree(root);
+    for (const attempt of [input, { ...input, body: 'different' }]) {
+      expect(await code(store.proposeCreate(attempt, 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);

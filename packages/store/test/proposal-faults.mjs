@@ -53,13 +53,18 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'partial-scrub-retains-digest',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const contentChanged = proposal.request_digest !== undefined &&\n      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));", 'const contentChanged = false;') }],
+    checks: [{ label: 'unit', args: unit('partial content scrub'), failure: /request_key_retired|to be true/ }],
+  },
+  {
     name: 'erased-key-retry',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && Object.hasOwn(existing, 'erasure')) throw new RequestKeyConflictError();", "if (existing && Object.hasOwn(existing, 'erasure')) return existing.id;") }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError();", "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) return existing.id;") }],
     checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /REQUEST_KEY_CONFLICT/ }],
   },
   {
     name: 'erased-key-digest-retained',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'const serialized = erased ? { ...proposal, request_digest: undefined, request_digest_version: undefined } : proposal;', 'const serialized = proposal;') }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;', 'const serialized = proposal;') }],
     checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /request_digest/ }],
   },
   {

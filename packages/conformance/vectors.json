@@ -8794,6 +8794,181 @@
           "length": 1
         }
       ]
+    },
+    {
+      "id": "create-request-key-after-partial-scrub",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "A partial purge leaves a content digest or allows reuse of the affected request key.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "scrub-source",
+              "type": "raw",
+              "title": "source",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            }
+          ],
+          "save": "source"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$source"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$source"
+          ],
+          "save": "tombstone"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "scrubbed"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "changed",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "tombstone.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "scrubbed.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "scrubbed.candidate.links.0.label",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_key_retired",
+          "equals": true
+        },
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest_version",
+          "absent": true
+        }
+      ]
     }
   ]
 }

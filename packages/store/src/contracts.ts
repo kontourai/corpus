@@ -167,6 +167,8 @@ export interface KitCreateProposal {
   request_digest?: string;
   /** Digest algorithm and canonicalization version. */
   request_digest_version?: 1;
+  /** Content was scrubbed; the retained key cannot be reused. */
+  request_key_retired?: true;
   /** Set once the proposal is settled. */
   reviewer_id?: string;
   decided_at?: string; // ISO-8601

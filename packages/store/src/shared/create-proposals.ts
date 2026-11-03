@@ -152,7 +152,7 @@ export class CreateProposals {
     const existing = requestKeyHash ? this.list().find((proposal) => proposal.request_key_hash === requestKeyHash) : undefined;
     // Erased proposals retain only the key identity; do not compute or compare a
     // digest of the caller's content for a key whose proposal was erased.
-    if (existing && Object.hasOwn(existing, 'erasure')) throw new RequestKeyConflictError();
+    if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError();
     const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
     if (existing) {
       if (existing.request_digest !== requestDigest) throw new RequestKeyConflictError();
@@ -274,7 +274,12 @@ export class CreateProposals {
     // Purge (#41) writes an erasure marker through this shared seam. Never
     // persist a content-derived request digest alongside an erased proposal.
     const erased = Object.hasOwn(proposal, 'erasure');
-    const serialized = erased ? { ...proposal, request_digest: undefined, request_digest_version: undefined } : proposal;
+    // A partial purge can remove a link label without setting full erasure. If
+    // the hashed content changed, retire the key and drop the old digest too.
+    const contentChanged = proposal.request_digest !== undefined &&
+      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));
+    const retireKey = erased || proposal.request_key_retired === true || contentChanged;
+    const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;
     const text = `${JSON.stringify(serialized, null, 2)}\n`;
     if (Buffer.byteLength(text) > maxBytes) {
       throw new MissingEvidenceError(`create proposal exceeds ${maxBytes} bytes`);
@@ -337,11 +342,15 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if (!isRecord(value)) throw corrupt('not an object');
   if (value.id !== id) throw corrupt('id does not match its filename');
   const erased = Object.hasOwn(value, 'erasure');
+  if (value.request_key_retired !== undefined && value.request_key_retired !== true) throw corrupt('invalid retired request key');
+  if (value.request_key_retired === true && value.request_key_hash === undefined) throw corrupt('retired request key has no identity');
   if (erased) {
     const erasure = value.erasure;
     if (!isRecord(erasure) || !isNonemptyString(erasure.agent) || !isNonemptyString(erasure.rationale) ||
         !isNonemptyString(erasure.at) || !Number.isFinite(Date.parse(erasure.at)) ||
         (erasure.note !== undefined && typeof erasure.note !== 'string')) throw corrupt('erasure is invalid');
+  }
+  if (erased || value.request_key_retired === true) {
     if (value.request_digest !== undefined || value.request_digest_version !== undefined) throw corrupt('erased proposal retains request digest');
     if (value.request_key_hash !== undefined && (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash))) throw corrupt('invalid request key metadata');
   } else {
