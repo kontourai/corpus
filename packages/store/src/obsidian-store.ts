@@ -1,3 +1,4 @@
+import { scaffoldRootBinding } from './root-binding.js';
 /**
  * Station-owned Kit-format adapter with an Obsidian vault layout.
  * Disk layout, external-edit behavior, and the original H1/M1/M2 regression
@@ -415,6 +416,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
   private readonly services: ResolvedServices;
   private readonly root: string;
+  private readonly binding: string;
   private readonly sourcesDir: string;
   private readonly dimensions: readonly string[];
   private readonly graphPath: string;
@@ -440,11 +442,14 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     this.kitV1PathIndexPath = join(this.root, KIT_V1_PATH_INDEX_FILE);
     this.aliasPath = join(this.root, 'alias-index.json');
     mkdirSync(this.root, { recursive: true });
+    this.binding = scaffoldRootBinding(this.root);
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
   }
+
+  rootBinding(): string { return this.binding; }
 
   // ── Internal: path index (id -> {path, archived}) ─────────────────────────
 

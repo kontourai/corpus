@@ -185,6 +185,7 @@ export type KnowledgeStoreErrorCode =
   | 'SLUG_CONFLICT'
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
+  | 'ROOT_BINDING_MISMATCH'
   /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
    * Kit contract has no notion of a non-writing adapter, so this code is not part

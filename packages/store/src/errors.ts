@@ -33,6 +33,11 @@ export class SelfApprovalError extends Error {
   }
 }
 
+export class RootBindingMismatchError extends Error {
+  readonly code = 'ROOT_BINDING_MISMATCH' as const;
+  constructor() { super('adapter is not bound to the authorized root'); this.name = 'RootBindingMismatchError'; }
+}
+
 export class AmbiguousIdError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'AMBIGUOUS_ID';
   readonly matches: string[];
@@ -107,6 +112,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof AmbiguousIdError ||
     error instanceof SlugConflictError ||
     error instanceof SelfApprovalError ||
+    error instanceof RootBindingMismatchError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||
     error instanceof KnowledgeStoreCorruptionError ||

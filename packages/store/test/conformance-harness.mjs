@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dump, load } from 'js-yaml';
-import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
 
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
@@ -49,6 +49,22 @@ export async function makeHarness(profile) {
     return result;
   }
   const specials = {
+    async 'root-binding'({ operation }) {
+      if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
+      if (operation.mode === 'alias') {
+        const alias = join(base, 'alias'); await symlink(root, alias);
+        assertAdapterBoundTo(adapter, alias);
+      }
+      if (operation.mode === 'mismatch') {
+        const other = join(base, 'other'); createStore(profile, other, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, other), { code: 'ROOT_BINDING_MISMATCH' });
+      }
+      if (operation.mode === 'rescaffold') {
+        await rm(root, { recursive: true, force: true }); createStore(profile, root, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, root), { code: 'ROOT_BINDING_MISMATCH' });
+      }
+      return { check: true };
+    },
     async 'body-not-frontmatter'({ values }) {
       const text = await readFile(await recordPath(profile, root, values.a), 'utf8');
       const end = text.indexOf('\n---\n', 4);

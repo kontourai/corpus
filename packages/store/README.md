@@ -311,3 +311,7 @@ The same identity is required on the construction-free observation port. Hosts
 with a runtime-home resolver must additionally check that resolver against the
 captured home. Record data remains identical on re-read; whitespace/style may
 normalize except for the approved top-level lossy plain tokens.
+
+### Owner decision: adapter root binding (2026-11-03)
+
+The orchestrator decided in [#47](https://github.com/kontourai/corpus/issues/47), subject to owner override, that each bundled adapter exposes `rootBinding()` and a host may call `assertAdapterBoundTo(adapter, root)` to compare it with its authorized root. A mismatch throws `ROOT_BINDING_MISMATCH`. The binding hashes the canonical root path and a random identity marker scaffolded in the root. Symlink aliases resolve to the same binding; a newly scaffolded root at the same path has a different identity. The helper only compares identity: the host owns root authorization and tenancy, and Corpus performs no ambient discovery.

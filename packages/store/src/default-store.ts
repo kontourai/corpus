@@ -1,3 +1,4 @@
+import { scaffoldRootBinding } from './root-binding.js';
 /**
  * Station-owned implementation of the Knowledge Kit's published file format:
  * records/<id>.md with graph and alias indexes. No Kit-private imports.
@@ -81,6 +82,7 @@ export interface KitDefaultStoreOptions extends StoreOptions {}
 export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
   private readonly services: ResolvedServices;
   private readonly root: string;
+  private readonly binding: string;
   private readonly recordsDir: string;
   private readonly graphPath: string;
   private readonly aliasPath: string;
@@ -95,11 +97,14 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     this.graphPath = join(this.root, 'graph-index.json');
     this.aliasPath = join(this.root, 'alias-index.json');
     mkdirSync(this.recordsDir, { recursive: true });
+    this.binding = scaffoldRootBinding(this.root);
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
   }
+
+  rootBinding(): string { return this.binding; }
 
   // ── Internal: record file access ─────────────────────────────────────────
 
