@@ -75,9 +75,14 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     `rejected` with its rationale and creates nothing. A proposer may reject
     (withdraw) its own proposal. Only a `pending` proposal can be applied or
     rejected; a settled one is refused with `MISSING_EVIDENCE`.
-  - Proposals are stored under `<storeRoot>/proposals/`, outside every record
+  - Proposals are stored under `<storeRoot>/.corpus-proposals/`, outside every record
     path, index and list, so pending and rejected proposals are never in the
     working set, `get`, `getLinks` or `reindex`, with or without `includeHistory`.
+    The directory's dot name cannot be a category, so a vault may still keep
+    notes in a `proposals` category, and the vault's record scans skip it, so
+    retained proposals never count toward their entry bounds. A proposal larger
+    than 16 MiB, or with blank evidence, is refused when proposed, so no accepted
+    proposal can break `listProposals`.
     Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
     is `pending`, `applied`, `rejected` or a list of them (omitted means all).
   - `apply` and `reject` keep their concept-proposal meaning, which takes

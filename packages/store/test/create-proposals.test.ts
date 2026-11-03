@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -242,11 +242,48 @@ describe.each([
       ['no evidence', () => store.proposeCreate(candidate(), 'agent-a', undefined as never)],
       ['no evidence agent', () => store.proposeCreate(candidate(), 'agent-a', { agent: '', proposal: 'x' })],
       ['blank evidence proposal', () => store.proposeCreate(candidate(), 'agent-a', { agent: 'a', proposal: '  ' })],
+      ['blank evidence agent', () => store.proposeCreate(candidate(), 'agent-a', { agent: ' ', proposal: 'x' })],
+      ['non-string evidence', () => store.proposeCreate(candidate(), 'agent-a', { agent: 1 as never, proposal: 'x' })],
+      ['inherited required field', () => store.proposeCreate(Object.assign(Object.create({ title: 'inherited' }), { ...candidate(), title: undefined }), 'agent-a', evidence)],
     ];
     for (const [label, run] of cases) expect([label, await code(run())]).toEqual([label, 'MISSING_EVIDENCE']);
     await store.create(candidate({ id: 'existing' }));
     expect(await code(store.proposeCreate(candidate({ id: 'existing' }), 'agent-a', evidence))).toBe('MISSING_EVIDENCE');
     expect(await store.listProposals()).toEqual([]);
+  });
+
+  test('a proposal too large to read back is refused up front, so the queries keep working', async () => {
+    const kept = await store.proposeCreate(candidate({ id: 'kept' }), 'agent-a', evidence);
+    const huge = candidate({ id: 'huge', body: 'a'.repeat(16 * 1024 * 1024) });
+    expect(await code(store.proposeCreate(huge, 'agent-a', evidence))).toBe('MISSING_EVIDENCE');
+    expect((await store.listProposals()).map((p) => p.id)).toEqual([kept]);
+    // The largest proposal that is accepted can still be applied.
+    const large = await store.proposeCreate(candidate({ id: 'large', body: 'a'.repeat(16 * 1024 * 1024 - 100 * 1024) }), 'agent-a', evidence);
+    expect(await store.apply(large, 'reviewer')).toBe('large');
+    expect((await store.getProposal(large))?.state).toBe('applied');
+  });
+
+  test('an inherited freshness field is not part of the candidate, as for create', async () => {
+    const inherited = Object.assign(Object.create({ ttl_seconds: 30 }), candidate());
+    await store.create(Object.assign(Object.create({ ttl_seconds: 30 }), candidate({ id: 'direct' })));
+    const proposalId = await store.proposeCreate(inherited, 'agent-a', evidence);
+    expect((await store.getProposal(proposalId))?.candidate).not.toHaveProperty('ttl_seconds');
+    await store.apply(proposalId, 'reviewer');
+    expect(await store.get('proposed-record')).not.toHaveProperty('ttl_seconds');
+    expect(await store.get('direct')).not.toHaveProperty('ttl_seconds');
+  });
+
+  test('a category named proposals coexists with proposals, and record writes do not walk them', async () => {
+    await store.create(candidate({ id: 'in-category', category: 'proposals' }));
+    const proposalId = await store.proposeCreate(candidate({ id: 'next', category: 'proposals' }), 'agent-a', evidence);
+    expect(await store.apply(proposalId, 'reviewer')).toBe('next');
+    expect((await store.listByCategory('proposals')).map((r) => r.id).sort()).toEqual(['in-category', 'next']);
+    // The vault's record scans must not walk the proposals directory, whose size is
+    // unbounded. A walk refuses a symlink, so one planted there proves it is skipped.
+    symlinkSync(join(base, 'elsewhere'), join(root, '.corpus-proposals', 'walk-trap'));
+    expect(await store.create(candidate({ id: 'after-trap', category: 'proposals' }))).toBe('after-trap');
+    const another = await store.proposeCreate(candidate({ id: 'another', category: 'proposals' }), 'agent-a', evidence);
+    expect(await store.apply(another, 'reviewer')).toBe('another');
   });
 
   test('apply and reject refuse an unknown proposal, a blank reviewer and a blank rationale', async () => {
@@ -291,7 +328,7 @@ describe.each([
 
   test('a corrupt proposal file is refused, not skipped', async () => {
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
-    const path = join(root, 'proposals', `${proposalId}.json`);
+    const path = join(root, '.corpus-proposals', `${proposalId}.json`);
     const stored = JSON.parse(readFileSync(path, 'utf8'));
     for (const broken of ['{not json', JSON.stringify({ ...stored, id: 'other' }), JSON.stringify({ ...stored, state: 'applied' }), JSON.stringify({ ...stored, state: 'weird' })]) {
       writeFileSync(path, broken);

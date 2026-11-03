@@ -644,9 +644,10 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
   // ── apply (§6.5) ───────────────────────────────────────────────────────
 
-  apply(conceptId: string, proposerId: string, evidence: ApplyEvidence): Promise<void>;
   /** Apply a create proposal; see `KnowledgeStoreCreateProposals.apply`. */
   apply(proposalId: string, reviewerId: string): Promise<string>;
+  // The concept form stays last: `Parameters<typeof store.apply>` selects the last overload.
+  apply(conceptId: string, proposerId: string, evidence: ApplyEvidence): Promise<void>;
   async apply(
     first: string,
     second: string,
@@ -718,9 +719,9 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
   // ── reject (§6.6) ──────────────────────────────────────────────────────
 
-  reject(conceptId: string, proposerId: string, evidence: RejectEvidence): Promise<void>;
   /** Reject a create proposal; see `KnowledgeStoreCreateProposals.reject`. */
   reject(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
+  reject(conceptId: string, proposerId: string, evidence: RejectEvidence): Promise<void>;
   async reject(
     first: string,
     second: string,

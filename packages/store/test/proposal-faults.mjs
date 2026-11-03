@@ -76,7 +76,22 @@ const injections = [
     ],
     checks: [
       { label: 'unit', args: unit('outside the working set'), failure: /to not include 'pending-record'/ },
-      { label: 'vector', args: vectors('create-proposal-working-set-exclusion', 'create-proposal-apply'), failure: /"id": "create-proposal-working-set-exclusion",\s+"error": "Expected values to be strictly deep-equal/ },
+      { label: 'vector', args: vectors('create-proposal-working-set-exclusion'), failure: /"id": "create-proposal-working-set-exclusion",\s+"passed": false,\s+"error": "Expected values to be strictly deep-equal/ },
+    ],
+  },
+  {
+    // The vault's identity scans must skip the proposals directory (unbounded, not records).
+    name: 'vault-scan',
+    files: [{
+      file: 'src/obsidian-store.ts',
+      mutate: (s) => {
+        const from = "if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);";
+        assert.equal(s.split(from).length, 3, 'both scans carry the skip');
+        return s.split(from).join('directories.push(path);');
+      },
+    }],
+    checks: [
+      { label: 'unit', args: unit('record writes do not walk them'), failure: /Knowledge directory contains a symlink/ },
     ],
   },
 ];

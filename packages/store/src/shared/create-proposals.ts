@@ -1,7 +1,7 @@
 /**
  * Create proposals (owner decision, 2026-11-03): a staged request to create a record.
  *
- * A proposal lives in `<storeRoot>/proposals/<id>.json`, outside every place a
+ * A proposal lives in `<storeRoot>/.corpus-proposals/<id>.json`, outside every place a
  * record lives, so no read, list, index or working-set path can see it. It holds the
  * whole candidate until `apply` creates the record in the caller's transaction.
  * Both profiles share this module; each supplies its own `createLocked`.
@@ -28,11 +28,17 @@ import { assertCreateFields } from './create-input.js';
 import { freshnessPatch } from './freshness.js';
 import type { KnowledgeFileTransactions } from './file-transactions.js';
 
-export const PROPOSALS_DIRECTORY = 'proposals';
+/**
+ * Dot-named so it can never be a category directory (categories match `[a-z0-9_-]+`):
+ * a vault may hold ordinary notes in a `proposals` category.
+ */
+export const PROPOSALS_DIRECTORY = '.corpus-proposals';
 export const PROPOSAL_STATES: readonly CreateProposalState[] = ['pending', 'applied', 'rejected'];
 /** The mutation-log op the created record carries (see `applyOrigin`). */
 export const APPLY_CREATE_OP = 'apply-create';
 const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
+/** Room left for the fields `apply` and `reject` add, so a proposal that fits can always be settled. */
+const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
 const CANDIDATE_KEYS = [
   'id', 'type', 'title', 'body', 'category', 'tags', 'aliases', 'links',
   'provenance', 'expires_at', 'ttl_seconds',
@@ -90,18 +96,19 @@ export class CreateProposals {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
     }
-    if (!evidence?.agent) {
+    if (!isNonemptyString(evidence?.agent)) {
       throw new MissingEvidenceError('proposeCreate: missing required evidence field: agent');
     }
-    if (!evidence?.proposal?.trim()) {
+    if (!isNonemptyString(evidence?.proposal)) {
       throw new MissingEvidenceError('proposeCreate: missing required evidence field: proposal');
     }
     if (!isRecord(candidate)) {
       throw new MissingEvidenceError('proposeCreate: candidate must be an object');
     }
-    assertCreateFields(candidate as unknown as CreateInput, 'proposeCreate');
-    freshnessPatch(candidate as unknown as CreateInput);
+    // Validate what is stored, so apply sees exactly the candidate that was checked.
     const stored = cloneCandidate(candidate as unknown as CreateInput);
+    assertCreateFields(stored, 'proposeCreate');
+    freshnessPatch(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a
     // type error and an id already taken are caught early.
     if (stored.id !== undefined) {
@@ -119,14 +126,17 @@ export class CreateProposals {
     }
     if (this.get(id)) throw new MissingEvidenceError('proposeCreate: proposal id already exists');
 
-    this.write({
-      id,
-      state: 'pending',
-      candidate: stored,
-      proposer_id: proposerId,
-      evidence: { agent: evidence.agent, proposal: evidence.proposal },
-      proposed_at: new Date(this.services.clock()).toISOString(),
-    });
+    this.write(
+      {
+        id,
+        state: 'pending',
+        candidate: stored,
+        proposer_id: proposerId,
+        evidence: { agent: evidence.agent, proposal: evidence.proposal },
+        proposed_at: new Date(this.services.clock()).toISOString(),
+      },
+      MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
+    );
     return id;
   }
 
@@ -188,15 +198,21 @@ export class CreateProposals {
     return value;
   }
 
-  private write(proposal: KitCreateProposal): void {
-    this.files.writeText(this.pathOf(proposal.id), `${JSON.stringify(proposal, null, 2)}\n`);
+  /** Refuses a proposal the reader would not load, so one accepted proposal cannot break the queries. */
+  private write(proposal: KitCreateProposal, maxBytes = MAX_PROPOSAL_BYTES): void {
+    const text = `${JSON.stringify(proposal, null, 2)}\n`;
+    if (Buffer.byteLength(text) > maxBytes) {
+      throw new MissingEvidenceError(`proposeCreate: proposal exceeds ${maxBytes} bytes`);
+    }
+    this.files.writeText(this.pathOf(proposal.id), text);
   }
 }
 
 function cloneCandidate(candidate: CreateInput): CreateInput {
   const source = candidate as unknown as Record<string, unknown>;
+  // Own properties only, as `create` reads them: an inherited field is not part of the candidate.
   const projected = Object.fromEntries(
-    CANDIDATE_KEYS.filter((key) => source[key] !== undefined).map((key) => [key, source[key]]),
+    CANDIDATE_KEYS.filter((key) => Object.hasOwn(source, key) && source[key] !== undefined).map((key) => [key, source[key]]),
   );
   try {
     return JSON.parse(JSON.stringify(projected)) as CreateInput;

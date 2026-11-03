@@ -43,7 +43,7 @@ import {
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { assertCreateFields } from './shared/create-input.js';
-import { CreateProposals } from './shared/create-proposals.js';
+import { CreateProposals, PROPOSALS_DIRECTORY } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
@@ -491,7 +491,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         if (++entries > CREATE_IDENTITY_MAX_ENTRIES) return true;
         const path = join(directory, entry.name);
         if (entry.kind === 'directory') {
-          directories.push(path);
+          // Proposals are not records, and their number is unbounded.
+          if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);
           continue;
         }
         if (!entry.name.toLowerCase().endsWith('.md')) continue;
@@ -1171,7 +1172,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
           );
         const path = join(directory, entry.name);
         if (entry.kind === 'directory') {
-          directories.push(path);
+          // Proposals are not records, and their number is unbounded.
+          if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);
           continue;
         }
         if (!entry.name.toLowerCase().endsWith('.md')) continue;
@@ -1548,9 +1550,10 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── apply (§6.5) ───────────────────────────────────────────────────────
 
-  apply(conceptId: string, proposerId: string, evidence: ApplyEvidence): Promise<void>;
   /** Apply a create proposal; see `KnowledgeStoreCreateProposals.apply`. */
   apply(proposalId: string, reviewerId: string): Promise<string>;
+  // The concept form stays last: `Parameters<typeof store.apply>` selects the last overload.
+  apply(conceptId: string, proposerId: string, evidence: ApplyEvidence): Promise<void>;
   async apply(
     first: string,
     second: string,
@@ -1624,9 +1627,9 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── reject (§6.6) ──────────────────────────────────────────────────────
 
-  reject(conceptId: string, proposerId: string, evidence: RejectEvidence): Promise<void>;
   /** Reject a create proposal; see `KnowledgeStoreCreateProposals.reject`. */
   reject(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
+  reject(conceptId: string, proposerId: string, evidence: RejectEvidence): Promise<void>;
   async reject(
     first: string,
     second: string,

@@ -64,7 +64,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   console.log(run(process.execPath, ['conformance.mjs'], js));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
+import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type KnowledgeStoreCreateProposals, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -84,6 +84,12 @@ function invalidConfigurations(): void {
   new KitObsidianStoreAdapter({ storeRoot: resolve('invalid-vault'), lock });
 }
 void invalidConfigurations;
+// The concept-proposal forms keep their meaning for utility types; the create-proposal forms are additional.
+const conceptApply: Parameters<KitDefaultStoreAdapter['apply']> = ['target', 'proposer', { agent: 'a', new_body: 'b', rationale: 'r' }];
+const conceptReject: Parameters<KitObsidianStoreAdapter['reject']> = ['target', 'proposer', { agent: 'a', reason: 'r' }];
+const proposals: KnowledgeStoreCreateProposals[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
+const proposalId: Promise<string> = proposals[0].proposeCreate({ type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'consumer' } }, 'proposer', { agent: 'consumer', proposal: 'p' });
+void conceptApply; void conceptReject; void proposalId;
 void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
 `);
   run(process.execPath, [join(ts, 'node_modules/typescript/bin/tsc'), '--outDir', 'compiled', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--target', 'ES2022', 'probe.ts'], ts);
