@@ -10,6 +10,7 @@ import type {
   KitRecord,
   KitRecordType,
 } from '../contracts.js';
+import { validSourceRefs } from './source-refs.js';
 import { isRecord } from '../is-record.js';
 import { KnowledgeStoreCorruptionError } from '../errors.js';
 
@@ -80,6 +81,7 @@ export function assertKitRecord(
   ) {
     invalid('provenance.agent is required');
   }
+  if (isRecord(record.provenance) && record.provenance.source_refs !== undefined && !validSourceRefs(record.provenance.source_refs)) invalid('invalid provenance.source_refs');
   if (
     !isNonemptyString(record.created_at) ||
     !Number.isFinite(Date.parse(record.created_at))

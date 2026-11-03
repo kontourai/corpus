@@ -110,6 +110,21 @@ describe('vault note size bound', () => {
     expect(existsSync(join(root, '.corpus-proposals'))).toBe(false);
   }, 120_000);
 
+  test('keyed proposal note sizing includes structured source references', async () => {
+    const vault = open();
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 'x'.repeat(4096) };
+    const body = 'a\n'.repeat(3_950_000);
+    const large = candidate({ body, provenance: { agent: 'tester', source_refs: Array.from({ length: 256 }, () => ref) } });
+    const options = { requestKey: 'source-size' }; const evidence = { agent: 'distiller', proposal: 'add it' };
+    const before = tree(root);
+    const error = await failure(vault.proposeCreate(large, 'proposer', evidence, options));
+    expect(error).toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringMatching(/^proposeCreate: .*limited to 16777216 bytes/) });
+    expect(tree(root)).toEqual(before);
+    const withoutRefs = candidate({ body });
+    const receipt = await vault.proposeCreate(withoutRefs, 'proposer', evidence, options);
+    expect(await vault.proposeCreate(withoutRefs, 'proposer', evidence, options)).toBe(receipt);
+  }, 120_000);
+
   test('keyed proposals enforce the same note bound before reserving the key', async () => {
     const vault = open();
     const before = tree(root);

@@ -144,10 +144,14 @@ export class CreateProposals {
     // Validate the candidate as read, then again as stored: JSON turns NaN into null, and
     // apply must see exactly the candidate that was checked.
     const projected = projectCandidate(candidate as unknown as CreateInput);
-    assertCreateFields(projected, 'proposeCreate');
+    const sourceRefs = assertCreateFields(projected, 'proposeCreate');
+    if (sourceRefs !== undefined) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };
     freshnessPatch(projected);
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
+    if (JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs)) {
+      throw new MissingEvidenceError('proposeCreate: provenance serialization changed source_refs');
+    }
     freshnessPatch(stored);
     // Purge reads a candidate's provenance and links to decide what rests on what, and
     // `create` would quietly turn a number into text. A proposal states them as text.

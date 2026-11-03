@@ -1173,7 +1173,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     input: CreateInput,
     origin?: (at: string) => KitMutationLogEntry,
   ): string {
-    assertCreateFields(input, 'create');
+    const sourceRefs = assertCreateFields(input, 'create');
 
     const id = input.id || this.services.ids();
     const pathIndex = this.loadPathIndex();
@@ -1199,7 +1199,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     assertNoPurgedSupport('create', links, input.provenance.source_ids, lookup);
     assertCompiledSource(input.type, links, lookup);
 
-    const record = this.newRecord(input, id, now, aliases, links, fresh, origin);
+    const record = this.newRecord(input, id, now, aliases, links, fresh, sourceRefs, origin);
 
     this.writeRecord(record, pathIndex, { enforceNoteBound: 'create' });
     this.savePathIndex(pathIndex);
@@ -1221,6 +1221,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     aliases: string[],
     links: KitLink[],
     fresh: ReturnType<typeof freshnessPatch>,
+    sourceRefs: ReturnType<typeof assertCreateFields>,
     origin?: (at: string) => KitMutationLogEntry,
   ): KitRecord {
     return {
@@ -1242,6 +1243,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         ...(input.provenance.source_ids?.length
           ? { source_ids: input.provenance.source_ids }
           : {}),
+        ...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),
         ...(input.provenance.note ? { note: input.provenance.note } : {}),
       },
       links,
@@ -1290,6 +1292,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       aliases,
       links,
       freshnessPatch(candidate),
+      assertCreateFields(candidate, 'proposeCreate'),
       () => origin,
     );
     this.assertNoteFits(this.renderNote(record, pathIndex), 'proposeCreate');

@@ -42,6 +42,7 @@
     "verify:pack": "node test/packed-consumers.mjs",
     "proof:faults": "node test/fault-injection.mjs",
     "proof:proposals": "node test/proposal-faults.mjs",
+    "proof:source-refs": "node test/source-ref-faults.mjs",
     "proof:round1": "node test/round1-faults.mjs",
     "proof:round2": "node test/round2-faults.mjs",
     "compare:station": "node test/station-byte-comparison.mjs",

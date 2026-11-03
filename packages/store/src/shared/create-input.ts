@@ -1,6 +1,7 @@
-import type { CreateInput } from '../contracts.js';
+import type { CreateInput, KitSourceRef } from '../contracts.js';
 import { MissingEvidenceError } from '../errors.js';
 import { isValidCategory } from './category.js';
+import { copySourceRefs } from './source-refs.js';
 import { VALID_TYPES } from './record-schema.js';
 
 /**
@@ -10,7 +11,7 @@ import { VALID_TYPES } from './record-schema.js';
  * State-dependent checks (id collisions, slug conflicts, link targets) stay in
  * each adapter's create path, because they depend on the records present at apply.
  */
-export function assertCreateFields(input: CreateInput, op: string): void {
+export function assertCreateFields(input: CreateInput, op: string): KitSourceRef[] | undefined {
   if (!input.type) {
     throw new MissingEvidenceError(`${op}: missing required field: type`);
   }
@@ -31,9 +32,12 @@ export function assertCreateFields(input: CreateInput, op: string): void {
   if (!isValidCategory(input.category)) {
     throw new MissingEvidenceError(`${op}: invalid category: ${input.category}`);
   }
+  const refs = input.provenance?.source_refs === undefined ? undefined : copySourceRefs(input.provenance.source_refs);
+  if (refs === null) throw new MissingEvidenceError(`${op}: invalid provenance.source_refs`);
   if (!input.provenance?.agent) {
     throw new MissingEvidenceError(
       `${op}: missing required provenance field: provenance.agent`,
     );
   }
+  return refs;
 }

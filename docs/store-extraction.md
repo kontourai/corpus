@@ -506,3 +506,28 @@ Key metadata is retained in the proposal file and counts toward its serialized
 size limit; it is not copied into the created note.
 The vault note-size check still runs before a new keyed proposal is staged; a
 refusal leaves the key available, and a matching settled retry returns its receipt.
+
+The [structured source-reference decision](https://github.com/kontourai/corpus/issues/46)
+adds optional `provenance.source_refs` to create inputs. Session transcript
+references carry bounded, validated attribution through proposal storage and
+record creation. They neither authorize transcript access nor constitute review
+evidence; `note` remains free text. Both store profiles run the source-reference
+survival and validation conformance vectors. Validation copies reference objects
+before persistence, including arrays with inherited serialization hooks; it refuses
+serialization that adds, removes or changes references. It rejects sparse arrays
+and prevents shared caller objects from
+generating excessive YAML aliases, while preserving aliases in unrelated fields.
+Keyed retries bind the references: changed or omitted attribution conflicts.
+The source-reference purge-scrub vector passes against real purge in both profiles.
+Pending proposals, cascaded records and all tombstone shapes also drop the field;
+the separate in-flight purge-journal expected failure remains.
+
+Validation snapshots the reference-array length before copying so a changing
+proxy cannot bypass the 256-entry bound.
+
+Hand-edited vault frontmatter reads plain scalars in source-reference string
+fields as strings, like other store string fields.
+
+The vault's proposal-size estimate serializes validated `source_refs` with the
+candidate, so attribution bytes count toward the note bound before a keyed or
+unkeyed proposal is staged. The apply path enforces the final note bound again.

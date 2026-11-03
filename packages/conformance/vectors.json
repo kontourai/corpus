@@ -12001,6 +12001,3512 @@
           "absent": true
         }
       ]
+    },
+    {
+      "id": "source-refs-survive",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Source attribution is lost or malformed source references are accepted.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ref-record",
+              "type": "raw",
+              "title": "title",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "example",
+                    "session_id": "s1",
+                    "transcript_ref": "opaque",
+                    "sitting_id": "sit1",
+                    "range": {
+                      "start": 1,
+                      "end": 7
+                    }
+                  }
+                ],
+                "note": "free text"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "pending"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "pending.candidate.provenance.source_refs",
+          "equals": [
+            {
+              "kind": "session-transcript",
+              "harness": "example",
+              "session_id": "s1",
+              "transcript_ref": "opaque",
+              "sitting_id": "sit1",
+              "range": {
+                "start": 1,
+                "end": 7
+              }
+            }
+          ]
+        },
+        {
+          "ref": "record.provenance.source_refs",
+          "equals": [
+            {
+              "kind": "session-transcript",
+              "harness": "example",
+              "session_id": "s1",
+              "transcript_ref": "opaque",
+              "sitting_id": "sit1",
+              "range": {
+                "start": 1,
+                "end": 7
+              }
+            }
+          ]
+        },
+        {
+          "ref": "record.provenance.note",
+          "equals": "free text"
+        }
+      ]
+    },
+    {
+      "id": "source-refs-validation",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Source attribution is lost or malformed source references are accepted.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ref-record",
+              "type": "raw",
+              "title": "title",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "example",
+                    "session_id": "s1",
+                    "transcript_ref": "opaque",
+                    "sitting_id": "sit1",
+                    "range": {
+                      "start": 1,
+                      "end": 7
+                    },
+                    "unexpected": "x"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "source-refs-boundaries",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Invalid source reference kinds, strings, or ranges are accepted.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "unknown",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "p"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "unknown",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t"
+                  }
+                ]
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "  ",
+                    "session_id": "s",
+                    "transcript_ref": "t"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "p"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "  ",
+                    "session_id": "s",
+                    "transcript_ref": "t"
+                  }
+                ]
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "sitting_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "p"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "sitting_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  }
+                ]
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 0,
+                      "end": 2
+                    }
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "p"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 0,
+                      "end": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 9007199254740992
+                    }
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "p"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "invalid-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 9007199254740992
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "source-refs-boundaries-accepted",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Valid boundary-length source references or equal range endpoints are refused.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "source-boundaries-ok",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
+                    "session_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  },
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "t",
+                    "range": {
+                      "start": 1,
+                      "end": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "save": "id"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$id"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.provenance.source_refs",
+          "length": 256
+        },
+        {
+          "ref": "record.provenance.source_refs.0.range",
+          "equals": {
+            "start": 1,
+            "end": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "source-refs-keyed-retry",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "A keyed retry silently drops changed source attribution.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-1"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-1"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "save": "retry"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-2"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "retry",
+          "equals": "$p"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        }
+      ]
+    },
+    {
+      "id": "source-refs-purge-scrub",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Purged record or proposal retains transcript attribution.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-ref-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "sensitive-ref",
+                    "sitting_id": "sit"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-erasure"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$r"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ],
+          "save": "purged"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "tombstone"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "scrubbed"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-ref-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "sensitive-ref",
+                    "sitting_id": "sit"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-erasure"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "purged.proposalsScrubbed",
+          "length": 1
+        },
+        {
+          "ref": "purged.proposalsScrubbed.0",
+          "equals": "$p"
+        },
+        {
+          "ref": "tombstone.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "tombstone.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_key_retired",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "source-refs-empty-vs-absent",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Empty source references are treated as absent during keyed retries.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-empty",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": []
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "empty-first"
+            }
+          ],
+          "save": "p0"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-empty",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "empty-first"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-empty",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "absent-first"
+            }
+          ],
+          "save": "p1"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-empty",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": []
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "absent-first"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 2
+        }
+      ]
     }
   ]
 }

@@ -169,6 +169,37 @@ describe.each([
     expect((await store.getProposal(id))?.request_digest).toBe('58ebe4238514a655424b6bba85d879e3fb39ffed0c3e822adad098d3becacc67');
   });
 
+  test('structured source refs reject a changing array length', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    const target = Array.from({ length: 300 }, () => ref);
+    let lengthReads = 0;
+    const refs = new Proxy(target, { get(array, key, receiver) { return key === 'length' ? (++lengthReads === 1 ? 1 : 300) : Reflect.get(array, key, receiver); } });
+    const before = tree(root);
+    expect(await code(store.create(candidate({ id: 'changing-length', provenance: { agent: 'writer', source_refs: refs } })))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+    expect(await store.listByType('raw')).toEqual([]);
+  });
+
+  test('structured source refs snapshot length even if a proxy hides indices', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    const target = Array.from({ length: 300 }, () => ref);
+    let lengthReads = 0;
+    const refs = new Proxy(target, {
+      ownKeys() { return ['0', 'length']; },
+      get(array, key, receiver) { return key === 'length' ? (++lengthReads === 1 ? 1 : 300) : Reflect.get(array, key, receiver); },
+    });
+    const id = await store.create(candidate({ id: 'hidden-indices', provenance: { agent: 'writer', source_refs: refs } }));
+    expect((await store.get(id))?.provenance.source_refs).toEqual([ref]);
+    expect(await store.listByType('raw')).toHaveLength(1);
+  });
+
+  test('structured source refs reject class instances with valid own fields', async () => {
+    class Ref { kind = 'session-transcript' as const; harness = 'h'; session_id = 's'; transcript_ref = 't'; }
+    const before = tree(root);
+    expect(await code(store.create(candidate({ id: 'class-ref', provenance: { agent: 'writer', source_refs: [new Ref()] } })))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
@@ -208,6 +239,145 @@ describe.each([
     if (mode === 'after') expect(receipt).toBe('crash-2');
     expect((await store.listProposals()).map((proposal) => proposal.id)).toEqual([receipt]);
     expect(await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' })).toBe(receipt);
+  });
+
+  test('direct create safely stores shared reference objects and rejects sparse or inherited shapes', async () => {
+    const range = { start: 1, end: 2 };
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't', range };
+    const refs = Array.from({ length: 60 }, () => ref);
+    await store.create(candidate({ id: 'shared-refs', provenance: { agent: 'writer', source_refs: refs } }));
+    expect((await store.get('shared-refs'))?.provenance.source_refs).toEqual(refs);
+    const sharedNote = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: shared-refs'))?.[1];
+    expect(sharedNote).toBeDefined(); expect(sharedNote).not.toMatch(/&ref_\d+|\*ref_\d+/);
+    await store.create(candidate({ id: 'unrelated' }));
+    const sparse = new Array(1);
+    const inherited = Object.assign(Object.create({ kind: 'session-transcript' }), { harness: 'h', session_id: 's', transcript_ref: 't' });
+    const hidden = { ...ref }; Object.defineProperty(hidden, 'kind', { value: 'session-transcript', enumerable: false });
+    const customJson = [ref]; Object.defineProperty(customJson, 'toJSON', { value: () => [], enumerable: false });
+    for (const invalid of [sparse, [inherited], [hidden], customJson]) {
+      const before = tree(root);
+      const bad = candidate({ id: 'invalid-ref', provenance: { agent: 'writer', source_refs: invalid } });
+      expect(await code(store.create(bad))).toBe('MISSING_EVIDENCE');
+      expect(await code(store.proposeCreate(bad, 'writer', evidence))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
+  test('proposal stores the validated copy even when the array inherits toJSON', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    class Refs extends Array<typeof ref> { toJSON() { return []; } }
+    const refs = new Refs(ref);
+    const input = candidate({ id: 'inherited-array', provenance: { agent: 'writer', source_refs: refs } });
+    const id = await store.proposeCreate(input, 'writer', evidence);
+    expect((await store.getProposal(id))?.candidate.provenance.source_refs).toEqual([ref]);
+    await store.applyCreate(id, 'reviewer');
+    expect((await store.get('inherited-array'))?.provenance.source_refs).toEqual([ref]);
+    const deceptive = { agent: 'writer', source_refs: [ref], toJSON() { return { agent: 'writer', source_refs: [] }; } };
+    const before = tree(root);
+    expect(await code(store.proposeCreate(candidate({ id: 'deceptive', provenance: deceptive }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+    const injected = { agent: 'writer', toJSON() { return { agent: 'writer', source_refs: [ref] }; } };
+    expect(await code(store.proposeCreate(candidate({ id: 'injected', provenance: injected }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    let reads = 0;
+    const changing = { agent: 'writer', get source_refs() { return reads++ === 0 ? undefined : [ref]; } };
+    expect(await code(store.proposeCreate(candidate({ id: 'changing', provenance: changing }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+  });
+
+  test('keyed retries bind structured source references', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 'ref-1' };
+    const input = candidate({ id: 'keyed-source', provenance: { agent: 'writer', source_refs: [ref] } });
+    const options = { requestKey: 'source-ref-key' };
+    const id = await store.proposeCreate(input, 'writer', evidence, options);
+    const before = tree(root);
+    expect(await store.proposeCreate(input, 'writer', evidence, options)).toBe(id);
+    for (const provenance of [{ agent: 'writer', source_refs: [{ ...ref, transcript_ref: 'ref-2' }] }, { agent: 'writer' }]) {
+      expect(await code(store.proposeCreate(candidate({ id: 'keyed-source', provenance }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
+  test('keyed retry with omitted source references conflicts without writes', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 'ref-1' };
+    const options = { requestKey: 'omit-source-ref' };
+    await store.proposeCreate(candidate({ id: 'omit-ref', provenance: { agent: 'writer', source_refs: [ref] } }), 'writer', evidence, options);
+    const before = tree(root);
+    expect(await code(store.proposeCreate(candidate({ id: 'omit-ref', provenance: { agent: 'writer' } }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+  });
+
+  test('empty and omitted source references are distinct for keyed retries', async () => {
+    for (const [key, initial, retry] of [
+      ['empty-first', { source_refs: [] }, {}],
+      ['absent-first', {}, { source_refs: [] }],
+    ] as const) {
+      const options = { requestKey: key };
+      await store.proposeCreate(candidate({ id: 'empty-vs-absent', provenance: { agent: 'writer', ...initial } }), 'writer', evidence, options);
+      const before = tree(root);
+      expect(await code(store.proposeCreate(candidate({ id: 'empty-vs-absent', provenance: { agent: 'writer', ...retry } }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
+  test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'é'.repeat(2048), session_id: 'x'.repeat(4096), transcript_ref: 't', sitting_id: undefined, range: undefined };
+    const withBoundary = { ...ref, range: { start: 1, end: 1 } };
+    const refs = Array.from({ length: 256 }, () => withBoundary);
+    const input = candidate({ id: 'boundary', provenance: { agent: 'writer', source_refs: refs } });
+    await store.create(input);
+    expect((await store.get('boundary'))?.provenance.source_refs).toEqual(refs.map(({ sitting_id: _sitting, ...rest }) => rest));
+    const proposal = await store.proposeCreate(candidate({ id: 'undefined-optionals', provenance: { agent: 'writer', source_refs: [ref] } }), 'writer', evidence);
+    expect((await store.getProposal(proposal))?.candidate.provenance.source_refs).toEqual([{ kind: ref.kind, harness: ref.harness, session_id: ref.session_id, transcript_ref: ref.transcript_ref }]);
+    expect(await code(store.create(candidate({ id: 'too-many-bytes', provenance: { agent: 'writer', source_refs: [{ ...withBoundary, harness: 'é'.repeat(2049) }] } })))).toBe('MISSING_EVIDENCE');
+  });
+
+  test('updating a record with shared YAML aliases keeps bounded serialized size', async () => {
+    await store.create(candidate({ id: 'yaml-alias-record' }));
+    const file = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: yaml-alias-record'))?.[0];
+    expect(file).toBeDefined(); const path = join(root, file!);
+    const original = readFileSync(path, 'utf8');
+    let extra = '\nanchor_0: &alias_0 [x]';
+    for (let n = 1; n <= 14; n++) extra += `\nanchor_${n}: &alias_${n} [*alias_${n - 1}, *alias_${n - 1}]`;
+    writeFileSync(path, original.replace('\n---\n', `${extra}\n---\n`));
+    await store.update('yaml-alias-record', { tags: ['updated'] }, { agent: 'writer' });
+    expect(Buffer.byteLength(readFileSync(path))).toBeLessThan(20000);
+    expect((await store.get('yaml-alias-record'))?.tags).toContain('updated');
+  });
+
+  test('structured source refs survive staging and creation and reject invalid shapes', async () => {
+    const refs = [{ kind: 'session-transcript' as const, harness: 'harness', session_id: 's-1', transcript_ref: 'opaque-ref', sitting_id: 'sit-1', range: { start: 1, end: 7 } }];
+    const input = candidate({ provenance: { agent: 'writer', source_refs: refs, note: 'free text' } });
+    const id = await store.proposeCreate(input, 'writer', evidence);
+    expect((await store.getProposal(id))?.candidate.provenance.source_refs).toEqual(refs);
+    await store.applyCreate(id, 'reviewer');
+    expect((await store.get('proposed-record'))?.provenance.source_refs).toEqual(refs);
+    for (const invalid of [
+      [{ ...refs[0], extra: 'no' }], [{ ...refs[0], kind: 'future' }],
+      [{ ...refs[0], harness: 'x'.repeat(4097) }], [{ ...refs[0], range: { start: 4, end: 3 } }],
+      [{ ...refs[0], range: { start: 1, end: 2, extra: true } }],
+      [{ ...refs[0], range: { start: 0, end: 2 } }], [{ ...refs[0], range: { start: 1, end: Number.MAX_SAFE_INTEGER + 1 } }],
+      [{ ...refs[0], harness: '   ' }], [{ ...refs[0], sitting_id: 'x'.repeat(4097) }],
+      Array.from({ length: 257 }, () => refs[0]),
+    ]) {
+      const bad = candidate({ id: 'invalid', provenance: { agent: 'writer', source_refs: invalid as never } });
+      const before = tree(root);
+      expect(await code(store.proposeCreate(bad, 'writer', evidence))).toBe('MISSING_EVIDENCE');
+      expect(await code(store.create(bad))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
+  test('invalid source refs on disk are reported as corrupt provenance', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'marker', session_id: 's', transcript_ref: 't' };
+    await store.create(candidate({ id: 'bad-source-read', provenance: { agent: 'writer', source_refs: [ref] } }));
+    const file = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: bad-source-read'))?.[0];
+    expect(file).toBeDefined();
+    const path = join(root, file!);
+    const text = readFileSync(path, 'utf8');
+    expect(text).toContain('harness: marker');
+    writeFileSync(path, text.replace('harness: marker', 'harness: [invalid]'));
+    await expect(store.get('bad-source-read')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError', message: expect.stringContaining('provenance.source_refs') });
+    await expect(store.listByType('raw')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
   });
 
   test('pending and rejected proposals are outside the working set and every ordinary read', async () => {
