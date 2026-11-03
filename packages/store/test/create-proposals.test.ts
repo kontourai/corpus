@@ -309,6 +309,8 @@ describe.each([
     try { await store.proposeCreate(candidate({ id: 'bound', body }), 'agent-a', evidence, { requestKey: 'bound-key' }); } catch (error) { failure = error; }
     expect(failure).toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringContaining('create proposal exceeds') });
     expect(tree(root)).toEqual(before);
+    const unkeyed = await store.proposeCreate(candidate({ id: 'bound', body }), 'agent-a', evidence);
+    expect((await store.getProposal(unkeyed))?.candidate.body.length).toBe(body.length);
     const retry = await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' });
     expect(await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' })).toBe(retry);
   }, 120_000);
