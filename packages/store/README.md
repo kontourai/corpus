@@ -118,7 +118,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     root it authorized. A CLI default remains a CLI concern. A vault opened
     read-only (`kit-v1`) refuses `proposeCreate`, `applyCreate` and `rejectCreate`
     with `READ_ONLY`.
-  - Not covered: `purge` does not erase proposals, so a host that purges a
+  - Purge integration is not implemented or verified here. A host that purges a
     record must also decide what to do with proposals that carry its content.
 
 Every decision is implemented, and the expected-fail list is empty.
@@ -341,7 +341,7 @@ normalize except for the approved top-level lossy plain tokens.
 
 ### Owner decision: create request keys (2026-11-03)
 
-The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in any state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key digest and proposal share one transaction and are retained with the proposal, including after rejection or record purge. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be nonempty and at most 1024 UTF-8 bytes.
+The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in any state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key digest and proposal share one transaction and are retained with the proposal, including after rejection; retention after record purge is not yet verified. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must not be empty or whitespace-only and are limited to 1024 UTF-8 bytes.
 
 Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.
 
