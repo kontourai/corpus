@@ -53,6 +53,14 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'request-key-well-formed',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "Buffer.from(key, 'utf8').toString('utf8') !== key", 'false') }],
+    checks: [
+      { label: 'unit', args: unit('request key limits'), failure: /MISSING_EVIDENCE/ },
+      { label: 'vector', args: vectors('create-request-key-limits'), failure: /proposeCreate must reject/ },
+    ],
+  },
+  {
     name: 'request-key-whitespace',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '!key.trim()', 'false') }],
     checks: [

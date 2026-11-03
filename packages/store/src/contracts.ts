@@ -313,7 +313,7 @@ export interface KnowledgeStoreCreateProposals {
    * `proposerId` is an identity, not a record id. Put session, transcript and
    * source references in `candidate.provenance`: they become the created record's
    * provenance on `applyCreate`. An optional requestKey is store-wide, nonempty
-   * and not whitespace-only, with a 1024 UTF-8 byte limit. Matching retries return
+   * and not whitespace-only, must be well-formed Unicode, with a 1024 UTF-8 byte limit. Matching retries return
    * the original ID in any state; differing input refuses REQUEST_KEY_CONFLICT.
    * A corrupt retained proposal makes keyed lookup fail with KnowledgeStoreCorruptionError.
    */
