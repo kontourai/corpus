@@ -442,3 +442,10 @@ cannot be written, refusal of corrupt proposal files, a read-only vault, and tha
 no path outside the supplied root is touched. `npm run proof:proposals` injects
 faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
+
+The [structured source-reference decision](https://github.com/kontourai/corpus/issues/46)
+adds optional `provenance.source_refs` to create inputs. Session transcript
+references carry bounded, validated attribution through proposal storage and
+record creation. They neither authorize transcript access nor constitute review
+evidence; `note` remains free text. Both store profiles run the source-reference
+survival and validation conformance vectors.
