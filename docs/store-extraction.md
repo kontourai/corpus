@@ -473,8 +473,8 @@ proposer and evidence returns the original proposal ID, including after
 settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
 The key digest and input digest are retained with the proposal in the same
 transaction, including after rejection; retention after record purge is not yet
-verified. Four `create-request-key-*` vectors exercise retries, conflicts,
-rejection and unkeyed calls in both profiles. The proposal tests also check that
+verified. Five `create-request-key-*` vectors exercise retries, conflicts,
+rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the
 original receipt.
 

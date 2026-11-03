@@ -89,6 +89,19 @@ describe.each([
     expect(await store.listByType('raw')).toEqual([]);
   });
 
+  test('request key limits reject whitespace and count UTF-8 bytes', async () => {
+    const before = tree(root);
+    for (const requestKey of ['', '   ', '\t\n', 'x'.repeat(1025), 'é'.repeat(513)]) {
+      expect(await code(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey }))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+    for (const requestKey of ['x'.repeat(1024), 'é'.repeat(512)]) {
+      const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey });
+      expect(await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey })).toBe(id);
+    }
+    expect(await store.listProposals()).toHaveLength(2);
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);

@@ -53,6 +53,22 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'request-key-whitespace',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '!key.trim()', 'false') }],
+    checks: [
+      { label: 'unit', args: unit('request key limits'), failure: /MISSING_EVIDENCE/ },
+      { label: 'vector', args: vectors('create-request-key-limits'), failure: /proposeCreate must reject/ },
+    ],
+  },
+  {
+    name: 'request-key-utf8-bytes',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'Buffer.byteLength(key) > 1024', 'key.length > 1024') }],
+    checks: [
+      { label: 'unit', args: unit('request key limits'), failure: /MISSING_EVIDENCE/ },
+      { label: 'vector', args: vectors('create-request-key-limits'), failure: /proposeCreate must reject/ },
+    ],
+  },
+  {
     name: 'request-key-version',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "  if (value.request_key_hash !== undefined && value.request_digest_version !== 1) throw corrupt('missing or unsupported request digest version');\n", '') }],
     checks: [{ label: 'unit', args: unit('keyed requests fail closed'), failure: /promise resolved/ }],

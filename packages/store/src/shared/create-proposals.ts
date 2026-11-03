@@ -146,7 +146,7 @@ export class CreateProposals {
     freshnessPatch(stored);
     const key = options?.requestKey;
     if (key !== undefined && (typeof key !== 'string' || !key.trim() || Buffer.byteLength(key) > 1024)) {
-      throw new MissingEvidenceError('proposeCreate: requestKey must be a non-empty string of at most 1024 bytes');
+      throw new MissingEvidenceError('proposeCreate: requestKey must not be empty or whitespace-only and must be at most 1024 UTF-8 bytes');
     }
     const requestKeyHash = key === undefined ? undefined : hash(key);
     const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
