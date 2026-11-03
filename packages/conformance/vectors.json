@@ -8745,7 +8745,7 @@
           "clause": "Owner decision: adapter root binding (2026-11-03)"
         }
       ],
-      "regression": "An adapter is accepted for a different authorized root.",
+      "regression": "A symlinked alias of the authorized root is falsely rejected.",
       "production_seam": false,
       "operations": [
         {
@@ -8775,6 +8775,30 @@
         {
           "special": "root-binding",
           "mode": "rescaffold"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-legacy",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "Legacy roots are silently modified or initialization changes an existing binding.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "legacy"
         }
       ],
       "expected": [

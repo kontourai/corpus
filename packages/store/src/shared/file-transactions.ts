@@ -841,11 +841,14 @@ export class KnowledgeFileTransactions {
 export function scaffoldNewRootIdentity(root: string): void {
   const temporary = join(root, `.corpus-root-id-${randomBytes(16).toString('hex')}.tmp`);
   try {
-    writeFileSync(temporary, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
+    const fd = openSync(temporary, 'wx', 0o600);
+    try { writeFileSync(fd, randomBytes(32).toString('hex')); fsyncSync(fd); } finally { closeSync(fd); }
     try { linkSync(temporary, join(root, '.corpus-root-id')); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
   } finally {
     try { unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const fd = openSync(root, constants.O_RDONLY);
+    try { fsyncSync(fd); } finally { closeSync(fd); }
   }
 }

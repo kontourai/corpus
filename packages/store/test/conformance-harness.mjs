@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dump, load } from 'js-yaml';
-import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
 
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
@@ -51,6 +51,19 @@ export async function makeHarness(profile) {
   const specials = {
     async 'root-binding'({ operation }) {
       if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
+      if (operation.mode === 'legacy') {
+        const legacy = join(base, 'legacy'); await mkdir(legacy);
+        const unbound = createStore(profile, legacy, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(unbound, legacy), { code: 'ROOT_BINDING_MISMATCH' });
+        await assert.rejects(readFile(join(legacy, '.corpus-root-id')), { code: 'ENOENT' });
+        const options = { storeRoot: legacy, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+        await initializeRootBinding(options); const bound = createStore(profile, legacy, coordinationDirectory);
+        const before = bound.rootBinding(); const bytes = await readFile(join(legacy, '.corpus-root-id'), 'utf8');
+        await initializeRootBinding(options);
+        assert.equal(await readFile(join(legacy, '.corpus-root-id'), 'utf8'), bytes);
+        assert.equal(createStore(profile, legacy, coordinationDirectory).rootBinding(), before);
+        assertAdapterBoundTo(bound, legacy);
+      }
       if (operation.mode === 'alias') {
         const alias = join(base, 'alias'); await symlink(root, alias);
         assertAdapterBoundTo(adapter, alias);

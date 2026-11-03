@@ -472,4 +472,5 @@ adds a host-verifiable adapter binding based on a canonical root and a scaffolde
 identity marker. Both profiles have match, mismatch, alias and re-scaffolding
 vectors. Existing unmarked roots require explicit initialization before a new
 adapter can attest them; this preserves legacy vault reads without writing to
-the vault. The host still authorizes the root.
+the vault. The host still authorizes the root. Initialization is an explicit host-authorized
+write, even for a kit-v1 vault; it does not enable record mutation there.

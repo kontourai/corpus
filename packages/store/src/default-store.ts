@@ -102,7 +102,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     mkdirSync(this.recordsDir, { recursive: true });
     if (newRoot) scaffoldNewRootIdentity(this.root);
     try { this.binding = captureRootBinding(this.root); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    catch { /* An unreadable marker leaves the adapter unbound; records remain readable. */ }
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);

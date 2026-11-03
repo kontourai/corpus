@@ -3,7 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import type { StoreOptions } from './services.js';
 import { join } from 'node:path';
-import { RootBindingMismatchError } from './errors.js';
+import type { KnowledgeStoreAdapter, RootBoundAdapter } from './contracts.js';
+import { KnowledgeStoreCorruptionError, RootBindingMismatchError } from './errors.js';
 
 const MARKER = '.corpus-root-id';
 
@@ -18,22 +19,30 @@ function marker(root: string): string {
   } finally { closeSync(fd); }
 }
 function binding(root: string): string {
-  const canonical = realpathSync(root);
+  const canonical = realpathSync.native(root);
   return createHash('sha256').update(JSON.stringify([canonical, marker(canonical)])).digest('hex');
 }
 /** Explicitly initialize an existing unbound root under the host's transaction lock. */
 export async function initializeRootBinding(options: StoreOptions): Promise<void> {
   const files = new KnowledgeFileTransactions(options.storeRoot, {}, options);
-  await files.mutate('initializeRootBinding', () => {
-    const path = join(options.storeRoot, MARKER);
-    if (files.readText(path, 64) === null) files.writeText(path, randomBytes(32).toString('hex'));
-  });
-  binding(options.storeRoot); // validate existing and newly written markers
+  try {
+    await files.mutate('initializeRootBinding', () => {
+      const path = join(options.storeRoot, MARKER);
+      if (files.readText(path, 64) === null) files.writeText(path, randomBytes(32).toString('hex'));
+      else { try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); } }
+    });
+    try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); }
+  } catch (error) {
+    if (error instanceof KnowledgeStoreCorruptionError) throw new RootBindingMismatchError();
+    throw error;
+  }
 }
 export function captureRootBinding(root: string): string { return binding(root); }
 /** Read-only comparison against a host-authorized root; this does not authorize the root. */
-export function assertAdapterBoundTo(adapter: { rootBinding(): string }, root: string): void {
+export function assertAdapterBoundTo(adapter: KnowledgeStoreAdapter, root: string): asserts adapter is RootBoundAdapter;
+export function assertAdapterBoundTo(adapter: { rootBinding(): string }, root: string): void;
+export function assertAdapterBoundTo(adapter: KnowledgeStoreAdapter | { rootBinding(): string }, root: string): void {
   let expected: string;
   try { expected = binding(root); } catch { throw new RootBindingMismatchError(); }
-  if (!adapter || typeof adapter.rootBinding !== 'function' || adapter.rootBinding() !== expected) throw new RootBindingMismatchError();
+  if (!adapter || !('rootBinding' in adapter) || typeof adapter.rootBinding !== 'function' || adapter.rootBinding() !== expected) throw new RootBindingMismatchError();
 }

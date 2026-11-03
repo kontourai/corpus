@@ -225,6 +225,11 @@ export interface KnowledgeStoreError extends Error {
   matches?: string[];
 }
 
+/** A store that exposes an opaque binding for host composition. */
+export interface RootBoundAdapter extends KnowledgeStoreAdapter {
+  rootBinding(): string;
+}
+
 // ── Adapter contract (store-contract.md §8 + Addendum A.6/B.5, Addendum H) ─
 
 /**
