@@ -452,3 +452,8 @@ transaction. Four `create-request-key-*` vectors exercise retries, conflicts,
 rejection and unkeyed calls in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the
 original receipt.
+
+The keyed recovery tests crash before and after publication, verify the prepared
+journal is resolved, and pin the original receipt after the complete after-image.
+Keyed corruption checks fail closed; `proof:proposals` includes replayable key
+conflict, duplicate retry, corrupt-neighbour and recovery injections.

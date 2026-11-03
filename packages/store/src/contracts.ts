@@ -291,7 +291,9 @@ export interface KnowledgeStoreCreateProposals {
    * required fields as `create`, and `evidence` needs `agent` and `proposal`.
    * `proposerId` is an identity, not a record id. Put session, transcript and
    * source references in `candidate.provenance`: they become the created record's
-   * provenance on `applyCreate`.
+   * provenance on `applyCreate`. An optional requestKey is store-wide, nonempty
+   * and at most 1024 UTF-8 bytes. Matching retries return the original ID in any
+   * state; differing candidate, proposer or evidence refuses REQUEST_KEY_CONFLICT.
    */
   proposeCreate(
     candidate: CreateInput,
