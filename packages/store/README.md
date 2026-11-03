@@ -83,7 +83,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     count or read the `.json` files there, so retained proposals never reach
     their entry bounds; anything else placed in that directory is still scanned.
     A proposal over 16 MiB (less headroom for settlement), with blank evidence, or
-    with a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
+    with an explicit id or a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
     accepted proposal can break `listProposals` or be left unsettleable. The size
     of the record a proposal creates is `create`'s concern, not bounded here.
     Read them with `getProposal(id)` and `listProposals({ state })`, where `state`

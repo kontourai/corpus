@@ -39,8 +39,10 @@ export const APPLY_CREATE_OP = 'apply-create';
 const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
 /** Room left for the fields `apply` and `reject` add, so a proposal that fits can always be settled. */
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
-/** Caps on what settlement adds, so the headroom above always holds (reviewer id, then rationale). */
+/** Caps on what settlement adds (reviewer id, rationale, record id), so the headroom above always holds. */
 const MAX_REVIEWER_BYTES = 1024;
+/** An explicit candidate id lands in the settled proposal as `record_id`. */
+const MAX_CANDIDATE_ID_BYTES = 1024;
 const MAX_RATIONALE_BYTES = 16 * 1024;
 const serializedBytes = (value: string) => Buffer.byteLength(JSON.stringify(value));
 const CANDIDATE_KEYS = [
@@ -125,6 +127,9 @@ export class CreateProposals {
     if (stored.id !== undefined) {
       if (typeof stored.id !== 'string' || stored.id === '') {
         throw new MissingEvidenceError('proposeCreate: candidate id must be a non-empty string');
+      }
+      if (serializedBytes(stored.id) > MAX_CANDIDATE_ID_BYTES) {
+        throw new MissingEvidenceError(`proposeCreate: candidate id exceeds ${MAX_CANDIDATE_ID_BYTES} bytes`);
       }
       if (recordExists(stored.id)) {
         throw new MissingEvidenceError('proposeCreate: record id already exists');

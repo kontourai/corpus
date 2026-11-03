@@ -317,6 +317,13 @@ describe.each([
     expect((await store.getProposal(proposalId))?.state).toBe('rejected');
   });
 
+  test('an explicit candidate id is capped, so the settled proposal always fits', async () => {
+    expect(await code(store.proposeCreate(candidate({ id: 'i'.repeat(2000) }), 'agent-a', evidence))).toBe('MISSING_EVIDENCE');
+    const proposalId = await store.proposeCreate(
+      candidate({ id: 'i'.repeat(150), body: 'a'.repeat(16 * 1024 * 1024 - 64 * 1024 - 2000) }), 'agent-a', evidence);
+    expect(await store.apply(proposalId, 'r'.repeat(1000))).toBe('i'.repeat(150));
+  });
+
   test('apply and reject refuse an unknown proposal, a blank reviewer and a blank rationale', async () => {
     expect(await code(store.apply('no-such-proposal', 'reviewer'))).toBe('NOT_FOUND');
     expect(await code(store.reject('no-such-proposal', 'reviewer', 'why'))).toBe('NOT_FOUND');
