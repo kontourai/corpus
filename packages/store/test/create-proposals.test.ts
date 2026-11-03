@@ -111,11 +111,19 @@ describe.each([
     expect(await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' })).toBe(rejected);
   });
 
-  test('keyed proposal recovers after a crash during publication', async () => {
-    const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/keyed-proposal-crash.ts', import.meta.url)), base, _profile], { encoding: 'utf8', timeout: 30_000 });
-    expect(child.status, child.stderr).toBe(99);
+  test.each(['before', 'after'] as const)('keyed proposal recovers after a crash %s publication', async (mode) => {
+    const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/keyed-proposal-crash.ts', import.meta.url)), base, _profile, mode], { encoding: 'utf8', timeout: 30_000 });
+    expect(child.status, child.stderr).toBe(mode === 'before' ? 98 : 99);
+    const journal = join(root, '.station-knowledge-transaction.json');
+    expect(JSON.parse(readFileSync(journal, 'utf8'))).toMatchObject({ phase: 'prepared', operation: 'proposeCreate' });
+    const proposalPath = join(root, '.corpus-proposals', 'crash-2.json');
+    expect(existsSync(proposalPath)).toBe(mode === 'after');
+    const recovered = await store.listProposals();
+    expect(recovered.map((proposal) => proposal.id)).toEqual(mode === 'before' ? [] : ['crash-2']);
+    expect(existsSync(journal)).toBe(false);
     const input = candidate({ id: 'crash-record', title: 'Crash', body: 'body', provenance: { agent: 'writer' } });
     const receipt = await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' });
+    if (mode === 'after') expect(receipt).toBe('crash-2');
     expect((await store.listProposals()).map((proposal) => proposal.id)).toEqual([receipt]);
     expect(await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' })).toBe(receipt);
   });
@@ -429,6 +437,27 @@ describe.each([
       await expect(store.getProposal(proposalId)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
       await expect(store.listProposals()).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
     }
+  });
+
+  test('keyed requests fail closed on corrupt neighbours and invalid metadata', async () => {
+    const options = { requestKey: 'metadata-key' };
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const stored = JSON.parse(readFileSync(path, 'utf8'));
+    expect(stored.request_digest_version).toBe(1);
+    for (const broken of [
+      '{bad json', JSON.stringify({ ...stored, request_digest: 'invalid' }),
+      JSON.stringify({ ...stored, request_digest_version: 2 }),
+      JSON.stringify({ ...stored, request_key_hash: undefined, request_digest: undefined }),
+    ]) {
+      writeFileSync(path, broken);
+      const before = tree(root);
+      await expect(store.proposeCreate(candidate(), 'agent-a', evidence, options)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      await expect(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'new-key' })).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      expect(tree(root)).toEqual(before);
+    }
+    writeFileSync(path, '{bad json');
+    expect(await store.proposeCreate(candidate(), 'agent-a', evidence)).not.toBe(id);
   });
 
   test('the store writes only under the root it was given and the host coordination directory', async () => {
