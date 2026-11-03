@@ -238,6 +238,46 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     }
   });
 
+  test('a healthy store stays purgeable: whitespace agents and null optional fields are accepted by proposeCreate, so purge must accept them', async () => {
+    await raw('src');
+    await raw('unrelated');
+    const blank = await store.proposeCreate(candidate([], { provenance: { agent: ' ' } }), 'proposer-1', proposal());
+    await store.applyCreate(blank, 'reviewer-1');
+    const nulls = await store.proposeCreate(
+      candidate(['src'], { links: null as never, provenance: { agent: 'drafter', source_ids: null as never } }),
+      'proposer-1',
+      proposal(),
+    );
+    await expect(store.purge(['unrelated'], evidence)).resolves.toMatchObject({ purged: ['unrelated'] });
+    // The null-field candidate has no support, so a purge of src leaves it alone.
+    await expect(store.purge(['src'], evidence)).resolves.toMatchObject({ proposalsRejected: [] });
+    expect((await store.getProposal(nulls))?.state).toBe('pending');
+  });
+
+  test('an erasure marker is trusted only over exactly what a purge writes', async () => {
+    await raw('src');
+    await raw('other');
+    const id = await store.proposeCreate(
+      candidate(['src'], { tags: ['secret-tag'], aliases: ['team/secret'], links: [{ target_id: 'other', kind: 'related', label: 'Secret label' }] }),
+      'proposer-1',
+      proposal(),
+    );
+    await store.rejectCreate(id, 'reviewer-1', 'Reviewer prose NEEDLE-REVIEW');
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const original = JSON.parse(readFileSync(path, 'utf8')) as Record<string, any>;
+    const partial = {
+      ...original,
+      erasure: { at: new Date().toISOString(), agent: 'x', rationale: 'y' },
+      evidence: { agent: 'drafter', proposal: '[purged]' },
+      candidate: { ...original.candidate, title: '[purged]', body: '' },
+    };
+    writeFileSync(path, JSON.stringify(partial));
+    const before = everything(root);
+    await expect(store.purge(['src'], evidence)).rejects.toThrow(/corrupt/);
+    expect(everything(root)).toBe(before);
+    expect((await store.get('src'))?.status).toBe('active');
+  });
+
   test('a candidate id counts as support like any other id once a record has it', async () => {
     const id = await store.proposeCreate(candidate(['future'], { id: 'future' }), 'proposer-1', proposal());
     await store.create({ id: 'future', type: 'raw', title: 'f', body: 'f', category: 'engineering', provenance: { agent: 'creator' } });

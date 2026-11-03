@@ -130,6 +130,10 @@ const controls = [
     args: focused('test/purge-proposals.test.ts'), reason: /stored shape purge cannot judge/ },
   { id: 'purge-bounds-raw-bytes', file: purge, mutate: (s) => swap(s, 'Buffer.byteLength(JSON.stringify(value)) <= limit', 'Buffer.byteLength(value) <= limit'),
     args: focused('test/purge-proposals.test.ts'), reason: /bounded as JSON/ },
+  { id: 'proposal-marker-trusted', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (!settled) throw corrupt('an erased proposal is not what a purge writes');", ''),
+    args: focused('test/purge-proposals.test.ts'), reason: /trusted only over exactly what a purge writes/ },
+  { id: 'proposal-agent-trimmed', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "typeof provenance.agent !== 'string' || provenance.agent === ''", "typeof provenance.agent !== 'string' || provenance.agent.trim() === ''"),
+    args: focused('test/purge-proposals.test.ts'), reason: /healthy store stays purgeable/ },
 ];
 
 function run(label, args, success) {

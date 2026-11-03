@@ -7,6 +7,7 @@
  * Both profiles share this module; each supplies its own `createLocked`.
  */
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   CreateInput,
   PurgeEvidence,
@@ -322,25 +323,39 @@ function projectCandidate(candidate: CreateInput): CreateInput {
  * Purge decides from the candidate's provenance and links and trusts a stored `erasure`
  * marker, so a proposal that does not have the shape those decisions need stops the purge
  * instead of being skipped: a skipped proposal would keep erased content readable.
+ *
+ * The shape is what `proposeCreate` and `create` accept, not more: an agent is any non-empty
+ * string, and a null or missing `links` or `source_ids` is empty. An erased proposal must be
+ * exactly what `erase` writes, field for field, so a marker laid over retained content is
+ * corrupt rather than trusted.
  */
 function assertErasable(proposal: KitCreateProposal): void {
   const corrupt = (reason: string) =>
     new KnowledgeStoreCorruptionError(`create proposal ${proposal.id} is corrupt: ${reason}`);
   const { candidate } = proposal;
   const provenance = candidate.provenance as unknown;
-  if (!isRecord(provenance) || !isNonemptyString(provenance.agent)) throw corrupt('candidate provenance is invalid');
+  if (!isRecord(provenance) || typeof provenance.agent !== 'string' || provenance.agent === '') {
+    throw corrupt('candidate provenance is invalid');
+  }
   const sourceIds = provenance.source_ids;
-  if (sourceIds !== undefined && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
+  if (sourceIds != null && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
     throw corrupt('candidate source_ids are invalid');
   }
   const links = candidate.links as unknown;
-  if (links !== undefined && (!Array.isArray(links) || links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string'))) {
+  if (links != null && (!Array.isArray(links) || links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string'))) {
     throw corrupt('candidate links are invalid');
   }
   if (typeof candidate.type !== 'string') throw corrupt('candidate type is invalid');
-  if (proposal.erasure && (candidate.title !== PURGED_TITLE || candidate.body !== '' || proposal.evidence.proposal !== PURGED_TITLE)) {
-    throw corrupt('an erased proposal still carries content');
-  }
+  if (!proposal.erasure) return;
+  const { erasure } = proposal;
+  const settled =
+    proposal.state !== 'pending' &&
+    isDeepStrictEqual(candidate, stubCandidate(candidate)) &&
+    isDeepStrictEqual(proposal.evidence, { agent: proposal.evidence.agent, proposal: PURGED_TITLE }) &&
+    (proposal.state === 'applied'
+      ? proposal.rationale === undefined
+      : proposal.rationale === PURGED_TITLE || proposal.rationale === erasure.rationale);
+  if (!settled) throw corrupt('an erased proposal is not what a purge writes');
 }
 
 /** What is left of a candidate once it is erased: identity, provenance and link targets, no content. */
