@@ -27,6 +27,7 @@ function run(label, args, success) {
 }
 const build = ['run', 'build', '--workspace=@kontourai/corpus-store'];
 const unit = (pattern) => ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/create-proposals.test.ts', '-t', pattern];
+const purgeUnit = (pattern) => ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/request-key-purge-integration.test.ts', '-t', pattern];
 const vaultUnit = (pattern) => ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/vault-note-bound.test.ts', '-t', pattern];
 const vectors = (...ids) => ['run', 'conformance', '--workspace=@kontourai/corpus-store', '--', ...ids];
 
@@ -52,6 +53,16 @@ ${source.slice(end)}`;
 };
 
 const injections = [
+  {
+    name: 'real-purge-retains-digest',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;', 'const serialized = proposal;') }],
+    checks: [{ label: 'unit', args: purgeUnit('full purge erases the digest'), failure: /KnowledgeStoreCorruptionError|request_digest/ }],
+  },
+  {
+    name: 'purge-guard-before-key',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(swap(s, '    // A candidate may not cite an erased record as a source (purge, 2026-11-03).\n    guard?.(stored);\n', ''), '    const key = options?.requestKey;', '    guard?.(stored);\n    const key = options?.requestKey;') }],
+    checks: [{ label: 'vector', args: vectors('create-request-key-blocked-retry', 'create-request-key-erased-source-retry'), failure: /PURGED|purged/ }],
+  },
   {
     name: 'request-key-tamper',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (actual !== value.request_digest) throw corrupt('request digest does not match proposal content');", "if (false) throw corrupt('request digest does not match proposal content');") }],
