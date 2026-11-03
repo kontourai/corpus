@@ -522,6 +522,9 @@ The source-reference purge-scrub vector passes against real purge in both profil
 Pending proposals, cascaded records and all tombstone shapes also drop the field;
 the separate in-flight purge-journal expected failure remains.
 
+Hand-edited vault frontmatter reads plain scalars in source-reference string
+fields as strings, like other store string fields.
+
 The vault's proposal-size estimate serializes validated `source_refs` with the
 candidate, so attribution bytes count toward the note bound before a keyed or
 unkeyed proposal is staged. The apply path enforces the final note bound again.

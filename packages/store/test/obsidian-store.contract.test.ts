@@ -59,6 +59,20 @@ describe('KitObsidianStoreAdapter — vault-shape assertions (store-contract.md 
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test('hand-edited source reference strings preserve plain YAML scalars', async () => {
+    const id = await adapter.create({ type: 'raw', title: 'Refs', body: 'body', category: 'test', provenance: { agent: 'tester', source_refs: [{ kind: 'session-transcript', harness: 'harness-marker', session_id: 'session-marker', transcript_ref: 'transcript-marker', sitting_id: 'sitting-marker', range: { start: 1, end: 2 } }] } });
+    const path = findObsidianRecordFilePath(dir, id);
+    let text = readFileSync(path, 'utf8');
+    for (const [field, value] of [['harness', '123'], ['session_id', 'true'], ['transcript_ref', 'null'], ['sitting_id', '456']]) {
+      const marker = `${field}: ${field === 'session_id' ? 'session' : field === 'transcript_ref' ? 'transcript' : field === 'sitting_id' ? 'sitting' : 'harness'}-marker`;
+      expect(text).toContain(marker); text = text.replace(marker, `${field}: ${value}`);
+    }
+    writeFileSync(path, text);
+    expect((await adapter.get(id))?.provenance.source_refs).toEqual([{ kind: 'session-transcript', harness: '123', session_id: 'true', transcript_ref: 'null', sitting_id: '456', range: { start: 1, end: 2 } }]);
+    await adapter.update(id, { tags: ['updated'] }, { agent: 'tester' });
+    expect((await adapter.get(id))?.provenance.source_refs?.[0].session_id).toBe('true');
+  });
+
   test('vault dimensions follow category changes without changing the record envelope', async () => {
     const dimensions = ['territory', 'customer', 'initiative'];
     const projected = new KitObsidianStoreAdapter({ storeRoot: dir, dimensions });
