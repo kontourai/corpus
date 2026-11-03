@@ -374,6 +374,24 @@ describe.each([
     expect(await store.listProposals()).toEqual([]);
   });
 
+  test('request key metadata counts toward the proposal file bound', async () => {
+    const sampleId = await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence);
+    const sample = await store.getProposal(sampleId);
+    expect(sample).not.toBeNull();
+    const bodyBytes = Buffer.byteLength(sample!.candidate.body);
+    const serialized = Buffer.byteLength(`${JSON.stringify(sample, null, 2)}\n`);
+    const proposalLimit = 16 * 1024 * 1024 - 64 * 1024;
+    // Leave enough slack for a possible extra ID digit but less than keyed metadata needs.
+    const body = 'x'.repeat(proposalLimit - (serialized - bodyBytes) - 16);
+    const before = tree(root);
+    let failure: unknown;
+    try { await store.proposeCreate(candidate({ id: 'bound', body }), 'agent-a', evidence, { requestKey: 'bound-key' }); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringContaining('create proposal exceeds') });
+    expect(tree(root)).toEqual(before);
+    const retry = await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' });
+    expect(await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' })).toBe(retry);
+  }, 120_000);
+
   test('a proposal too large to read back is refused up front, so the queries keep working', async () => {
     const kept = await store.proposeCreate(candidate({ id: 'kept' }), 'agent-a', evidence);
     const huge = candidate({ id: 'huge', body: 'a'.repeat(16 * 1024 * 1024) });
