@@ -157,6 +157,18 @@ describe.each([
     }
   });
 
+  test('request key digest canonicalizes nested object keys', async () => {
+    const first = candidate({ links: [{ target_id: 'source-x', kind: 'related', label: 'label' }] });
+    const reordered = candidate({
+      provenance: { note: 'sitting sitting-7', source_ids: ['transcript:abc#sitting-7'], session_id: 'session-1', agent: 'distiller' },
+      links: [{ label: 'label', kind: 'related', target_id: 'source-x' }],
+    });
+    const options = { requestKey: 'nested-order' };
+    const id = await store.proposeCreate(first, 'agent-a', evidence, options);
+    expect(await open().proposeCreate(reordered, 'agent-a', evidence, options)).toBe(id);
+    expect((await store.getProposal(id))?.request_digest).toBe('58ebe4238514a655424b6bba85d879e3fb39ffed0c3e822adad098d3becacc67');
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);

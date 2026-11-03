@@ -54,6 +54,11 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'request-key-nested-order',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'Object.keys(object).sort().map', 'Object.keys(object).map') }],
+    checks: [{ label: 'unit', args: unit('request key digest canonicalizes nested object keys'), failure: /REQUEST_KEY_CONFLICT|request key already used/i }],
+  },
+  {
     name: 'keyed-extra-evidence',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (value.request_key_hash !== undefined && Object.keys(value.evidence).some((key) => key !== 'agent' && key !== 'proposal')) throw corrupt('keyed proposal evidence has unknown fields');", 'if (false) throw corrupt("keyed proposal evidence has unknown fields");') }],
     checks: [{ label: 'unit', args: unit('keyed proposal with extra stored evidence'), failure: /promise resolved/ }],
