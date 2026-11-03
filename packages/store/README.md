@@ -63,15 +63,18 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   The refusal is `MISSING_EVIDENCE`, and nothing is written: a refused
   `applyCreate` leaves the proposal `pending`. `proposeCreate` sizes the note as
   `applyCreate` would write it, including the first mutation-log entry with the
-  proposal's evidence, so large evidence counts. It is an estimate, not a bound:
-  what is only known at apply is stood in for (the longest ASCII reviewer and
-  proposal ids, and a link to the record itself at its id's length rather than
-  its file name's). Within a few KiB of the limit it can differ from the applied
-  note in either direction (up to about 7 KiB in the cases measured, such as a
-  reviewer id that YAML escapes heavily, links to the record itself, or a custom
-  id generator). `applyCreate` is the authoritative check: a proposal that passed
-  can still be refused there for size, and then stays `pending`. Only creation is
-  checked: `update` and the other writes are unchanged.
+  proposal's evidence, so large evidence counts. What is only known at apply
+  is stood in for by its largest form (the reviewer id with the largest YAML
+  expansion, the longest proposal id), and a link to the record itself renders
+  as its file name. In the tested cases the estimate was never below the
+  applied note and ran about 4.5 KiB above it for a plain reviewer, so a
+  candidate that close to the limit can be refused by `proposeCreate` that
+  `create` would accept. It is a margin, not a proof: a custom id generator
+  with ids longer than a UUID, or another record taking the destination first,
+  can still move the applied note. `applyCreate` is the authoritative check: a
+  proposal that passed can still be refused there for size, and then stays
+  `pending`. Only creation is checked: `update` and the other writes are
+  unchanged.
 
 - **A new record can be proposed, then applied or rejected (2026-11-03).**
   Decided by the delivery orchestrator under the owner's standing direction to

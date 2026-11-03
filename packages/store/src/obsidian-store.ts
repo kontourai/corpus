@@ -1211,14 +1211,14 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   /**
    * Refuse a candidate that `create` would refuse for size, before a proposal stages it.
    * The note is sized as `applyCreate` would write it, with `origin` as its first log entry
-   * (so large proposal evidence counts) and a stand-in id when the candidate has none. What
-   * is only known at apply is stood in for: the longest ASCII reviewer and proposal ids, and
-   * a link to the record itself renders at its id's length, not its file name's. The
-   * estimate is therefore not a bound. Measured, it was 1180 bytes above the applied note
-   * for a plain reviewer and 3066 below it for a reviewer YAML escapes heavily, and it
-   * drifts further with self-links or a custom id generator. A candidate within a few KiB of
-   * the limit can pass here and be refused by `applyCreate`, which checks again and is
-   * authoritative.
+   * (so large proposal evidence counts), a stand-in id when the candidate has none, and the
+   * candidate in the path index so a link to itself shows its file name. What is only known
+   * at apply is stood in for by its largest form: the reviewer id with the largest YAML
+   * expansion and the longest proposal id. In the tested cases (see vault-note-bound.test.ts)
+   * the estimate was never below the applied note, and it ran about 4.5 KiB above it for a
+   * plain reviewer. That is a margin, not a proof: a custom id generator with ids longer than
+   * a UUID, or a destination another record takes first, can still move the applied note.
+   * `applyCreate` checks again and is authoritative.
    */
   private assertCandidateFits(candidate: CreateInput, origin: KitMutationLogEntry): void {
     const aliases = normalizeAliases(candidate.aliases);
