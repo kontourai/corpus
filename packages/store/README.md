@@ -121,7 +121,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   - Purge integration is not implemented or verified here. A host that purges a
     record must also decide what to do with proposals that carry its content.
 
-Full erasure and partial scrub integration remain expected failures until corpus#41 supplies and verifies purge.
+Full erasure, partial scrub, and retry-order integration remain expected failures until corpus#41 supplies and verifies purge.
 
 ## Host composition
 
@@ -341,9 +341,9 @@ normalize except for the approved top-level lossy plain tokens.
 
 ### Owner decision: create request keys (2026-11-03)
 
-The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in pending, applied or rejected state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key identity and input digest share the proposal transaction. The owner decided that erasure removes the content digest and every later use of that key is refused with `REQUEST_KEY_CONFLICT`, regardless of input; the retained key identity prevents reuse. The shared proposal-write seam also retires the key and removes its digest when a partial scrub changes the candidate or evidence. Real full-erasure and partial-scrub integration remain expected failures pending corpus#41. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be well-formed Unicode strings, not empty or whitespace-only, and at most 1024 UTF-8 bytes.
+The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in pending, applied or rejected state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key identity and input digest share the proposal transaction. The owner decided that erasure removes the content digest and every later use of that key is refused with `REQUEST_KEY_CONFLICT`, regardless of input; the retained key identity prevents reuse. The shared proposal-write seam also sets `request_key_retired: true` and removes the digest when a partial scrub changes the candidate or evidence. Real purge integration and retry ordering remain expected failures pending corpus#41; key lookup must precede the purge source guard. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be well-formed Unicode strings, not empty or whitespace-only, and at most 1024 UTF-8 bytes.
 
-Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys and use opaque keys that do not encode content. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.
+Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys and use opaque keys that do not encode content. The stored key hash is unsalted and can reveal a guessable key. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.
 
 ### Owner decision: structured source references (2026-11-03)
 
