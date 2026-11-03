@@ -364,7 +364,7 @@ export class CreateProposals {
     // A partial purge can remove a link label without setting full erasure. If
     // the hashed content changed, retire the key and drop the old digest too.
     const contentChanged = proposal.request_digest !== undefined &&
-      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));
+      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: { agent: proposal.evidence.agent, proposal: proposal.evidence.proposal } }));
     const retireKey = erased || proposal.request_key_retired === true || contentChanged;
     const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;
     const text = `${JSON.stringify(serialized, null, 2)}\n`;
@@ -529,6 +529,7 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if (!isRecord(value.evidence) || !isNonemptyString(value.evidence.agent) || !isNonemptyString(value.evidence.proposal)) {
     throw corrupt('evidence is invalid');
   }
+  if (value.request_key_hash !== undefined && Object.keys(value.evidence).some((key) => key !== 'agent' && key !== 'proposal')) throw corrupt('keyed proposal evidence has unknown fields');
   if (!erased && value.request_key_retired !== true && typeof value.request_digest === 'string') {
     const evidence = value.evidence as Record<string, unknown>;
     const actual = hash(canonical({ candidate: value.candidate, proposerId: value.proposer_id, evidence: { agent: evidence.agent, proposal: evidence.proposal } }));

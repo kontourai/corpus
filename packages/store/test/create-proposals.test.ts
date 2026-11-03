@@ -659,6 +659,16 @@ describe.each([
     expect(tree(root)).toEqual(before);
   });
 
+  test('keyed proposal with extra stored evidence is refused as corrupt', async () => {
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'extra-evidence-key' });
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const proposal = JSON.parse(readFileSync(path, 'utf8')); proposal.evidence.extra = 'unvalidated';
+    writeFileSync(path, JSON.stringify(proposal)); const before = tree(root);
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.applyCreate(id, 'reviewer')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    expect(tree(root)).toEqual(before);
+  });
+
   test('keyed requests fail closed on corrupt neighbours and invalid metadata', async () => {
     const options = { requestKey: 'metadata-key' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);

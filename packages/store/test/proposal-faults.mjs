@@ -54,6 +54,11 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'keyed-extra-evidence',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (value.request_key_hash !== undefined && Object.keys(value.evidence).some((key) => key !== 'agent' && key !== 'proposal')) throw corrupt('keyed proposal evidence has unknown fields');", 'if (false) throw corrupt("keyed proposal evidence has unknown fields");') }],
+    checks: [{ label: 'unit', args: unit('keyed proposal with extra stored evidence'), failure: /promise resolved/ }],
+  },
+  {
     name: 'real-purge-retains-digest',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;', 'const serialized = proposal;') }],
     checks: [{ label: 'unit', args: purgeUnit('full purge erases the digest'), failure: /KnowledgeStoreCorruptionError|request_digest/ }],
@@ -70,7 +75,7 @@ const injections = [
   },
   {
     name: 'partial-scrub-retains-digest',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const contentChanged = proposal.request_digest !== undefined &&\n      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));", 'const contentChanged = false;') }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const contentChanged = proposal.request_digest !== undefined &&\n      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: { agent: proposal.evidence.agent, proposal: proposal.evidence.proposal } }));", 'const contentChanged = false;') }],
     checks: [{ label: 'unit', args: unit('partial content scrub'), failure: /request_key_retired|to be true/ }],
   },
   {
