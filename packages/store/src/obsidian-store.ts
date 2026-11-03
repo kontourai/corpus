@@ -1451,8 +1451,16 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     );
   }
 
+  async applyCreate(proposalId: string, reviewerId: string): Promise<string> {
+    return this.mutate('applyCreate', () => this.applyCreateLocked(proposalId, reviewerId));
+  }
+
+  async rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void> {
+    return this.mutate('rejectCreate', () => this.rejectCreateLocked(proposalId, reviewerId, rationale));
+  }
+
   private applyCreateLocked(proposalId: string, reviewerId: string): string {
-    const proposal = this.proposals.pendingFor('apply', proposalId, reviewerId);
+    const proposal = this.proposals.pendingFor('applyCreate', proposalId, reviewerId);
     let at = '';
     const recordId = this.createLocked(proposal.candidate, (now) => {
       at = now;
@@ -1463,7 +1471,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   private rejectCreateLocked(proposalId: string, reviewerId: string, rationale: string): void {
-    const proposal = this.proposals.pendingFor('reject', proposalId, reviewerId);
+    const proposal = this.proposals.pendingFor('rejectCreate', proposalId, reviewerId);
     const reason = CreateProposals.rationale(rationale);
     this.proposals.settle(proposal, {
       state: 'rejected',
@@ -1563,21 +1571,13 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── apply (§6.5) ───────────────────────────────────────────────────────
 
-  /** Apply a create proposal; see `KnowledgeStoreCreateProposals.apply`. */
-  apply(proposalId: string, reviewerId: string): Promise<string>;
-  // The concept form stays last: `Parameters<typeof store.apply>` selects the last overload.
-  apply(conceptId: string, proposerId: string, evidence: ApplyEvidence): Promise<void>;
   async apply(
-    first: string,
-    second: string,
-    ...rest: [ApplyEvidence?]
-  ): Promise<void | string> {
-    // Arity picks the form: only a call with no third argument applies a proposal.
-    if (rest.length === 0) {
-      return this.mutate('apply', () => this.applyCreateLocked(first, second));
-    }
+    conceptId: string,
+    proposerId: string,
+    evidence: ApplyEvidence,
+  ): Promise<void> {
     return this.mutate('apply', () =>
-      this.applyLocked(first, second, rest[0] as ApplyEvidence),
+      this.applyLocked(conceptId, proposerId, evidence),
     );
   }
 
@@ -1640,20 +1640,13 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── reject (§6.6) ──────────────────────────────────────────────────────
 
-  /** Reject a create proposal; see `KnowledgeStoreCreateProposals.reject`. */
-  reject(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
-  reject(conceptId: string, proposerId: string, evidence: RejectEvidence): Promise<void>;
   async reject(
-    first: string,
-    second: string,
-    third: RejectEvidence | string,
+    conceptId: string,
+    proposerId: string,
+    evidence: RejectEvidence,
   ): Promise<void> {
-    // A string third argument is a rationale; the concept form passes an evidence object.
-    if (typeof third === 'string') {
-      return this.mutate('reject', () => this.rejectCreateLocked(first, second, third));
-    }
     return this.mutate('reject', () =>
-      this.rejectLocked(first, second, third),
+      this.rejectLocked(conceptId, proposerId, evidence),
     );
   }
 

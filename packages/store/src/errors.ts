@@ -28,7 +28,7 @@ export class SelfApprovalError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'SELF_APPROVAL';
 
   constructor(proposalId: string) {
-    super(`apply: proposal ${proposalId} cannot be applied by its proposer`);
+    super(`applyCreate: proposal ${proposalId} cannot be applied by its proposer`);
     this.name = 'SelfApprovalError';
   }
 }

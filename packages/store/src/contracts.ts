@@ -183,7 +183,7 @@ export type KnowledgeStoreErrorCode =
   | 'NOT_FOUND'
   | 'AMBIGUOUS_ID'
   | 'SLUG_CONFLICT'
-  /** `apply` of a create proposal by the identity that proposed it (owner decision, 2026-11-03). */
+  /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
   /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
@@ -274,13 +274,9 @@ export interface KnowledgeStoreAdapter {
 /**
  * Transactional create proposals (owner decision, 2026-11-03). Kept off
  * `KnowledgeStoreAdapter` so existing implementers of that interface need no
- * change. Both bundled adapters implement it.
- *
- * `apply(proposalId, reviewerId)` and `reject(proposalId, reviewerId, rationale)`
- * share their names with the concept-proposal verbs, which take
- * `(targetId, proposerId, evidence)`. The adapters tell the forms apart by shape:
- * `apply` with no third argument and `reject` with a string third argument are the
- * create-proposal forms.
+ * change. Both bundled adapters implement it. `applyCreate` and `rejectCreate` are
+ * distinct from the concept-proposal verbs `apply` and `reject`, which take
+ * `(targetId, proposerId, evidence)` and are unchanged.
  */
 export interface KnowledgeStoreCreateProposals {
   /**
@@ -289,7 +285,7 @@ export interface KnowledgeStoreCreateProposals {
    * required fields as `create`, and `evidence` needs `agent` and `proposal`.
    * `proposerId` is an identity, not a record id. Put session, transcript and
    * source references in `candidate.provenance`: they become the created record's
-   * provenance on apply.
+   * provenance on `applyCreate`.
    */
   proposeCreate(
     candidate: CreateInput,
@@ -305,9 +301,9 @@ export interface KnowledgeStoreCreateProposals {
    * `MISSING_EVIDENCE`. Every `create` requirement applies at this point; a failure
    * leaves the proposal `pending` and writes nothing.
    */
-  apply(proposalId: string, reviewerId: string): Promise<string>;
+  applyCreate(proposalId: string, reviewerId: string): Promise<string>;
   /** Settle a pending proposal as `rejected`, keeping it with `rationale`. Creates no record. */
-  reject(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
+  rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
   getProposal(proposalId: string): Promise<KitCreateProposal | null>;
   /** The explicit proposals query. Ordered by `proposed_at`, then id. */
   listProposals(options?: CreateProposalListOptions): Promise<KitCreateProposal[]>;

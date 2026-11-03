@@ -63,7 +63,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     included) and `evidence` (`agent` and `proposal`, as for `propose`). It
     returns the proposal id. The candidate must have the fields `create` requires.
     **No record exists until apply**: `get` and every list return nothing for it.
-  - `apply(proposalId, reviewerId)` creates the record in one transaction with
+  - `applyCreate(proposalId, reviewerId)` creates the record in one transaction with
     every `create` requirement, so a refusal (a source-less `compiled`
     candidate, a taken id or slug) leaves the proposal `pending` and writes
     nothing. It returns the new record id. The record's first mutation-log entry,
@@ -71,7 +71,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     proposal records `record_id`. A reviewer who is the proposer is refused with
     `SELF_APPROVAL`; the identity is the `proposerId` string, so a host that
     needs more than self-comparison must authorize reviewers itself.
-  - `reject(proposalId, reviewerId, rationale)` keeps the proposal as
+  - `rejectCreate(proposalId, reviewerId, rationale)` keeps the proposal as
     `rejected` with its rationale and creates nothing. A proposer may reject
     (withdraw) its own proposal. Only a `pending` proposal can be applied or
     rejected; a settled one is refused with `MISSING_EVIDENCE`.
@@ -88,13 +88,12 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     of the record a proposal creates is `create`'s concern, not bounded here.
     Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
     is `pending`, `applied`, `rejected` or a list of them (omitted means all).
-  - `apply` and `reject` keep their concept-proposal meaning, which takes
-    `(targetId, proposerId, evidence)`: only a call with no third argument (`apply`)
-    or a string third argument (`reject`) is the create-proposal form.
+  - The create-proposal verbs are separate from the concept-proposal `apply` and
+    `reject`, which take `(targetId, proposerId, evidence)` and are unchanged.
   - **The store discovers no root.** The host constructs the adapter over the
     root it authorized. A CLI default remains a CLI concern. A vault opened
-    read-only (`kit-v1`) refuses `proposeCreate`, `apply` and `reject` with
-    `READ_ONLY`.
+    read-only (`kit-v1`) refuses `proposeCreate`, `applyCreate` and `rejectCreate`
+    with `READ_ONLY`.
   - Not covered: `purge` does not erase proposals, so a host that purges a
     record must also decide what to do with proposals that carry its content.
 

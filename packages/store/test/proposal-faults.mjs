@@ -37,7 +37,7 @@ function swap(source, from, to) {
 /** A proposeCreate that also creates the record: a pending proposal leaks into the working set. */
 const leak = (readRecord) => (source) => {
   const start = source.indexOf('  async proposeCreate(');
-  const end = source.indexOf('  private applyCreateLocked');
+  const end = source.indexOf('  async applyCreate(');
   assert.ok(start > 0 && end > start, 'proposeCreate anchor not found');
   return `${source.slice(0, start)}  async proposeCreate(candidate: CreateInput, proposerId: string, evidence: ProposeEvidence): Promise<string> {
     return ${readRecord.mutate}('proposeCreate', () => {
@@ -55,11 +55,11 @@ const injections = [
     name: 'self-approval',
     files: [{
       file: 'src/shared/create-proposals.ts',
-      mutate: (s) => swap(s, "if (op === 'apply' && proposal.proposer_id === reviewerId) {", "if (op === 'apply' && proposal.proposer_id === reviewerId && false) {"),
+      mutate: (s) => swap(s, "if (op === 'applyCreate' && proposal.proposer_id === reviewerId) {", "if (op === 'applyCreate' && proposal.proposer_id === reviewerId && false) {"),
     }],
     checks: [
       { label: 'unit', args: unit('apply refuses the proposer'), failure: /SelfApprovalError|SELF_APPROVAL/ },
-      { label: 'vector', args: vectors('create-proposal-self-approval'), failure: /apply must reject/ },
+      { label: 'vector', args: vectors('create-proposal-self-approval'), failure: /applyCreate must reject/ },
     ],
   },
   {

@@ -7134,7 +7134,7 @@
           "save": "working_before"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "$p",
             "reviewer"
@@ -7275,7 +7275,7 @@
           "save": "p"
         },
         {
-          "call": "reject",
+          "call": "rejectCreate",
           "args": [
             "$p",
             "reviewer",
@@ -7284,7 +7284,7 @@
           "expect_error": "MISSING_EVIDENCE"
         },
         {
-          "call": "reject",
+          "call": "rejectCreate",
           "args": [
             "$p",
             "reviewer",
@@ -7317,7 +7317,7 @@
           "save": "pending"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "$p",
             "other-reviewer"
@@ -7405,7 +7405,7 @@
           "save": "p"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "$p",
             "proposer"
@@ -7429,7 +7429,7 @@
           "save": "pending"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "$p",
             "reviewer"
@@ -7534,7 +7534,7 @@
           "save": "rejected_id"
         },
         {
-          "call": "reject",
+          "call": "rejectCreate",
           "args": [
             "$rejected_id",
             "reviewer",
@@ -7701,7 +7701,7 @@
           "save": "p"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "$p",
             "reviewer"
@@ -7792,7 +7792,7 @@
           "expect_error": "MISSING_EVIDENCE"
         },
         {
-          "call": "apply",
+          "call": "applyCreate",
           "args": [
             "no-such-proposal",
             "reviewer"

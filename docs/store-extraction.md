@@ -423,12 +423,12 @@ them; setting this option alone does not rewrite the vault.
 
 ## Create proposals
 
-`proposeCreate`, `apply(proposalId, reviewerId)`, `reject(proposalId, reviewerId,
-rationale)`, `getProposal` and `listProposals` implement the 2026-11-03 decision
+`proposeCreate`, `applyCreate(proposalId, reviewerId)`, `rejectCreate(proposalId,
+reviewerId, rationale)`, `getProposal` and `listProposals` implement the 2026-11-03 decision
 recorded in the [store README](../packages/store/README.md#owner-decisions)
 ([corpus#40](https://github.com/kontourai/corpus/issues/40)). A proposal is a JSON
 file under `<storeRoot>/.corpus-proposals/` in both profiles, published through the same
-journaled transaction as records, so `apply` writes the record, its indexes and the
+journaled transaction as records, so `applyCreate` writes the record, its indexes and the
 settled proposal together. Nothing reads that directory except the proposals
 queries: lists, `get`, `getLinks`, `reindex` and the vault's identity scan see
 records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of

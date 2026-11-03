@@ -92,7 +92,7 @@ describe.each([
     await store.create({ ...candidate({ id: 'ordinary' }), title: 'Ordinary' });
     const pending = await store.proposeCreate(candidate({ id: 'pending-record', aliases: ['pending-slug'], ttl_seconds: 1 }), 'agent-a', evidence);
     const rejected = await store.proposeCreate(candidate({ id: 'rejected-record' }), 'agent-a', evidence);
-    await store.reject(rejected, 'reviewer', 'not durable');
+    await store.rejectCreate(rejected, 'reviewer', 'not durable');
 
     const ids = (records: { id: string }[]) => records.map((record) => record.id);
     for (const options of [undefined, { includeHistory: true }, { includeRetired: true }, { stale: true, now: Date.UTC(2030, 0, 1) }, { stale: false }]) {
@@ -114,7 +114,7 @@ describe.each([
 
   test('apply creates the record in one transaction, linked back to the proposal and its evidence', async () => {
     const proposalId = await store.proposeCreate(candidate({ tags: ['t'], links: [] }), 'agent-a', evidence);
-    expect(await store.apply(proposalId, 'reviewer-b')).toBe('proposed-record');
+    expect(await store.applyCreate(proposalId, 'reviewer-b')).toBe('proposed-record');
 
     const record = await store.get('proposed-record');
     expect(record).toMatchObject({
@@ -146,7 +146,7 @@ describe.each([
       'agent-a',
       evidence,
     );
-    const recordId = await store.apply(proposalId, 'reviewer-b');
+    const recordId = await store.applyCreate(proposalId, 'reviewer-b');
     // The id comes from the store's id service at apply, not from the proposal.
     expect(recordId).toMatch(/^generated-\d+$/);
     expect(recordId).not.toBe(proposalId);
@@ -158,7 +158,7 @@ describe.each([
   test('apply refuses the proposer: SELF_APPROVAL, nothing written, still pending', async () => {
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
     const before = tree(root);
-    const error = await store.apply(proposalId, 'agent-a').catch((caught: unknown) => caught);
+    const error = await store.applyCreate(proposalId, 'agent-a').catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(SelfApprovalError);
     expect(error).toMatchObject({ code: 'SELF_APPROVAL' });
     expect(isKnowledgeStoreError(error)).toBe(true);
@@ -166,53 +166,53 @@ describe.each([
     expect(await store.get('proposed-record')).toBeNull();
     expect((await store.getProposal(proposalId))?.state).toBe('pending');
     // A different reviewer still can; the refusal consumed nothing.
-    expect(await store.apply(proposalId, 'agent-b')).toBe('proposed-record');
+    expect(await store.applyCreate(proposalId, 'agent-b')).toBe('proposed-record');
   });
 
   test('reject keeps the proposal as rejected with its rationale and creates no record', async () => {
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
-    await store.reject(proposalId, 'reviewer-b', 'Duplicates an existing finding');
+    await store.rejectCreate(proposalId, 'reviewer-b', 'Duplicates an existing finding');
     expect(await store.getProposal(proposalId)).toMatchObject({
       state: 'rejected', reviewer_id: 'reviewer-b', rationale: 'Duplicates an existing finding', candidate: candidate(),
     });
     expect(await store.get('proposed-record')).toBeNull();
     // A settled proposal is final.
-    expect(await code(store.apply(proposalId, 'reviewer-c'))).toBe('MISSING_EVIDENCE');
-    expect(await code(store.reject(proposalId, 'reviewer-c', 'again'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.applyCreate(proposalId, 'reviewer-c'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.rejectCreate(proposalId, 'reviewer-c', 'again'))).toBe('MISSING_EVIDENCE');
     expect(await store.get('proposed-record')).toBeNull();
   });
 
   test('the proposer may withdraw its own proposal by rejecting it', async () => {
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
-    await store.reject(proposalId, 'agent-a', 'withdrawn');
+    await store.rejectCreate(proposalId, 'agent-a', 'withdrawn');
     expect((await store.getProposal(proposalId))?.state).toBe('rejected');
   });
 
   test('an applied proposal cannot be applied or rejected again', async () => {
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
-    await store.apply(proposalId, 'reviewer-b');
-    expect(await code(store.apply(proposalId, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
-    expect(await code(store.reject(proposalId, 'reviewer-b', 'late'))).toBe('MISSING_EVIDENCE');
+    await store.applyCreate(proposalId, 'reviewer-b');
+    expect(await code(store.applyCreate(proposalId, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.rejectCreate(proposalId, 'reviewer-b', 'late'))).toBe('MISSING_EVIDENCE');
     expect((await store.listByType('raw')).length).toBe(1);
   });
 
   test('apply keeps every create requirement and a refusal leaves the proposal pending', async () => {
     const compiled = await store.proposeCreate(candidate({ type: 'compiled' }), 'agent-a', evidence);
     const before = tree(root);
-    expect(await code(store.apply(compiled, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.applyCreate(compiled, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
     expect(tree(root)).toEqual(before);
     expect((await store.getProposal(compiled))?.state).toBe('pending');
 
     await store.create(candidate({ id: 'taken-slug-owner', aliases: ['taken-slug'] }));
     const clash = await store.proposeCreate(candidate({ id: 'clash', aliases: ['taken-slug'] }), 'agent-a', evidence);
-    expect(await code(store.apply(clash, 'reviewer-b'))).toBe('SLUG_CONFLICT');
+    expect(await code(store.applyCreate(clash, 'reviewer-b'))).toBe('SLUG_CONFLICT');
     expect((await store.getProposal(clash))?.state).toBe('pending');
     expect(await store.get('clash')).toBeNull();
 
     // The id was free at proposal time and taken before apply.
     const raced = await store.proposeCreate(candidate({ id: 'raced' }), 'agent-a', evidence);
     await store.create(candidate({ id: 'raced' }));
-    expect(await code(store.apply(raced, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.applyCreate(raced, 'reviewer-b'))).toBe('MISSING_EVIDENCE');
     expect((await store.getProposal(raced))?.state).toBe('pending');
   });
 
@@ -221,7 +221,7 @@ describe.each([
     const before = tree(root);
     const proposals = (store as unknown as { proposals: { settle(...args: unknown[]): void } }).proposals;
     const settle = vi.spyOn(proposals, 'settle').mockImplementation(() => { throw new Error('injected failure after the record write'); });
-    await expect(store.apply(proposalId, 'reviewer-b')).rejects.toThrow('injected failure');
+    await expect(store.applyCreate(proposalId, 'reviewer-b')).rejects.toThrow('injected failure');
     settle.mockRestore();
     expect(tree(root)).toEqual(before);
     expect(await store.get('proposed-record')).toBeNull();
@@ -260,7 +260,7 @@ describe.each([
     expect((await store.listProposals()).map((p) => p.id)).toEqual([kept]);
     // The largest proposal that is accepted can still be applied.
     const large = await store.proposeCreate(candidate({ id: 'large', body: 'a'.repeat(16 * 1024 * 1024 - 100 * 1024) }), 'agent-a', evidence);
-    expect(await store.apply(large, 'reviewer')).toBe('large');
+    expect(await store.applyCreate(large, 'reviewer')).toBe('large');
     expect((await store.getProposal(large))?.state).toBe('applied');
   });
 
@@ -269,7 +269,7 @@ describe.each([
     await store.create(Object.assign(Object.create({ ttl_seconds: 30 }), candidate({ id: 'direct' })));
     const proposalId = await store.proposeCreate(inherited, 'agent-a', evidence);
     expect((await store.getProposal(proposalId))?.candidate).not.toHaveProperty('ttl_seconds');
-    await store.apply(proposalId, 'reviewer');
+    await store.applyCreate(proposalId, 'reviewer');
     expect(await store.get('proposed-record')).not.toHaveProperty('ttl_seconds');
     expect(await store.get('direct')).not.toHaveProperty('ttl_seconds');
   });
@@ -277,10 +277,10 @@ describe.each([
   test('a category named proposals coexists with proposals', async () => {
     await store.create(candidate({ id: 'in-category', category: 'proposals' }));
     const proposalId = await store.proposeCreate(candidate({ id: 'next', category: 'proposals' }), 'agent-a', evidence);
-    expect(await store.apply(proposalId, 'reviewer')).toBe('next');
+    expect(await store.applyCreate(proposalId, 'reviewer')).toBe('next');
     expect((await store.listByCategory('proposals')).map((r) => r.id).sort()).toEqual(['in-category', 'next']);
     const another = await store.proposeCreate(candidate({ id: 'another', category: 'proposals' }), 'agent-a', evidence);
-    expect(await store.apply(another, 'reviewer')).toBe('another');
+    expect(await store.applyCreate(another, 'reviewer')).toBe('another');
   });
 
   test('evidence and candidate fields are read once, so an accessor cannot store what was not validated', async () => {
@@ -292,7 +292,7 @@ describe.each([
     const accessor = { ...candidate({ id: 'accessor' }), get title() { return ++titleReads === 1 ? 'Title' : ' '; } };
     const second = await store.proposeCreate(accessor, 'agent-a', evidence);
     expect((await store.getProposal(second))?.candidate.title).toBe('Title');
-    expect(await store.apply(second, 'reviewer')).toBe('accessor');
+    expect(await store.applyCreate(second, 'reviewer')).toBe('accessor');
   });
 
   test('a candidate class instance with prototype fields is read as create reads it', async () => {
@@ -304,16 +304,16 @@ describe.each([
     const instance = make('instance');
     await store.create(make('direct'));
     const proposalId = await store.proposeCreate(instance, 'agent-a', evidence);
-    await store.apply(proposalId, 'reviewer');
+    await store.applyCreate(proposalId, 'reviewer');
     expect(await store.get('instance')).toMatchObject({ title: (await store.get('direct'))!.title });
     expect(await store.get('instance')).not.toHaveProperty('ttl_seconds');
   });
 
   test('settlement text is bounded, so every accepted proposal can be settled', async () => {
     const proposalId = await store.proposeCreate(candidate({ body: 'a'.repeat(16 * 1024 * 1024 - 80 * 1024) }), 'agent-a', evidence);
-    expect(await code(store.apply(proposalId, 'r'.repeat(2000)))).toBe('MISSING_EVIDENCE');
-    expect(await code(store.reject(proposalId, 'reviewer', 'x'.repeat(20 * 1024)))).toBe('MISSING_EVIDENCE');
-    await store.reject(proposalId, 'r'.repeat(1000), 'x'.repeat(16 * 1024 - 2));
+    expect(await code(store.applyCreate(proposalId, 'r'.repeat(2000)))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.rejectCreate(proposalId, 'reviewer', 'x'.repeat(20 * 1024)))).toBe('MISSING_EVIDENCE');
+    await store.rejectCreate(proposalId, 'r'.repeat(1000), 'x'.repeat(16 * 1024 - 2));
     expect((await store.getProposal(proposalId))?.state).toBe('rejected');
   });
 
@@ -321,18 +321,18 @@ describe.each([
     expect(await code(store.proposeCreate(candidate({ id: 'i'.repeat(2000) }), 'agent-a', evidence))).toBe('MISSING_EVIDENCE');
     const proposalId = await store.proposeCreate(
       candidate({ id: 'i'.repeat(150), body: 'a'.repeat(16 * 1024 * 1024 - 64 * 1024 - 2000) }), 'agent-a', evidence);
-    expect(await store.apply(proposalId, 'r'.repeat(1000))).toBe('i'.repeat(150));
+    expect(await store.applyCreate(proposalId, 'r'.repeat(1000))).toBe('i'.repeat(150));
   });
 
   test('apply and reject refuse an unknown proposal, a blank reviewer and a blank rationale', async () => {
-    expect(await code(store.apply('no-such-proposal', 'reviewer'))).toBe('NOT_FOUND');
-    expect(await code(store.reject('no-such-proposal', 'reviewer', 'why'))).toBe('NOT_FOUND');
-    expect(await code(store.apply('../escape', 'reviewer'))).toBe('NOT_FOUND');
+    expect(await code(store.applyCreate('no-such-proposal', 'reviewer'))).toBe('NOT_FOUND');
+    expect(await code(store.rejectCreate('no-such-proposal', 'reviewer', 'why'))).toBe('NOT_FOUND');
+    expect(await code(store.applyCreate('../escape', 'reviewer'))).toBe('NOT_FOUND');
     expect(await store.getProposal('../escape')).toBeNull();
     const proposalId = await store.proposeCreate(candidate(), 'agent-a', evidence);
-    expect(await code(store.apply(proposalId, ''))).toBe('MISSING_EVIDENCE');
-    expect(await code(store.reject(proposalId, '', 'why'))).toBe('MISSING_EVIDENCE');
-    expect(await code(store.reject(proposalId, 'reviewer', '  '))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.applyCreate(proposalId, ''))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.rejectCreate(proposalId, '', 'why'))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.rejectCreate(proposalId, 'reviewer', '  '))).toBe('MISSING_EVIDENCE');
     expect((await store.getProposal(proposalId))?.state).toBe('pending');
   });
 
@@ -340,8 +340,8 @@ describe.each([
     const first = await store.proposeCreate(candidate({ id: 'one' }), 'agent-a', evidence);
     const second = await store.proposeCreate(candidate({ id: 'two' }), 'agent-a', evidence);
     const third = await store.proposeCreate(candidate({ id: 'three' }), 'agent-a', evidence);
-    await store.apply(first, 'reviewer');
-    await store.reject(third, 'reviewer', 'no');
+    await store.applyCreate(first, 'reviewer');
+    await store.rejectCreate(third, 'reviewer', 'no');
     const ids = async (options?: Parameters<Store['listProposals']>[0]) => (await store.listProposals(options)).map((p) => p.id);
     expect(await ids()).toEqual([first, second, third]);
     expect(await ids({ state: 'pending' })).toEqual([second]);
@@ -351,17 +351,21 @@ describe.each([
     expect(await code(store.listProposals({ state: ['pending', 'bogus'] as never }))).toBe('MISSING_EVIDENCE');
   });
 
-  test('the concept-proposal forms of apply and reject keep their meaning', async () => {
+  test('the concept-proposal apply and reject are unchanged and never take the create form', async () => {
     const concept = await store.create(candidate({ id: 'concept-1', type: 'concept' }));
     const proposer = await store.create(candidate({ id: 'proposer-1' }));
     await store.propose(concept, proposer, { agent: 'a', proposal: 'new wording' });
-    // Passing the third argument, even undefined, is the concept form: it needs evidence.
-    expect(await code(store.apply(concept, proposer, undefined as never))).toBe('MISSING_EVIDENCE');
+    // Two arguments are not a create-proposal application: the concept form needs its evidence.
+    expect(await code((store as any).apply(concept, proposer))).toBe('MISSING_EVIDENCE');
+    expect(await code((store as any).reject(concept, proposer, 'why'))).toBe('MISSING_EVIDENCE');
+    const pending = await store.proposeCreate(candidate({ id: 'still-pending' }), 'agent-a', evidence);
+    expect(await code((store as any).apply(pending, 'reviewer'))).toBe('MISSING_EVIDENCE');
+    expect((await store.getProposal(pending))?.state).toBe('pending');
+    expect(await store.get('still-pending')).toBeNull();
     await store.apply(concept, proposer, { agent: 'a', new_body: 'new wording', rationale: 'better' });
     expect((await store.get(concept))?.body).toBe('new wording');
     await store.reject(concept, proposer, { agent: 'a', reason: 'changed my mind' });
-    expect(await code(store.reject(concept, proposer, undefined as never))).toBe('MISSING_EVIDENCE');
-    expect(await store.listProposals()).toEqual([]);
+    expect((await store.listProposals({ state: 'pending' })).map((p) => p.id)).toEqual([pending]);
   });
 
   test('a corrupt proposal file is refused, not skipped', async () => {
@@ -384,7 +388,7 @@ describe.each([
       const other = join(base, 'second-store');
       const second = open(other);
       const proposalId = await second.proposeCreate(candidate(), 'agent-a', evidence);
-      await second.apply(proposalId, 'reviewer');
+      await second.applyCreate(proposalId, 'reviewer');
       // The first store, over a different root, sees none of it.
       expect(await store.listProposals()).toEqual([]);
       expect(await store.get('proposed-record')).toBeNull();
@@ -413,8 +417,8 @@ describe('create proposals on a read-only vault', () => {
       });
       const before = tree(root);
       expect(await code(store.proposeCreate(candidate(), 'agent-a', evidence))).toBe('READ_ONLY');
-      expect(await code(store.apply('p', 'reviewer'))).toBe('READ_ONLY');
-      expect(await code(store.reject('p', 'reviewer', 'no'))).toBe('READ_ONLY');
+      expect(await code(store.applyCreate('p', 'reviewer'))).toBe('READ_ONLY');
+      expect(await code(store.rejectCreate('p', 'reviewer', 'no'))).toBe('READ_ONLY');
       expect(await store.listProposals()).toEqual([]);
       expect(tree(root)).toEqual(before);
     } finally {

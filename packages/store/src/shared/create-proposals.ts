@@ -3,7 +3,7 @@
  *
  * A proposal lives in `<storeRoot>/.corpus-proposals/<id>.json`, outside every place a
  * record lives, so no read, list, index or working-set path can see it. It holds the
- * whole candidate until `apply` creates the record in the caller's transaction.
+ * whole candidate until `applyCreate` creates the record in the caller's transaction.
  * Both profiles share this module; each supplies its own `createLocked`.
  */
 import { join } from 'node:path';
@@ -37,7 +37,7 @@ export const PROPOSAL_STATES: readonly CreateProposalState[] = ['pending', 'appl
 /** The mutation-log op the created record carries (see `applyOrigin`). */
 export const APPLY_CREATE_OP = 'apply-create';
 const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
-/** Room left for the fields `apply` and `reject` add, so a proposal that fits can always be settled. */
+/** Room left for the fields `applyCreate` and `rejectCreate` add, so a proposal that fits can always be settled. */
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
 /** Caps on what settlement adds (reviewer id, rationale, record id), so the headroom above always holds. */
 const MAX_REVIEWER_BYTES = 1024;
@@ -157,10 +157,10 @@ export class CreateProposals {
   }
 
   /**
-   * The proposal `apply` or `reject` may settle: it exists, is pending, and, for
-   * `apply`, was not proposed by `reviewerId`.
+   * The proposal `applyCreate` or `rejectCreate` may settle: it exists, is pending, and, for
+   * `applyCreate`, was not proposed by `reviewerId`.
    */
-  pendingFor(op: 'apply' | 'reject', proposalId: string, reviewerId: string): KitCreateProposal {
+  pendingFor(op: 'applyCreate' | 'rejectCreate', proposalId: string, reviewerId: string): KitCreateProposal {
     if (!isNonemptyString(reviewerId)) {
       throw new MissingEvidenceError(`${op}: missing required field: reviewerId`);
     }
@@ -172,7 +172,7 @@ export class CreateProposals {
     if (proposal.state !== 'pending') {
       throw new MissingEvidenceError(`${op}: proposal ${proposalId} is ${proposal.state}, not pending`);
     }
-    if (op === 'apply' && proposal.proposer_id === reviewerId) {
+    if (op === 'applyCreate' && proposal.proposer_id === reviewerId) {
       throw new SelfApprovalError(proposalId);
     }
     return proposal;
@@ -212,10 +212,10 @@ export class CreateProposals {
   /** The rationale `reject` stores, validated. */
   static rationale(value: unknown): string {
     if (!isNonemptyString(value)) {
-      throw new MissingEvidenceError('reject: missing required field: rationale');
+      throw new MissingEvidenceError('rejectCreate: missing required field: rationale');
     }
     if (serializedBytes(value) > MAX_RATIONALE_BYTES) {
-      throw new MissingEvidenceError(`reject: rationale exceeds ${MAX_RATIONALE_BYTES} bytes`);
+      throw new MissingEvidenceError(`rejectCreate: rationale exceeds ${MAX_RATIONALE_BYTES} bytes`);
     }
     return value;
   }

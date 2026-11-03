@@ -12,7 +12,7 @@ These vectors describe expected results from the public Knowledge Kit store cont
 - Whitespace-only bodies are rejected with `MISSING_EVIDENCE`.
 - Compiled records must link a raw source at creation. Other compiled fixtures have a raw-source precondition.
 - Expiry is `created_at + ttl_seconds`; explicit `expires_at` takes precedence.
-- Create proposals (`create-proposal-*` vectors): `proposeCreate` stages a `pending` proposal and creates no record; `apply(proposalId, reviewerId)` creates it, linked back to the proposal; the proposer applying is refused with `SELF_APPROVAL`; `reject(proposalId, reviewerId, rationale)` keeps the proposal as `rejected`; pending and rejected proposals stay out of `get` and every list, and are read through `listProposals({ state })`. A store that does not implement them lists the vectors as expected failures.
+- Create proposals (`create-proposal-*` vectors): `proposeCreate` stages a `pending` proposal and creates no record; `applyCreate(proposalId, reviewerId)` creates it, linked back to the proposal; the proposer applying is refused with `SELF_APPROVAL`; `rejectCreate(proposalId, reviewerId, rationale)` keeps the proposal as `rejected`; pending and rejected proposals stay out of `get` and every list, and are read through `listProposals({ state })`. A store that does not implement them lists the vectors as expected failures.
 
 The original study's non-public vectors and implementation-source citations were excluded. Contract-only replacements cover compiled-source rejection, TTL anchoring, and absolute-expiry precedence. Conflicting alternatives were replaced with the decisions above. Storage fault and read-facade vectors still require adapter-specific harnesses; their expectations are not waived.
 

@@ -84,12 +84,18 @@ function invalidConfigurations(): void {
   new KitObsidianStoreAdapter({ storeRoot: resolve('invalid-vault'), lock });
 }
 void invalidConfigurations;
-// The concept-proposal forms keep their meaning for utility types; the create-proposal forms are additional.
-const conceptApply: Parameters<KitDefaultStoreAdapter['apply']> = ['target', 'proposer', { agent: 'a', new_body: 'b', rationale: 'r' }];
-const conceptReject: Parameters<KitObsidianStoreAdapter['reject']> = ['target', 'proposer', { agent: 'a', reason: 'r' }];
-const proposals: KnowledgeStoreCreateProposals[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
-const proposalId: Promise<string> = proposals[0].proposeCreate({ type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'consumer' } }, 'proposer', { agent: 'consumer', proposal: 'p' });
-void conceptApply; void conceptReject; void proposalId;
+// The concept-proposal apply and reject keep their signatures; the create-proposal verbs are separate methods.
+// Compile-time only: none of this runs.
+function proposalTypes(): void {
+  const conceptApply: Parameters<KitDefaultStoreAdapter['apply']> = ['target', 'proposer', { agent: 'a', new_body: 'b', rationale: 'r' }];
+  const conceptReject: Parameters<KitObsidianStoreAdapter['reject']> = ['target', 'proposer', { agent: 'a', reason: 'r' }];
+  const proposals: KnowledgeStoreCreateProposals[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
+  const proposalId: Promise<string> = proposals[0].proposeCreate({ type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'consumer' } }, 'proposer', { agent: 'consumer', proposal: 'p' });
+  const applied: Promise<string> = proposals[0].applyCreate('proposal', 'reviewer');
+  const rejected: Promise<void> = proposals[1].rejectCreate('proposal', 'reviewer', 'rationale');
+  void conceptApply; void conceptReject; void proposalId; void applied; void rejected;
+}
+void proposalTypes;
 void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
 `);
   run(process.execPath, [join(ts, 'node_modules/typescript/bin/tsc'), '--outDir', 'compiled', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--target', 'ES2022', 'probe.ts'], ts);
