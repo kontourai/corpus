@@ -530,6 +530,9 @@ the vault. The host still authorizes the root. Initialization is an explicit hos
 write, even for a kit-v1 vault; it does not enable record mutation there.
 Initialization publishes markers without replacing a concurrent scaffold and can
 recover a matching temporary link left after a completed marker was published.
+Additional hard links to the marker, including hard-link snapshots, make binding
+checks fail closed. Remove the extra links and reconstruct the adapter to restore
+the binding.
 
 A purge-enabled adapter's root binding and marker survive purge and reindex;
 both profiles test the real purge path and still reject a different root.

@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -103,6 +103,20 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       writeFileSync(linked, 'a'.repeat(64), { mode: 0o600 }); linkSync(linked, marker);
       await initializeRootBinding(options);
       expect(readFileSync(external, 'utf8')).toBe('outside'); expect(existsSync(lookalike)).toBe(true); expect(existsSync(linked)).toBe(false);
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('scaffold recovery skips an unreadable regular lookalike', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-unreadable-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const lookalike = join(root, `.corpus-root-id-${'0'.repeat(32)}.tmp`);
+      const linked = join(root, `.corpus-root-id-${'f'.repeat(32)}.tmp`); const marker = join(root, '.corpus-root-id');
+      writeFileSync(lookalike, 'unrelated'); chmodSync(lookalike, 0o000);
+      writeFileSync(linked, 'a'.repeat(64), { mode: 0o600 }); linkSync(linked, marker);
+      await initializeRootBinding(options);
+      expect(existsSync(lookalike)).toBe(true); expect(existsSync(linked)).toBe(false);
       expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
     } finally { rmSync(base, { recursive: true, force: true }); }
   });

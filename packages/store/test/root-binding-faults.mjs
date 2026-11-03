@@ -11,7 +11,7 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 function run(label, pattern, pass) {
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/root-binding.test.ts', '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log); assert.equal(r.error, undefined);
-  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved|RootBindingMismatchError|ELOOP|EOPNOTSUPP/); }
+  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved|RootBindingMismatchError|ELOOP|EOPNOTSUPP|EACCES/); }
   console.log(`${label}: exit ${r.status}`);
 }
 const cases = [
@@ -23,6 +23,7 @@ const cases = [
   ['scaffold-recovery', 'settleScaffoldMarker(options.storeRoot);', 'void 0;', 'completed marker left'],
   ['marker-validation', "if (!stat.isFile() || stat.nlink !== 1 || stat.size !== 64)", "if (false)", 'malformed markers'],
 ];
+if (process.platform !== 'win32' && process.getuid?.() !== 0) cases.push(['unreadable-lookalike', "} catch {\n      // A lookalike may be a symlink, socket, inaccessible or concurrently removed.\n      // It is not authority to delete; keep looking for the marker's actual twin.\n      continue;\n    }", '} catch (error) { throw error; }', 'scaffold recovery skips an unreadable regular lookalike', 'src/shared/file-transactions.ts']);
 for (const [name, before, after, pattern, file = 'src/root-binding.ts'] of cases) {
   const path = join(root, 'packages/store', file);
   const original = readFileSync(path, 'utf8'); const beforeList = Array.isArray(before) ? before : [before]; const afterList = Array.isArray(after) ? after : [after];
