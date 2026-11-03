@@ -17,6 +17,7 @@ const run = (label, pattern, good, testFile = 'test/create-proposals.test.ts') =
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['loop-length', 'src/shared/source-refs.ts', 'i < length', 'i < value.length', 'structured source refs snapshot length even if a proxy hides indices'],
   ['changing-length', 'src/shared/source-refs.ts', ['Number(key) >= length', 'i < length'], ['Number(key) >= value.length', 'i < value.length'], 'structured source refs reject a changing array length'],
   ['plain-prototype', 'src/shared/source-refs.ts', 'isRecord(v) && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)', 'isRecord(v)', 'structured source refs reject class instances'],
   ['vault-plain-strings', 'src/shared/frontmatter.ts', "    if (index === 'source_refs' && path.length === 4 && typeof key === 'number' && SOURCE_REF_STRINGS.has(String(evidenceKey))) return 'string';\n", '', 'hand-edited source reference strings', 'test/obsidian-store.contract.test.ts'],
