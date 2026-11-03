@@ -16,6 +16,9 @@ const run = (label, pattern, good, testFile = 'test/create-proposals.test.ts') =
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['empty-refs-digest', 'src/shared/create-proposals.ts', 'Object.keys(object).sort()', "Object.keys(object).filter((key) => key !== 'source_refs' || !Array.isArray(object[key]) || (object[key] as unknown[]).length !== 0).sort()", 'empty and omitted source references'],
+  ['tombstone-refs', 'src/shared/purge.ts', '      agent: provenance.agent,', '      agent: provenance.agent, ...(provenance.source_refs ? { source_refs: provenance.source_refs } : {}),', 'all tombstone shapes', 'test/source-ref-purge-integration.test.ts'],
+  ['proposal-scrub-refs', 'src/shared/create-proposals.ts', '      agent: provenance.agent,', '      agent: provenance.agent, ...(provenance.source_refs ? { source_refs: provenance.source_refs } : {}),', 'pending-only support', 'test/source-ref-purge-integration.test.ts'],
   ['digest-omitted-refs', 'src/shared/create-proposals.ts',
     'hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }))',
     'hash(canonical({ candidate: existing && stored.provenance.source_refs === undefined ? { ...stored, provenance: { ...stored.provenance, source_refs: existing.candidate.provenance.source_refs } } : stored, proposerId, evidence: { agent, proposal } }))',

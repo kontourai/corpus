@@ -45,7 +45,8 @@
     "proof:source-refs": "node test/source-ref-faults.mjs",
     "proof:round1": "node test/round1-faults.mjs",
     "proof:round2": "node test/round2-faults.mjs",
-    "compare:station": "node test/station-byte-comparison.mjs"
+    "compare:station": "node test/station-byte-comparison.mjs",
+    "proof:purge": "node test/purge-faults.mjs"
   },
   "dependencies": {
     "js-yaml": "5.4.2"

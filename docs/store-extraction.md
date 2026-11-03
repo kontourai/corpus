@@ -293,10 +293,11 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-0 of the 5 expected failures are bound to ref/kind/expected/actual, and 5 to
-specific error patterns. The remaining vectors check full erasure, partial scrub, retry ordering, and
-source-reference removal; they await corpus#41 and
-fail specifically because `purge` is unavailable.
+The expected-fail list holds one entry: `purge-journal-in-flight`, the window
+between a purge's first journal write and its commit marker (see
+[Owner decisions](../packages/store/README.md#owner-decisions)). Every other
+decision has shipped. 0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
+specific error patterns.
 
 ### Host vectors
 
@@ -461,7 +462,7 @@ records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
 required-field checks used by `create` in both profiles and by `proposeCreate`.
 
 Six `create-proposal-*` vectors joined the store vectors (129 per profile at that decision). All
-implemented; the later purge integration is tracked separately as an expected failure. Tests: `test/create-proposals.test.ts`
+implemented; purge integration is covered below. Tests: `test/create-proposals.test.ts`
 runs on both profiles and covers self-approval, working-set exclusion (including
 history, expiry and `reindex`), rollback of the record when the settled proposal
 cannot be written, refusal of corrupt proposal files, a read-only vault, and that
@@ -479,10 +480,13 @@ the input digest, and refuses all retries with that key without a content compar
 The shared proposal-write seam also retires the key and removes the old digest if
 a partial scrub changes hashed candidate or evidence content, marking the key
 as `request_key_retired`. Live keyed proposals with a mismatching stored digest
-are refused as corrupt. The actual purge
-operation and four purge-integration vectors remain expected failures pending corpus#41.
-On integration, key lookup must precede the purge source guard so an unchanged
-blocked proposal returns its receipt and an erased key returns uniform refusal.
+are refused as corrupt. Four purge-integration vectors pass on the real purge
+implementation in both profiles. Completed full-purge and partial-label-scrub
+tests also check that store and coordination bytes do not retain the old digest.
+The separate in-flight journal expected failure remains: an unfinished purge can
+still hold pre-purge images for recovery. Key lookup precedes the purge source guard so
+an unchanged blocked proposal returns its receipt and an erased key returns
+uniform refusal.
 Five other `create-request-key-*` vectors exercise retries, conflicts,
 rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the
@@ -509,8 +513,9 @@ serialization that adds, removes or changes references. It rejects sparse arrays
 and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
 Keyed retries bind the references: changed or omitted attribution conflicts.
-The source-reference purge-scrub vector is expected-fail until corpus#41 supplies
-real purge; its current tombstone and proposal scrub paths omit `source_refs`.
+The source-reference purge-scrub vector passes against real purge in both profiles.
+Pending proposals, cascaded records and all tombstone shapes also drop the field;
+the separate in-flight purge-journal expected failure remains.
 
 The vault's proposal-size estimate serializes validated `source_refs` with the
 candidate, so attribution bytes count toward the note bound before a keyed or
