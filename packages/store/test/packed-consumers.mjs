@@ -11,7 +11,7 @@ const repo = resolve(packageRoot, '../..');
 const artifacts = process.argv[2] ? resolve(process.argv[2]) : null;
 const temporary = mkdtempSync(join(tmpdir(), 'corpus-pack-consumers-'));
 function sha256(file) { return createHash('sha256').update(readFileSync(file)).digest('hex'); }
-function run(command, args, cwd) { return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000 }); }
+function run(command, args, cwd, timeout = 180_000) { return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }); }
 function pack(cwd) {
   const output = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temporary], cwd));
   return join(temporary, output[0].filename);
@@ -45,6 +45,11 @@ for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
  const id = await adapter.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  assert.equal((await adapter.get(id)).body, 'Consumer body');
 }
+{
+ const closed = new KitDefaultStoreAdapter({ storeRoot: new URL('./closed', import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+ const id = await closed.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
+ await assert.rejects(closed.purge([id], { agent: 'consumer', rationale: 'test' }), { code: 'READ_ONLY' });
+}
 await assert.rejects(import('@kontourai/corpus-store/src/default-store.ts'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 `);
@@ -61,10 +66,11 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   const manifest = JSON.parse(readFileSync(join(js, 'kit-vault/.corpus-store-migration/manifest.json'), 'utf8'));
   assert.deepEqual(manifest.tool, { name: '@kontourai/corpus-store', version: JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version });
   for (const file of ['conformance.mjs', 'conformance-harness.mjs', 'store-child.mjs', 'expected-fails.json']) cpSync(join(packageRoot, 'test', file), join(js, file));
-  console.log(run(process.execPath, ['conformance.mjs'], js));
+  // Every vector runs on both profiles, several in child processes; a loaded CI runner needs more than the default.
+  console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -75,6 +81,12 @@ const stores: KnowledgeStoreAdapter[] = [new KitDefaultStoreAdapter(options), ne
 async function read(): Promise<KitRecord | null> { return stores[0].get('id'); }
 const id = await stores[0].create({ type: 'raw', title: 'Typed consumer', body: 'Typed body', category: 'testing', provenance: { agent: 'consumer' } });
 assert.equal((await stores[0].get(id))?.body, 'Typed body');
+// @ts-expect-error purge is privileged and is not part of the ordinary adapter type.
+void stores[0].purge;
+const purger: KnowledgeStorePurger = new KitDefaultStoreAdapter({ ...options, allowPurge: true });
+const outcome: PurgeResult = await purger.purge([id], { agent: 'privacy-officer', rationale: 'erasure request' });
+assert.deepEqual(outcome.purged, [id]);
+assert.equal((await stores[0].get(id))?.status, 'purged');
 function invalidConfigurations(): void {
   // @ts-expect-error Coordination identity must be supplied even with an explicit lock and directory.
   new KitDefaultStoreAdapter({ storeRoot: resolve("invalid-identity"), lock, coordinationDirectory: resolve("invalid-coordination") });

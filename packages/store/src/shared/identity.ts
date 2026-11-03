@@ -149,3 +149,10 @@ export function registerAliases(
     index.by_slug[slug] = id;
   }
 }
+
+/** Drop every slug that points at `id` (a purged record's aliases are content). */
+export function unregisterAliases(index: AliasIndex, id: string): void {
+  for (const [slug, owner] of Object.entries(index.by_slug)) {
+    if (owner === id) delete index.by_slug[slug];
+  }
+}

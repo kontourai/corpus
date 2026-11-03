@@ -18,6 +18,7 @@ const EVIDENCE_STRINGS: Record<string, Set<string>> = {
   reject: new Set(['proposer_id', 'reason']),
   'superseded-by': new Set(['superseded_by_id']),
   retire: new Set(['targetStatus', 'rationale', 'implementedByRef', 'supersededByRef']),
+  purged: new Set(['cause']),
 };
 function at(value: unknown, path: Path): unknown {
   for (const key of path) {
@@ -47,7 +48,7 @@ function fieldType(path: Path, meta: unknown): 'string' | 'number' | 'container'
     if (path.length === 2) return 'container';
     if (path.length === 3 && LOG_STRINGS.has(String(key))) return 'string';
     const operation = at(meta, ['mutation_log', index, 'op']);
-    if (path.length === 3 && key === 'rationale' && ['supersede', 'superseded-by'].includes(String(operation))) return 'string';
+    if (path.length === 3 && key === 'rationale' && ['supersede', 'superseded-by', 'purged', 'support-purged', 'reference-purged'].includes(String(operation))) return 'string';
     if (path.length === 3 && key === 'new_id' && operation === 'superseded-by') return 'string';
     if (key === 'evidence') {
       if (path.length === 3) return 'container';
@@ -55,6 +56,9 @@ function fieldType(path: Path, meta: unknown): 'string' | 'number' | 'container'
       if (path.length === 4 && EVIDENCE_STRINGS[String(op)]?.has(String(evidenceKey))) return 'string';
       if (op === 'supersede' && evidenceKey === 'superseded_count' && path.length === 4) return 'number';
       if (op === 'update' && evidenceKey === 'fields') return path.length === 4 ? 'container' : 'string';
+      if ((op === 'purged' && evidenceKey === 'via') || (['support-purged', 'reference-purged'].includes(String(op)) && evidenceKey === 'purged_ids')) {
+        return path.length === 4 ? 'container' : 'string';
+      }
       if (op === 'link' && evidenceKey === 'added') {
         if (path.length <= 5) return 'container';
         if (path.length === 6 && typeof item === 'number' && LINK_STRINGS.has(String(linkKey))) return 'string';

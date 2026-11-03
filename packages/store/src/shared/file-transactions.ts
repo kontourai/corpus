@@ -14,6 +14,7 @@ import {
   readSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -36,6 +37,69 @@ import {
 
 const JOURNAL_VERSION = 1;
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
+/**
+ * True when `text` starts the way every journal this engine writes does:
+ * JSON.stringify of a Journal, in key order, up to the `entries` array. Strings are
+ * checked against what JSON.stringify can emit, so an id or operation name with
+ * escaped quotes, newlines or unicode matches at any length, and a file whose header
+ * uses an encoding the engine never produces (`\u0074` for `t`, `\/`, a raw newline)
+ * is not ours. This is a loop, not a regular expression: a pattern with a repeated
+ * group overflows the stack on a multi-megabyte id, and an unreadable classifier would
+ * block the whole store.
+ */
+export function startsLikeJournal(text: string): boolean {
+  let at = 0;
+  const literal = (value: string): boolean => {
+    if (!text.startsWith(value, at)) return false;
+    at += value.length;
+    return true;
+  };
+  const string = (): boolean => {
+    let highEscape = false; // the previous token was an escaped high surrogate
+    while (at < text.length) {
+      const code = text.charCodeAt(at);
+      if (code === 0x22) {
+        at += 1;
+        return true;
+      }
+      if (code < 0x20) return false; // JSON.stringify always escapes controls
+      if (code !== 0x5c) {
+        at += 1;
+        highEscape = false;
+        continue;
+      }
+      const next = text[at + 1];
+      if (next !== undefined && '"\\bfnrt'.includes(next)) {
+        at += 2;
+        highEscape = false;
+        continue;
+      }
+      if (next !== 'u') return false;
+      const hex = text.slice(at + 2, at + 6);
+      if (!/^[0-9a-f]{4}$/.test(hex)) return false;
+      const unit = parseInt(hex, 16);
+      // JSON.stringify writes \b \t \n \f \r as short escapes and the rest of the controls as \u00xx.
+      const control = unit < 0x20 && ![0x08, 0x09, 0x0a, 0x0c, 0x0d].includes(unit);
+      const surrogate = unit >= 0xd800 && unit <= 0xdfff;
+      if (!control && !surrogate) return false;
+      // Well-formed JSON.stringify escapes only a lone surrogate, never a pair.
+      if (unit >= 0xdc00 && highEscape) return false;
+      if (unit >= 0xd800 && unit <= 0xdbff && /^\\ud[c-f][0-9a-f]{2}/.test(text.slice(at + 6, at + 12))) return false;
+      highEscape = unit >= 0xd800 && unit <= 0xdbff;
+      at += 6;
+    }
+    return false;
+  };
+  return (
+    literal('{"version":1,"transactionId":"') &&
+    string() &&
+    literal(',"operation":"') &&
+    string() &&
+    literal(',"phase":"') &&
+    (literal('prepared') || literal('committed')) &&
+    literal('","entries":[')
+  );
+}
 const LEGACY_LOCK_FILE = '.station-knowledge-mutation';
 function knowledgeLockIdentity(
   rootRealpath: string,
@@ -231,7 +295,17 @@ export class KnowledgeFileTransactions {
     return this.mutate('read-repair', body);
   }
 
-  async mutate<T>(operation: string, body: () => T | Promise<T>): Promise<T> {
+  /**
+   * `erasure` marks a transaction whose before-images are content that must not
+   * outlive it. The prepared journal still holds them, because rollback needs them,
+   * but the commit marker drops them, so a journal left behind by a crash after the
+   * commit marker holds no erased content.
+   */
+  async mutate<T>(
+    operation: string,
+    body: () => T | Promise<T>,
+    options: { erasure?: boolean } = {},
+  ): Promise<T> {
     if (this.storage.getStore()) return body();
     let release: () => void | Promise<void>;
     try {
@@ -271,6 +345,7 @@ export class KnowledgeFileTransactions {
         this.observe(operation, 'rejected');
         throw error;
       }
+      let markerPersisted = false;
       try {
         this.verifyReadSet(context);
         if (context.journal.entries.length === 0) return result;
@@ -284,9 +359,15 @@ export class KnowledgeFileTransactions {
           this.hooks.afterFilePublish?.(path);
         }
         context.journal.phase = 'committed';
+        if (options.erasure) {
+          // A committed journal is only cleanup debris and is never rolled back.
+          for (const entry of context.journal.entries) entry.before = null;
+        }
         this.persistJournal(context.journal);
+        markerPersisted = true;
         this.hooks.afterCommitMarker?.(context.journal);
         this.removeJournal();
+        if (options.erasure) this.pruneEmptyDirectories(context.journal);
         this.observe(operation, 'applied');
         return result;
       } catch (error) {
@@ -297,6 +378,19 @@ export class KnowledgeFileTransactions {
           // Every authoritative/derived target is durably published. A lost
           // commit-marker response or cleanup error cannot turn that applied
           // fact into a caller-visible failure that invites a duplicate retry.
+          // An erasure is the exception: until the journal is gone it may still
+          // hold the erased content, so it must not report success over that.
+          if (options.erasure) {
+            if (!markerPersisted) {
+              try {
+                this.removeJournal();
+              } catch (cleanup) {
+                this.observe(operation, 'unavailable');
+                throw unavailable(cleanup);
+              }
+            }
+            this.pruneEmptyDirectories(context.journal);
+          }
           this.observe(operation, 'applied-readback');
           return result;
         }
@@ -627,7 +721,63 @@ export class KnowledgeFileTransactions {
     });
   }
 
+  /**
+   * A crash inside the journal's own atomic write leaves `.<id>.tmp` at the root,
+   * possibly cut short, holding the before-images the journal would. This engine
+   * writes a journal as `{"version":1,"transactionId":...,"operation":...,"phase":
+   * ...,"entries":[`, so a root `.tmp` file that starts that way is ours. A file
+   * that does not is not touched. We hold the store lock, so no live writer owns
+   * it. A failure to remove one is an error, not a skip: it may hold erased content.
+   */
+  private removeOrphanJournalTemporaries(): void {
+    let names: string[];
+    try {
+      names = readdirSync(this.root, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && /^\..+\.tmp$/.test(entry.name))
+        .map((entry) => entry.name);
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw unavailable(error);
+    }
+    for (const name of names) {
+      const path = join(this.root, name);
+      let text: string;
+      try {
+        text = readFileSync(path, 'utf8');
+      } catch {
+        continue; // unreadable or already gone: nothing we can classify
+      }
+      if (startsLikeJournal(text)) {
+        try {
+          this.removePublished(path);
+        } catch (error) {
+          throw unavailable(error);
+        }
+      }
+    }
+  }
+
+  /** Best effort, after an erasure: a removed note must not leave its folder names behind. */
+  private pruneEmptyDirectories(journal: Journal): void {
+    for (const entry of journal.entries) {
+      if (entry.after !== null) continue;
+      let directory = dirname(join(this.root, entry.path));
+      while (directory !== this.root && directory.startsWith(this.root + sep)) {
+        try {
+          // An ancestor swapped for a symlink since publication must not redirect this.
+          this.assertNoSymlink(directory);
+          if (!lstatSync(directory).isDirectory()) break;
+          rmdirSync(directory);
+        } catch {
+          break; // not empty, already gone, or not ours to touch
+        }
+        directory = dirname(directory);
+      }
+    }
+  }
+
   private recoverLocked(): void {
+    this.removeOrphanJournalTemporaries();
     const journal = this.loadJournal();
     if (!journal) return;
     if (journal.phase === 'prepared') {

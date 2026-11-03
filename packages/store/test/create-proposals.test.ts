@@ -263,6 +263,19 @@ describe.each([
     expect(tree(root)).toEqual(before);
   });
 
+  test('empty and omitted source references are distinct for keyed retries', async () => {
+    for (const [key, initial, retry] of [
+      ['empty-first', { source_refs: [] }, {}],
+      ['absent-first', {}, { source_refs: [] }],
+    ] as const) {
+      const options = { requestKey: key };
+      await store.proposeCreate(candidate({ id: 'empty-vs-absent', provenance: { agent: 'writer', ...initial } }), 'writer', evidence, options);
+      const before = tree(root);
+      expect(await code(store.proposeCreate(candidate({ id: 'empty-vs-absent', provenance: { agent: 'writer', ...retry } }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
     const ref = { kind: 'session-transcript' as const, harness: 'é'.repeat(2048), session_id: 'x'.repeat(4096), transcript_ref: 't', sitting_id: undefined, range: undefined };
     const withBoundary = { ...ref, range: { start: 1, end: 1 } };

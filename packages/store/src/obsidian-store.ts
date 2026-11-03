@@ -13,6 +13,7 @@ import { RootBindingMismatchError } from './errors.js';
  * Removing the real boundary AND inserting a look-alike in one external edit
  * remains a known limitation. Keep the obsidian-store.contract.test.ts cases.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type {
@@ -28,9 +29,12 @@ import type {
   KitReverseLink,
   KnowledgeStoreAdapter,
   KnowledgeStoreCreateProposals,
+  KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
+  PurgeEvidence,
+  PurgeResult,
   RejectEvidence,
   RetireEvidence,
   SupersedeEvidence,
@@ -68,7 +72,17 @@ import {
   normalizeAliases,
   registerAliases,
   resolveRecordId,
+  unregisterAliases,
 } from './shared/identity.js';
+import {
+  assertNoPurgedSupport,
+  assertNotPurged,
+  planPurge,
+  survivorOf,
+  TOMBSTONE_SHAPES,
+  tombstoneOf,
+  validatePurgeInput,
+} from './shared/purge.js';
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
@@ -423,7 +437,15 @@ const CREATE_IDENTITY_MAX_ENTRIES = 10_000;
 export const VAULT_NOTE_MAX_BYTES = 16 * 1024 * 1024;
 const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
-export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
+/**
+ * Tombstones live here, under `archive/` so the path index keeps its rule that an
+ * archived entry sits in an `archive/` location. The filename is derived from the
+ * id, never from the title, so the erased title does not survive in a path, the
+ * path index or a `[[wikilink]]`.
+ */
+const TOMBSTONE_DIR = 'archive/purged';
+
+export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -559,7 +581,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   /** Every mutation runs here, so a `kit-v1` vault refuses writes before any I/O. */
-  private mutate<T>(operation: string, body: () => T): Promise<T> {
+  private mutate<T>(
+    operation: string,
+    body: () => T,
+    options: { erasure?: boolean } = {},
+  ): Promise<T> {
     return this.files.mutate(operation, () => {
       if (this.readPathIndexSource().format === 'kit-v1') {
         throw new ReadOnlyStoreError(
@@ -568,7 +594,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         );
       }
       return body();
-    });
+    }, options);
   }
 
   private savePathIndex(index: PathIndex): void {
@@ -709,17 +735,22 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       }
     }
 
+    // A tombstone's note has no body to parse; whatever follows its frontmatter is
+    // not read, so a hand-edited tombstone cannot serve content.
     const availability = generatedSectionHeadingAvailability(
       meta.type as KitRecordType,
       meta.links as KitLink[] | undefined,
     );
-    const body = this.parseBodyFromRendered(
-      id,
-      meta.type as KitRecordType,
-      renderedText,
-      sentinel,
-      availability,
-    );
+    const body =
+      meta.status === 'purged'
+        ? ''
+        : this.parseBodyFromRendered(
+            id,
+            meta.type as KitRecordType,
+            renderedText,
+            sentinel,
+            availability,
+          );
 
     // Strip the bookkeeping key before returning — mirrors the destructuring
     // `writeRecord` already does on the write side, so it never leaks onto the public
@@ -821,6 +852,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       [BODY_SENTINEL_FRONTMATTER_KEY]: _staleSentinel,
       ...frontmatterFields
     } = record as unknown as Record<string, unknown>;
+    if (record.status === 'purged') {
+      // No body, no generated link sections and no category dimensions: only the
+      // frontmatter a tombstone keeps.
+      return serializeMarkdown(frontmatterFields, '');
+    }
     const segments = record.category.split('.').slice(1);
     this.dimensions.forEach((name, index) => {
       delete frontmatterFields[name];
@@ -1000,14 +1036,15 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   /**
-   * Every active (non-archived) record, for `reindex()`. Archived records remain
+   * Every active (non-archived) record and every tombstone, for `reindex()`, so a
+   * tombstone keeps its links in the graph. Other archived records remain
    * `get`/`getLinks`-able; lists reach them only with `includeHistory` (see
    * `listed`).
    */
   private allRecords(pathIndex: PathIndex): KitRecord[] {
     const records: KitRecord[] = [];
     for (const [id, entry] of Object.entries(pathIndex.by_id)) {
-      if (entry.archived) continue;
+      if (entry.archived && !entry.path.startsWith(`${TOMBSTONE_DIR}/`)) continue;
       const record = this.readRecord(id, pathIndex);
       if (record) records.push(record);
     }
@@ -1168,7 +1205,9 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const explicitLinks = input.links ?? [];
     const wikilinks = extractWikilinks(input.body);
     const links = mergeLinks(explicitLinks, wikilinks);
-    assertCompiledSource(input.type, links, (target) => this.readRecord(target, pathIndex));
+    const lookup = (target: string) => this.readRecord(target, pathIndex);
+    assertNoPurgedSupport('create', links, input.provenance.source_ids, lookup);
+    assertCompiledSource(input.type, links, lookup);
 
     const record = this.newRecord(input, id, now, aliases, links, fresh, sourceRefs, origin);
 
@@ -1387,6 +1426,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const pathIndex = this.loadPathIndex();
     const record = this.readRecord(id, pathIndex);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
+    assertNotPurged('update', record);
 
     const mutableKeys = [
       'title',
@@ -1438,6 +1478,13 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         fields.body !== undefined ? fields.body : record.body,
       );
       newLinks = mergeLinks(fields.links, wikilinks);
+      const kept = record.links ?? [];
+      assertNoPurgedSupport(
+        'update',
+        newLinks.filter((l) => !kept.some((k) => k.target_id === l.target_id && k.kind === l.kind)),
+        undefined,
+        (target) => this.readRecord(target, pathIndex),
+      );
     } else if (fields.body !== undefined) {
       const wikilinks = extractWikilinks(fields.body);
       newLinks = mergeLinks(record.links ?? [], wikilinks);
@@ -1505,11 +1552,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const pathIndex = this.loadPathIndex();
     const source = this.readRecord(sourceId, pathIndex);
     if (!source) throw new KnowledgeRecordNotFoundError(sourceId);
+    assertNotPurged('link', source);
 
     for (const l of links) {
-      if (!this.readRecord(l.target_id, pathIndex)) {
-        throw new KnowledgeRecordNotFoundError(l.target_id);
-      }
+      const target = this.readRecord(l.target_id, pathIndex);
+      if (!target) throw new KnowledgeRecordNotFoundError(l.target_id);
+      assertNotPurged('link', target);
     }
 
     const now = new Date(this.services.clock()).toISOString();
@@ -1556,6 +1604,10 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         (id) => this.readRecord(id, this.loadPathIndex()) !== null,
         options,
         (validated, origin) => this.assertCandidateFits(validated, origin),
+        (stored) =>
+          assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+            this.readRecord(id, this.loadPathIndex()),
+          ),
       ),
     );
   }
@@ -1632,6 +1684,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
     const proposer = this.readRecord(proposerId, pathIndex);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('propose', concept);
+    assertNotPurged('propose', proposer);
 
     const now = new Date(this.services.clock()).toISOString();
 
@@ -1717,6 +1771,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
     const proposer = this.readRecord(proposerId, pathIndex);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('apply', concept);
+    assertNotPurged('apply', proposer);
 
     const proposerLinks = proposer.links ?? [];
     const hasProposesLink = proposerLinks.some(
@@ -1781,6 +1837,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
     const proposer = this.readRecord(proposerId, pathIndex);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('reject', concept);
+    assertNotPurged('reject', proposer);
 
     const proposerLinks = proposer.links ?? [];
     const hasProposesLink = proposerLinks.some(
@@ -1845,11 +1903,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const pathIndex = this.loadPathIndex();
     const newRecord = this.readRecord(newId, pathIndex);
     if (!newRecord) throw new KnowledgeRecordNotFoundError(newId);
+    assertNotPurged('supersede', newRecord);
 
     for (const sid of supersededIds) {
-      if (!this.readRecord(sid, pathIndex)) {
-        throw new KnowledgeRecordNotFoundError(sid);
-      }
+      const old = this.readRecord(sid, pathIndex);
+      if (!old) throw new KnowledgeRecordNotFoundError(sid);
+      assertNotPurged('supersede', old);
     }
 
     const now = new Date(this.services.clock()).toISOString();
@@ -1954,6 +2013,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const pathIndex = this.loadPathIndex();
     const record = this.readRecord(id, pathIndex);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
+    assertNotPurged('retire', record);
 
     const currentStatus = record.status ?? 'active';
     const allowed = VALID_STATUS_TRANSITIONS[currentStatus];
@@ -1990,6 +2050,134 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     };
     this.writeRecord(updated, pathIndex);
     this.savePathIndex(pathIndex);
+  }
+
+  // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
+
+  async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const requested = validatePurgeInput(ids, evidence);
+    return this.mutate('purge', () => this.purgeLocked(requested, evidence), { erasure: true });
+  }
+
+  /** An id-derived, title-free path for a tombstone; an occupied name gets a numeric suffix. */
+  private tombstonePath(id: string, pathIndex: PathIndex): string {
+    const base = /^[a-z0-9][a-z0-9_-]{0,99}$/.test(id)
+      ? id
+      : `id-${createHash('sha256').update(id).digest('hex').slice(0, 32)}`;
+    for (let suffix = 1; ; suffix++) {
+      const relPath = `${TOMBSTONE_DIR}/${suffix === 1 ? base : `${base}-${suffix}`}.md`;
+      const owner = pathIndex.by_path[relPath];
+      if (owner === undefined || owner === id) {
+        if (owner === undefined && this.files.readText(this.resolveStorePath(relPath), VAULT_NOTE_MAX_BYTES) !== null) {
+          throw new KnowledgeStoreCorruptionError('Obsidian tombstone destination is occupied by an unindexed file');
+        }
+        return relPath;
+      }
+    }
+  }
+
+  /**
+   * The fullest tombstone whose note fits the vault note bound. A tombstone keeps provenance and
+   * link ids that a note near the bound can be mostly made of, and nothing the host does to the
+   * record changes that, so unlike a survivor it is shortened instead of refusing the erasure.
+   */
+  private fittingTombstone(
+    record: KitRecord,
+    at: string,
+    evidence: PurgeEvidence,
+    via: string[] | undefined,
+    pathIndex: PathIndex,
+  ): KitRecord {
+    let stone = tombstoneOf(record, at, evidence, via);
+    for (const shape of TOMBSTONE_SHAPES) {
+      stone = tombstoneOf(record, at, evidence, via, shape);
+      try {
+        if (Buffer.byteLength(this.renderNote(stone, pathIndex)) <= VAULT_NOTE_MAX_BYTES) break;
+      } catch (error) {
+        // The YAML writer recurses on a multi-megabyte scalar and overflows the stack: that shape
+        // cannot be written at all, which is the same as not fitting.
+        if (!(error instanceof RangeError)) throw error;
+      }
+    }
+    return stone;
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    // `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and
+    // path, so it would keep the erased titles. (The names are fixed by that command.)
+    for (const kept of ['.corpus-store-migration/kit-v1-path-index.json', '.corpus-store-migration/manifest.json']) {
+      if (this.files.readText(this.resolveStorePath(kept)) !== null) {
+        throw new ReadOnlyStoreError('purge', 'this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then purge.');
+      }
+    }
+    const pathIndex = this.loadPathIndex();
+    const records = new Map<string, KitRecord>();
+    for (const id of Object.keys(pathIndex.by_id)) {
+      const record = this.readRecord(id, pathIndex);
+      if (record) records.set(id, record);
+    }
+    for (const id of requested) {
+      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
+    }
+    const plan = planPurge(requested, records);
+    const now = new Date(this.services.clock()).toISOString();
+    const graph = this.loadGraph();
+    const aliasIndex = this.loadAliasIndex();
+
+    // Every tombstone moves before anything renders, so no survivor's generated
+    // link section can still name an erased title.
+    for (const id of [...plan.purged, ...plan.cascaded]) {
+      const stone = this.fittingTombstone(records.get(id)!, now, evidence, plan.via.get(id), pathIndex);
+      const entry = pathIndex.by_id[id];
+      const target = this.tombstonePath(id, pathIndex);
+      this.files.remove(this.resolveStorePath(entry.path));
+      delete pathIndex.by_path[entry.path];
+      pathIndex.by_id[id] = { path: target, archived: true };
+      pathIndex.by_path[target] = id;
+      this.writeRecord(stone, pathIndex, { enforceNoteBound: 'purge' });
+      removeLinksFromGraph(graph, id);
+      addLinksToGraph(graph, id, stone.links ?? []);
+      unregisterAliases(aliasIndex, id);
+    }
+    for (const [op, ids] of [['support-purged', plan.survivors], ['reference-purged', plan.referrers]] as const) {
+      for (const id of ids) {
+        const survivor = (compact: boolean) =>
+          survivorOf(op, records.get(id)!, now, evidence, plan.erased, plan.lost.get(id)!, compact);
+        let kept = survivor(false);
+        // The log entry and the re-render can grow a near-limit note past the bound that every
+        // identity scan reads with. Try the entry without its prose first. A survivor is the
+        // host's content, so beyond that the purge is refused rather than shortening it, and
+        // everything purge writes is staged, so a refusal writes nothing.
+        try {
+          this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });
+        } catch (error) {
+          if (!(error instanceof MissingEvidenceError)) throw error;
+          kept = survivor(true);
+          this.writeRecord(kept, pathIndex, { enforceNoteBound: `purge (record ${id}; shrink it, then purge again)` });
+        }
+        // The graph mirrors link labels, so it follows the stripped labels.
+        removeLinksFromGraph(graph, id);
+        addLinksToGraph(graph, id, kept.links ?? []);
+      }
+    }
+
+    this.savePathIndex(pathIndex);
+    this.saveGraph(graph);
+    this.saveAliasIndex(aliasIndex);
+    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

@@ -177,6 +177,22 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       } finally { rmSync(base, { recursive: true, force: true }); }
     }
   }, 60_000);
+  test('purge-enabled adapters keep their root binding across purge and reindex', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-purge-'));
+    try {
+      const root = join(base, 'store'); const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowPurge: true };
+      const adapter = new Constructor(options); const binding = adapter.rootBinding(); const marker = readFileSync(join(root, '.corpus-root-id'), 'utf8');
+      await adapter.create({ id: 'purge-record', type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'writer' } });
+      await adapter.purge(['purge-record'], { agent: 'eraser', rationale: 'requested' });
+      await adapter.reindex();
+      expect((await adapter.get('purge-record'))?.status).toBe('purged');
+      expect(adapter.rootBinding()).toBe(binding); expect(readFileSync(join(root, '.corpus-root-id'), 'utf8')).toBe(marker);
+      expect(new Constructor(options).rootBinding()).toBe(binding);
+      expect(() => assertAdapterBoundTo(adapter, root)).not.toThrow();
+      const other = join(base, 'other'); new Constructor({ ...options, storeRoot: other });
+      expect(() => assertAdapterBoundTo(adapter, other)).toThrow(expect.objectContaining({ code: 'ROOT_BINDING_MISMATCH' }));
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
   test('matches canonical aliases and rejects other and rescaffolded roots', () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-root-binding-'));
     try {

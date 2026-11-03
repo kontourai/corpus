@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, Ki
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
   const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
-  return new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+  return new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowPurge: true });
 }
 export async function recordPath(profile, root, id) {
   if (profile === 'default') return join(root, 'records', `${id}.md`);
@@ -48,10 +49,31 @@ export async function makeHarness(profile) {
     }
     return result;
   }
+  async function folders(directory = root) {
+    const result = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(directory, entry.name);
+      result.push(path, ...await folders(path));
+    }
+    return result;
+  }
   const specials = {
     async 'root-binding'({ operation }) {
-      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy'].includes(operation.mode), 'unknown root-binding mode');
+      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy', 'purge'].includes(operation.mode), 'unknown root-binding mode');
       if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
+      if (operation.mode === 'purge') {
+        const initial = adapter.rootBinding(); const marker = await readFile(join(root, '.corpus-root-id'), 'utf8');
+        await adapter.create(input('binding-purge'));
+        await adapter.purge(['binding-purge'], { agent: 'eraser', rationale: 'requested' });
+        await adapter.reindex();
+        assert.equal((await adapter.get('binding-purge')).status, 'purged');
+        assert.equal(adapter.rootBinding(), initial); assert.equal(await readFile(join(root, '.corpus-root-id'), 'utf8'), marker);
+        assert.equal(createStore(profile, root, coordinationDirectory).rootBinding(), initial);
+        assertAdapterBoundTo(adapter, root);
+        const other = join(base, 'other'); createStore(profile, other, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, other), { code: 'ROOT_BINDING_MISMATCH' });
+      }
       if (operation.mode === 'legacy') {
         const legacy = join(base, 'legacy'); await mkdir(legacy);
         const unbound = createStore(profile, legacy, coordinationDirectory);
@@ -224,6 +246,103 @@ export async function makeHarness(profile) {
       for (const id of ids) {
         assert.equal((await adapter.get(id)).id, id);
         assert.match(await readFile(await recordPath(profile, root, id), 'utf8'), new RegExp(`id: ${id}`));
+      }
+      return { check: true };
+    },
+    async 'purge-store-bytes'({ operation }) {
+      // Every byte the store keeps, and every path, as the thing a reader of the disk sees.
+      const scan = async () => {
+        const entries = await Promise.all((await files()).map(async (path) => ({ path: path.slice(root.length + 1), text: await readFile(path, 'utf8') })));
+        // Empty folders keep names too (a vault routes notes into category folders).
+        return [...entries, ...(await folders()).map((path) => ({ path: path.slice(root.length + 1), text: '' }))];
+      };
+      const seen = await scan();
+      const found = (marker) => seen.some((file) => file.text.includes(marker) || file.path.includes(marker));
+      if (operation.mode === 'present') {
+        // The scan must be able to see the content, or an empty result proves nothing.
+        for (const marker of operation.markers) {
+          if (profile === 'default' && marker === 'ember-zebra-interview') continue; // only the vault names files by title
+          assert.ok(found(marker), `scan must see ${JSON.stringify(marker)} before the purge`);
+        }
+        return { check: true };
+      }
+      if (operation.mode === 'rebuilt') {
+        // Derived projections must rebuild without the content.
+        await rm(join(root, 'graph-index.json'), { force: true });
+        await rm(join(root, 'alias-index.json'), { force: true });
+        await adapter.reindex();
+        return await (async () => {
+          const rebuilt = await scan();
+          for (const marker of operation.markers) assert.equal(rebuilt.some((file) => file.text.includes(marker) || file.path.includes(marker)), false, `${JSON.stringify(marker)} reappeared after reindex`);
+          return { check: true };
+        })();
+      }
+      assert.equal((await adapter.get('purge-bytes-a')).status, 'purged');
+      for (const marker of operation.markers) assert.equal(found(marker), false, `${JSON.stringify(marker)} is still on disk`);
+      // No plain digest of any erased value, in any common encoding.
+      for (const marker of operation.markers) {
+        for (const algorithm of ['md5', 'sha1', 'sha256', 'sha512']) {
+          const digest = createHash(algorithm).update(marker).digest();
+          for (const form of [digest.toString('hex'), digest.toString('base64'), digest.toString('base64url')]) {
+            assert.equal(seen.some((file) => file.text.toLowerCase().includes(form.toLowerCase())), false, `${algorithm} of ${JSON.stringify(marker)} is on disk`);
+          }
+        }
+      }
+      return { check: true };
+    },
+    async 'purge-journal-erasure'() {
+      const marker = 'JOURNAL-MARKER-ALPHA-7';
+      const journalPath = join(root, '.station-knowledge-transaction.json');
+      const seed = async (id) => {
+        await adapter.create(input(id, { body: marker }));
+        await adapter.create(input(`${id}-dependent`, { type: 'compiled', body: `${marker} dependent`, links: [{ target_id: id, kind: 'source' }] }));
+      };
+      // Crash after the commit marker: the journal left behind holds no erased content.
+      await seed('journal-committed');
+      const committed = await child([profile, root, coordinationDirectory, 'crash-purge', 'committed,journal-committed']);
+      assert.equal(committed.code, 23, committed.stderr);
+      const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+      assert.equal(journal.phase, 'committed');
+      assert.equal(journal.operation, 'purge');
+      assert.ok(journal.entries.length >= 2, 'the journal must name the purged files');
+      for (const entry of journal.entries) {
+        for (const side of [entry.before, entry.after]) {
+          if (side !== null) assert.equal(Buffer.from(side, 'base64').toString('utf8').includes(marker), false, `${entry.path} still holds erased content in the journal`);
+        }
+      }
+      const reopened = createStore(profile, root, coordinationDirectory);
+      assert.equal((await reopened.get('journal-committed')).status, 'purged');
+      assert.equal((await reopened.get('journal-committed-dependent')).status, 'purged');
+      await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
+      // A purge that never reached its commit marker is rolled back whole, never half applied.
+      for (const phase of ['prepared', 'first-publish']) {
+        const id = `journal-${phase}`;
+        await seed(id);
+        const interrupted = await child([profile, root, coordinationDirectory, 'crash-purge', `${phase},${id}`]);
+        assert.equal(interrupted.code, 23, interrupted.stderr);
+        const recovered = createStore(profile, root, coordinationDirectory);
+        for (const key of [id, `${id}-dependent`]) {
+          const record = await recovered.get(key);
+          assert.equal(record.status, 'active', `${key} must not be half purged`);
+          assert.ok(record.body.includes(marker));
+        }
+        await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
+      }
+      return { check: true };
+    },
+    async 'purge-journal-in-flight'() {
+      // Every file is published and the commit marker is not: the purge is applied on
+      // disk, so nothing on disk may still hold the erased content, journal included.
+      const marker = 'IN-FLIGHT-MARKER-ALPHA-7';
+      await adapter.create(input('in-flight-source', { body: marker }));
+      const crashed = await child([profile, root, coordinationDirectory, 'crash-purge', 'final-publish,in-flight-source']);
+      assert.equal(crashed.code, 23, crashed.stderr);
+      const journal = JSON.parse(await readFile(join(root, '.station-knowledge-transaction.json'), 'utf8'));
+      assert.equal(journal.phase, 'prepared');
+      for (const entry of journal.entries) {
+        for (const side of [entry.before, entry.after]) {
+          if (side !== null) assert.equal(Buffer.from(side, 'base64').toString('utf8').includes(marker), false, `in-flight journal still holds erased content in ${entry.path}`);
+        }
       }
       return { check: true };
     },
