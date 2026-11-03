@@ -1215,7 +1215,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
    * candidate in the path index so a link to itself shows its file name. What is only known
    * at apply is stood in for by its largest form: the reviewer id with the largest YAML
    * expansion and the longest proposal id. In the tested cases (see vault-note-bound.test.ts)
-   * the estimate was never below the applied note, and it ran about 4.5 KiB above it for a
+   * the estimate was never below the applied note, and it ran about 4 KiB (4253 bytes) above it for a
    * plain reviewer. That is a margin, not a proof: a custom id generator with ids longer than
    * a UUID, or a destination another record takes first, can still move the applied note.
    * `applyCreate` checks again and is authoritative.

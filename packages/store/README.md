@@ -67,7 +67,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   is stood in for by its largest form (the reviewer id with the largest YAML
   expansion, the longest proposal id), and a link to the record itself renders
   as its file name. In the tested cases the estimate was never below the
-  applied note and ran about 4.5 KiB above it for a plain reviewer, so a
+  applied note and ran about 4 KiB above it for a plain reviewer, so a
   candidate that close to the limit can be refused by `proposeCreate` that
   `create` would accept. It is a margin, not a proof: a custom id generator
   with ids longer than a UUID, or another record taking the destination first,

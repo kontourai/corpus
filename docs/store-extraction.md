@@ -432,7 +432,7 @@ before staging it, sizing the note with the `apply-create` log entry and the
 proposal's evidence. Values known only at apply are stood in for by their largest
 form (reviewer id, proposal id), and a link to the record itself renders as its file name.
 In the tested cases the estimate was never below the applied note and ran about
-4.5 KiB above it for a plain reviewer; it is a margin, not a proof, and
+4 KiB above it for a plain reviewer; it is a margin, not a proof, and
 `applyCreate` stays authoritative. `update` and the other writes
 are not bounded
 ([corpus#51](https://github.com/kontourai/corpus/issues/51)). Tests:
