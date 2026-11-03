@@ -152,6 +152,8 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /rationale of at most 64 bytes/ },
   { id: 'tombstone-measure-overflow-fatal', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'if (!(error instanceof RangeError)) throw error;', 'throw error;'),
     args: focused('test/purge.test.ts'), reason: /made of a very long (type|created_at) can still be erased/ },
+  { id: 'rationale-cut-from-spaces', file: purge, mutate: (s) => swap(s, 'leadingJson(evidence.rationale.trimStart(), maxBytes)', 'leadingJson(evidence.rationale, maxBytes)'),
+    args: focused('test/purge.test.ts'), reason: /leading spaces cannot leave only spaces/ },
 ];
 
 function run(label, args, success) {

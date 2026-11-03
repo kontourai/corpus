@@ -237,7 +237,9 @@ function leadingJson(text: string, maxBytes: number): { text: string; truncated:
 
 /** A shortened tombstone's `rationale` field and the evidence that says how much of it is left. */
 function shortRationale(evidence: PurgeEvidence, maxBytes: number): { rationale: string; evidence: Record<string, unknown> } {
-  const kept = leadingJson(evidence.rationale, maxBytes);
+  // Cut from the first visible character: a rationale that starts with spaces would otherwise
+  // be cut to spaces alone, and a reason is the point of keeping it.
+  const kept = leadingJson(evidence.rationale.trimStart(), maxBytes);
   return {
     rationale: kept.text,
     evidence: kept.truncated ? { rationale_truncated: true, rationale_bytes: Buffer.byteLength(evidence.rationale) } : {},

@@ -551,6 +551,14 @@ describe('purge — vault layout', () => {
       expect(noteBytes('tiny')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
     });
 
+    test('cuts a rationale from its first visible character, so leading spaces cannot leave only spaces', async () => {
+      await noteNearBound('lead', 450);
+      await store.purge(['lead'], { agent: 'privacy-officer', rationale: `${' '.repeat(600)}erasure request 42` });
+      const entry = (await store.get('lead'))!.mutation_log!.at(-1)!;
+      expect(entry.rationale).toBe('erasure request 42');
+      expect(entry.evidence).not.toHaveProperty('rationale_truncated');
+    });
+
     test('also drops an agent or session id too long to keep, so a note made of them can still be erased', async () => {
       const scratch = open('vault', join(base, 'scratch-agent'));
       const make = (adapter: Store, pad: number) =>

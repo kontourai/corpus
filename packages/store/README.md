@@ -130,9 +130,9 @@ silent behavior.
     one. The default layout has no such limit and always writes the full
     tombstone. **This is a narrow departure from "a tombstone keeps provenance,
     links and a purge entry", made so that erasure is not blocked**: it applies
-    only when the full tombstone would exceed 16 MiB, which needs a note of
-    that size made mostly of metadata, and what was lost is counted in the
-    entry. A record id cannot be dropped, and the vault does not cap it as the
+    only when the full tombstone would exceed 16 MiB or cannot be written (the
+    YAML writer overflows its stack on a multi-megabyte field), which needs a
+    note made mostly of metadata, and what was lost is counted in the entry. A record id cannot be dropped, and the vault does not cap it as the
     default layout does ([#58](https://github.com/kontourai/corpus/issues/58)),
     so a purge of a record whose id alone fills the limit is still refused. The
     owner may prefer to refuse every such purge instead; that is a one-line
