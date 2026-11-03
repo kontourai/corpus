@@ -91,41 +91,17 @@ export type PurgePlan = PurgeResult & {
 };
 
 /**
- * The records that still rest on something real once `gone` is erased. A record is
- * grounded when it has no support at all, or some support that is not a record in
- * the store (an outside id), or some support that is itself grounded. This is a
- * least fixed point: two records that only support each other are not grounded, so
- * a cycle cannot keep erased content alive.
- */
-function grounded(
-  ordered: readonly KitRecord[],
-  gone: ReadonlySet<string>,
-  inStore: ReadonlySet<string>,
-): Set<string> {
-  const alive = new Set<string>();
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (const record of ordered) {
-      if (gone.has(record.id) || alive.has(record.id)) continue;
-      const support = supportIds(record);
-      if (
-        support.length === 0 ||
-        support.some((id) => !inStore.has(id) || alive.has(id))
-      ) {
-        alive.add(record.id);
-        changed = true;
-      }
-    }
-  }
-  return alive;
-}
-
-/**
  * Decide the cascade. `records` holds every record in the store, tombstones included,
- * and every requested id must be in it. A record is cascaded when it was grounded
- * before this purge and is not grounded after it, so a record that already rested on
- * nothing real is left alone. A record with any remaining support survives, and a
- * record that only links to a purged record is untouched.
+ * and every requested id must be in it.
+ *
+ * A record is *affected* when a chain of support reaches a requested id. An affected
+ * record survives only if it has support that is real: an id outside the store, a
+ * record the purge does not reach, or an affected record that itself survives. That
+ * is a least fixed point over the affected records, so two affected records that only
+ * support each other fall together, while a record with a live supporter outside the
+ * purge's reach (even one that is part of an older cycle) keeps it. Tombstones and
+ * requested ids are never real support. A record the purge does not reach is left
+ * alone, whatever its own support looks like.
  */
 export function planPurge(
   requested: readonly string[],
@@ -135,15 +111,34 @@ export function planPurge(
   const alreadyPurged = targets.filter((id) => isPurged(records.get(id)!));
   const purged = targets.filter((id) => !alreadyPurged.includes(id));
   const ordered = [...records.values()].sort((a, b) => a.id.localeCompare(b.id));
-  const inStore = new Set(records.keys());
-  const tombstoned = new Set(ordered.filter(isPurged).map((record) => record.id));
-  const gone = new Set([...tombstoned, ...purged]);
+  const gone = new Set<string>(ordered.filter(isPurged).map((record) => record.id));
+  for (const id of purged) gone.add(id);
 
-  const before = grounded(ordered, tombstoned, inStore);
-  const after = grounded(ordered, gone, inStore);
-  const cascaded = ordered
-    .filter((record) => before.has(record.id) && !after.has(record.id) && !gone.has(record.id))
-    .map((record) => record.id);
+  const affected = new Set<string>();
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const record of ordered) {
+      if (gone.has(record.id) || affected.has(record.id)) continue;
+      if (supportIds(record).some((id) => purged.includes(id) || affected.has(id))) {
+        affected.add(record.id);
+        changed = true;
+      }
+    }
+  }
+
+  const alive = new Set<string>();
+  const real = (id: string) => !gone.has(id) && (!records.has(id) || !affected.has(id) || alive.has(id));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const record of ordered) {
+      if (!affected.has(record.id) || alive.has(record.id)) continue;
+      if (supportIds(record).some(real)) {
+        alive.add(record.id);
+        changed = true;
+      }
+    }
+  }
+  const cascaded = ordered.filter((r) => affected.has(r.id) && !alive.has(r.id)).map((r) => r.id);
   const via = new Map(cascaded.map((id) => [id, supportIds(records.get(id)!)]));
 
   const newlyGone = new Set([...purged, ...cascaded]);
@@ -280,11 +275,15 @@ function unlabelErased(entry: KitMutationLogEntry, erased: ReadonlySet<string>):
 
 /** Input checks shared by both adapters; they run before any read or write. */
 export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
-  if (!evidence?.agent) {
+  const text = (value: unknown) => typeof value === 'string' && value.trim() !== '';
+  if (!text(evidence?.agent)) {
     throw new MissingEvidenceError('purge: missing required evidence field: agent');
   }
-  if (typeof evidence.rationale !== 'string' || !evidence.rationale.trim()) {
+  if (!text(evidence.rationale)) {
     throw new MissingEvidenceError('purge: missing required evidence field: rationale');
+  }
+  if (evidence.note !== undefined && typeof evidence.note !== 'string') {
+    throw new MissingEvidenceError('purge: evidence note must be a string');
   }
   if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
     throw new MissingEvidenceError('purge: ids must be a non-empty array of record ids');

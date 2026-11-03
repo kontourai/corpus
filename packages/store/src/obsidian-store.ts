@@ -1895,7 +1895,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
 
   async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
-    if (!this.services.allowPurge) {
+    if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const requested = validatePurgeInput(ids, evidence);
@@ -1920,6 +1920,13 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    // `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and
+    // path, so it would keep the erased titles. (The names are fixed by that command.)
+    for (const kept of ['.corpus-store-migration/kit-v1-path-index.json', '.corpus-store-migration/manifest.json']) {
+      if (this.files.readText(this.resolveStorePath(kept)) !== null) {
+        throw new ReadOnlyStoreError('purge', 'this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then purge.');
+      }
+    }
     const pathIndex = this.loadPathIndex();
     const records = new Map<string, KitRecord>();
     for (const id of Object.keys(pathIndex.by_id)) {

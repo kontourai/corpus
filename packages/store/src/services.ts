@@ -36,6 +36,7 @@ export function resolveServices(options: Omit<StoreOptions, 'storeRoot'>): Resol
   if (typeof recheck !== 'function') throw new Error('coordinationIdentity must return a recheck function');
   return {
     ...options,
+    allowPurge: options.allowPurge === true,
     coordinationIdentity: () => recheck,
     coordinationDirectory: resolve(options.coordinationDirectory),
     lock: options.lock,

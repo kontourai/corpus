@@ -23,16 +23,19 @@ const remove = (source, text) => { assert.ok(source.includes(text), `fault targe
 const swap = (source, from, to) => { assert.ok(source.includes(from), `fault target not found: ${from}`); return source.replace(from, to); };
 
 const controls = [
-  { id: 'skip-cascade', file: purge, mutate: (s) => swap(s, '.filter((record) => before.has(record.id) && !after.has(record.id) && !gone.has(record.id))', '.filter(() => false)'),
+  { id: 'skip-cascade', file: purge, mutate: (s) => swap(s, 'ordered.filter((r) => affected.has(r.id) && !alive.has(r.id))', 'ordered.filter(() => false)'),
     args: conformance('purge-cascade-sole-dependency', 'purge-cascade-cycle', 'purge-source-ids-support'), reason: /result\.cascaded/ },
   // Tombstone a record as soon as any support is lost, instead of only when all of it is.
-  { id: 'cascade-on-any-lost-support', file: purge, mutate: (s) => swap(s, 'support.some((id) => !inStore.has(id) || alive.has(id))', 'support.every((id) => !inStore.has(id) || alive.has(id))'),
+  { id: 'cascade-on-any-lost-support', file: purge, mutate: (s) => swap(s, 'supportIds(record).some(real)', 'supportIds(record).every(real)'),
     args: conformance('purge-survivor-keeps-support', 'purge-source-ids-support'), reason: /(survivor|cascaded|e_after|f_after)/ },
-  { id: 'outside-support-not-real', file: purge, mutate: (s) => swap(s, '!inStore.has(id) || alive.has(id)', 'alive.has(id)'),
+  { id: 'outside-support-not-real', file: purge, mutate: (s) => swap(s, '!gone.has(id) && (!records.has(id) ||', '!gone.has(id) && records.has(id) && (false ||'),
     args: conformance('purge-source-ids-support'), reason: /result\.cascaded/ },
   // The naive rule: a record survives while any support is not purged, so a cycle holds itself up.
-  { id: 'no-cycle-rule', file: purge, mutate: (s) => swap(s, 'support.some((id) => !inStore.has(id) || alive.has(id))', 'support.some((id) => !gone.has(id))'),
-    args: conformance('purge-cascade-cycle'), reason: /result\.cascaded/ },
+  { id: 'no-cycle-rule', file: purge, mutate: (s) => swap(s, 'if (supportIds(record).some(real)) {', 'if (supportIds(record).some((id) => !gone.has(id))) {'),
+    args: conformance('purge-cascade-cycle', 'purge-cascade-cycle-member'), reason: /result\.cascaded/ },
+  // A supporter the purge does not reach is not real support, so b falls although x is alive.
+  { id: 'unreached-supporter-ignored', file: purge, mutate: (s) => swap(s, '|| !affected.has(id) ||', '||'),
+    args: conformance('purge-survivor-with-live-cycle'), reason: /(result\.survivors|b_after)/ },
   { id: 'survivor-log-skipped', file: purge, mutate: (s) => swap(s, "auditEntry(op, at, evidence, { purged_ids: purgedIds }),", ''),
     args: conformance('purge-survivor-keeps-support', 'purge-source-ids-support'), reason: /(mutation_log|survivor)/ },
   { id: 'tombstone-keeps-body', file: purge, mutate: (s) => swap(s, "    body: '',\n    category: PURGED_CATEGORY,", '    body: record.body,\n    category: PURGED_CATEGORY,'),
@@ -67,6 +70,18 @@ const controls = [
     args: conformance('purge-input-validation'), reason: /NOT_FOUND|must reject/ },
   { id: 'prefix-resolves-target', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan = planPurge(requested, records);', '    requested = requested.map((id) => [...records.keys()].find((key) => key.startsWith(id)) ?? id);\n    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan = planPurge(requested, records);'),
     args: conformance('purge-input-validation'), reason: /(purge|NOT_FOUND|must reject)/ },
+  { id: 'orphan-journal-temp-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '    this.removeOrphanJournalTemporaries();\n', ''),
+    args: focused('test/purge.test.ts'), reason: /journal temporary left by a crash/ },
+  { id: 'success-over-unscrubbed-journal', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (options.erasure && !markerPersisted) {', 'if (false) {'),
+    args: focused('test/purge.test.ts'), reason: /commit marker cannot be written/ },
+  { id: 'empty-folders-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (options.erasure) this.pruneEmptyDirectories(context.journal);', ''),
+    args: conformance('purge-store-bytes'), reason: /person-739.* is still on disk/ },
+  { id: 'migration-artifacts-ignored', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "if (this.files.readText(this.resolveStorePath(kept)) !== null) {", 'if (false) {'),
+    args: focused('test/purge.test.ts'), reason: /migration artifacts/ },
+  { id: 'evidence-types-unchecked', file: purge, mutate: (s) => swap(s, "const text = (value: unknown) => typeof value === 'string' && value.trim() !== '';", 'const text = (value: unknown) => Boolean(value);'),
+    args: focused('test/purge.test.ts'), reason: /wrong runtime type/ },
+  { id: 'allow-purge-truthy', file: store + 'src/services.ts', mutate: (s) => swap(s, 'allowPurge: options.allowPurge === true,', 'allowPurge: Boolean(options.allowPurge),'),
+    args: focused('test/purge.test.ts'), reason: /allowPurge must be exactly true/ },
 ];
 
 function run(label, args, success) {

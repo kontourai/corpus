@@ -49,6 +49,15 @@ export async function makeHarness(profile) {
     }
     return result;
   }
+  async function folders(directory = root) {
+    const result = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(directory, entry.name);
+      result.push(path, ...await folders(path));
+    }
+    return result;
+  }
   const specials = {
     async 'body-not-frontmatter'({ values }) {
       const text = await readFile(await recordPath(profile, root, values.a), 'utf8');
@@ -200,7 +209,12 @@ export async function makeHarness(profile) {
     },
     async 'purge-store-bytes'({ operation }) {
       // Every byte the store keeps, and every path, as the thing a reader of the disk sees.
-      const seen = await Promise.all((await files()).map(async (path) => ({ path: path.slice(root.length + 1), text: await readFile(path, 'utf8') })));
+      const scan = async () => {
+        const entries = await Promise.all((await files()).map(async (path) => ({ path: path.slice(root.length + 1), text: await readFile(path, 'utf8') })));
+        // Empty folders keep names too (a vault routes notes into category folders).
+        return [...entries, ...(await folders()).map((path) => ({ path: path.slice(root.length + 1), text: '' }))];
+      };
+      const seen = await scan();
       const found = (marker) => seen.some((file) => file.text.includes(marker) || file.path.includes(marker));
       if (operation.mode === 'present') {
         // The scan must be able to see the content, or an empty result proves nothing.
@@ -216,7 +230,7 @@ export async function makeHarness(profile) {
         await rm(join(root, 'alias-index.json'), { force: true });
         await adapter.reindex();
         return await (async () => {
-          const rebuilt = await Promise.all((await files()).map(async (path) => ({ path: path.slice(root.length + 1), text: await readFile(path, 'utf8') })));
+          const rebuilt = await scan();
           for (const marker of operation.markers) assert.equal(rebuilt.some((file) => file.text.includes(marker) || file.path.includes(marker)), false, `${JSON.stringify(marker)} reappeared after reindex`);
           return { check: true };
         })();

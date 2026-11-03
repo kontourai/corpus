@@ -13,6 +13,7 @@ import {
   readSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -280,6 +281,7 @@ export class KnowledgeFileTransactions {
         this.observe(operation, 'rejected');
         throw error;
       }
+      let markerPersisted = false;
       try {
         this.verifyReadSet(context);
         if (context.journal.entries.length === 0) return result;
@@ -298,8 +300,10 @@ export class KnowledgeFileTransactions {
           for (const entry of context.journal.entries) entry.before = null;
         }
         this.persistJournal(context.journal);
+        markerPersisted = true;
         this.hooks.afterCommitMarker?.(context.journal);
         this.removeJournal();
+        if (options.erasure) this.pruneEmptyDirectories(context.journal);
         this.observe(operation, 'applied');
         return result;
       } catch (error) {
@@ -310,6 +314,16 @@ export class KnowledgeFileTransactions {
           // Every authoritative/derived target is durably published. A lost
           // commit-marker response or cleanup error cannot turn that applied
           // fact into a caller-visible failure that invites a duplicate retry.
+          // An erasure is the exception: until the journal is gone it may still
+          // hold the erased content, so it must not report success over that.
+          if (options.erasure && !markerPersisted) {
+            try {
+              this.removeJournal();
+            } catch (cleanup) {
+              this.observe(operation, 'unavailable');
+              throw unavailable(cleanup);
+            }
+          }
           this.observe(operation, 'applied-readback');
           return result;
         }
@@ -640,7 +654,53 @@ export class KnowledgeFileTransactions {
     });
   }
 
+  /**
+   * A crash inside the journal's own atomic write leaves `.<id>.tmp` at the root
+   * holding the same before-images the journal would. Only a file that parses as
+   * this engine's journal is removed; any other `.tmp` file is not ours.
+   */
+  private removeOrphanJournalTemporaries(): void {
+    let names: string[];
+    try {
+      names = readdirSync(this.root, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && /^\..+\.tmp$/.test(entry.name))
+        .map((entry) => entry.name);
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw unavailable(error);
+    }
+    for (const name of names) {
+      const path = join(this.root, name);
+      try {
+        const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<Journal>;
+        if (value?.version === JOURNAL_VERSION && typeof value.transactionId === 'string' && Array.isArray(value.entries)) {
+          this.removePublished(path);
+        }
+      } catch {
+        // Not JSON, or unreadable: not a journal temporary.
+      }
+    }
+  }
+
+  /** Best effort, after an erasure: a removed note must not leave its folder names behind. */
+  private pruneEmptyDirectories(journal: Journal): void {
+    for (const entry of journal.entries) {
+      if (entry.after !== null) continue;
+      let directory = dirname(join(this.root, entry.path));
+      while (directory !== this.root && directory.startsWith(this.root + sep)) {
+        try {
+          if (!lstatSync(directory).isDirectory()) break;
+          rmdirSync(directory);
+        } catch {
+          break; // not empty, already gone, or not ours to touch
+        }
+        directory = dirname(directory);
+      }
+    }
+  }
+
   private recoverLocked(): void {
+    this.removeOrphanJournalTemporaries();
     const journal = this.loadJournal();
     if (!journal) return;
     if (journal.phase === 'prepared') {

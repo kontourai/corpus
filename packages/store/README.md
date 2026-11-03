@@ -88,12 +88,14 @@ silent behavior.
     are the erasure trace it asks for.
   - **Cascade.** A record's support is `provenance.source_ids` plus the targets of
     its `source` links. `related`, `proposes` and `supersedes` links are
-    references, not support. A record is tombstoned when it rested on something
-    real before the purge and rests on nothing real after it. An id that is not a
-    record in the store (an outside conversation id, say) counts as real support.
-    Records that only support each other do not keep erased content alive, so a
-    cycle falls with its root. The rule repeats to a fixed point, so it is
-    transitive.
+    references, not support. A record is *affected* when a chain of support
+    reaches a requested id. An affected record is tombstoned unless it still has
+    real support: an id that is not a record in the store (an outside
+    conversation id, say), a record the purge does not reach, or an affected
+    record that itself survives. This is a least fixed point, so the cascade is
+    transitive, and affected records that only support each other fall together
+    instead of holding each other up. A record the purge does not reach is left
+    alone, whatever its own support looks like.
   - **Survivors.** A record with other support survives untouched except for two
     things. Its log gains a `support-purged` entry (`agent`, `rationale`, the
     purged ids), and the labels of its links to erased records are dropped,
@@ -112,28 +114,33 @@ silent behavior.
     with no content.
   - **Read paths and projections.** The slug aliases leave the alias index, the
     graph index rebuilds from tombstone links, and `reindex` reproduces the same
-    result. In the vault the file moves to `archive/purged/<id>.md` and the
-    path index loses the title slug, and every record that linked to it is
-    re-rendered, so no generated `[[link]]` section still names the erased
-    title. The `dimensions` frontmatter is not written to a tombstone.
+    result. In the vault the file moves to `archive/purged/<id>.md`, the path
+    index loses the title slug, category folders the purge emptied are removed,
+    and every record that linked to it is re-rendered, so no generated `[[link]]`
+    section still names the erased title. The `dimensions` frontmatter is not written to a tombstone.
   - **Recoverable publication.** The transaction journal holds base64
     before-images of every file it touches so an interrupted write can roll
     back. For a purge, the commit marker drops them, so a journal left by a
-    crash after the commit marker holds no erased content. *Deferred:* between
+    crash after the commit marker holds no erased content. A purge does not
+    report success while its journal may still hold them: if the commit marker
+    cannot be written, it removes the journal or throws. The next locked
+    operation also removes a `.<id>.tmp` file that a crash inside the journal's
+    own write left at the root, but only one that parses as a journal.
+    *Deferred:* between
     the first journal write and the commit marker the journal still holds the
     pre-purge files, because rollback needs them. A crash in that window leaves
     them on disk until the next locked read recovers it, and unlinking a file is
     not secure erasure. `purge-journal-in-flight` records this on the
     expected-fail list. Closing it needs a roll-forward journal, which is a
     separate change to the transaction engine.
+  - **Migration artifacts.** A vault that still holds `.corpus-store-migration/`
+    keeps the original Kit index (every path, so every title slug and category)
+    and a sha256 of every file. `purge` refuses such a vault with `READ_ONLY`
+    until the host deletes that directory, which it should do once the migration
+    is verified. After a purge, `--reverse` could not run anyway.
   - **Not covered.** Copies outside the store's transaction: backups, a
-    filesystem snapshot, search or vector indexes a host built from `get`/lists
-    (the host must rebuild them from the working set), and the `corpus-store
-    migrate` manifest under `.corpus-store-migration/`, which holds a sha256 of
-    every file as it was before a purge. These are whole-file hashes, not hashes
-    of the content alone, but they are still a trace, and `--reverse` refuses
-    once those files change. A host should delete that directory once the
-    migration is verified.
+    filesystem snapshot, and search or vector indexes a host built from
+    `get`/lists (the host must rebuild them from the working set).
 
 Every decision is implemented except the journal window named above, which is
 the single entry on the expected-fail list.

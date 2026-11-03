@@ -8198,6 +8198,22 @@
           "call": "create",
           "args": [
             {
+              "id": "purge-bytes-s",
+              "type": "raw",
+              "title": "Folder only",
+              "body": "folder only body",
+              "category": "private.person-739",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
               "id": "purge-bytes-a",
               "type": "raw",
               "title": "Ember Zebra Interview",
@@ -8293,14 +8309,16 @@
             "conformance/ember-zebra",
             "note ALPHA-7",
             "label ALPHA-7",
-            "ember-zebra-interview"
+            "ember-zebra-interview",
+            "person-739"
           ]
         },
         {
           "call": "purge",
           "args": [
             [
-              "$a"
+              "$a",
+              "$s"
             ],
             {
               "agent": "privacy-officer",
@@ -8318,7 +8336,8 @@
             "conformance/ember-zebra",
             "note ALPHA-7",
             "label ALPHA-7",
-            "ember-zebra-interview"
+            "ember-zebra-interview",
+            "person-739"
           ]
         },
         {
@@ -8331,7 +8350,8 @@
             "conformance/ember-zebra",
             "note ALPHA-7",
             "label ALPHA-7",
-            "ember-zebra-interview"
+            "ember-zebra-interview",
+            "person-739"
           ]
         }
       ],
@@ -9033,6 +9053,288 @@
         }
       ],
       "regression": "Records that only support each other keep erased content alive after their common root is purged.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-cascade-cycle-member",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-p",
+              "type": "concept",
+              "title": "purge-cyc-p",
+              "body": "purge-cyc-p body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-q",
+              "type": "concept",
+              "title": "purge-cyc-q",
+              "body": "purge-cyc-q body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$p"
+                ]
+              }
+            }
+          ],
+          "save": "q"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$p",
+            [
+              {
+                "target_id": "$q",
+                "kind": "source"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-r",
+              "type": "concept",
+              "title": "purge-cyc-r",
+              "body": "purge-cyc-r body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$q"
+                ]
+              }
+            }
+          ],
+          "save": "r"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$p"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$q"
+          ],
+          "save": "q_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "r_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$q",
+            "$r"
+          ]
+        },
+        {
+          "ref": "result.survivors",
+          "length": 0
+        },
+        {
+          "ref": "q_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "q_after.body",
+          "equals": ""
+        },
+        {
+          "ref": "r_after.status",
+          "equals": "purged"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "A record whose only support is the purged record survives because the two support each other.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-survivor-with-live-cycle",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-root",
+              "type": "raw",
+              "title": "purge-live-root",
+              "body": "purge-live-root body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "root"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-x",
+              "type": "concept",
+              "title": "purge-live-x",
+              "body": "purge-live-x body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "x"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-y",
+              "type": "concept",
+              "title": "purge-live-y",
+              "body": "purge-live-y body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$x"
+                ]
+              }
+            }
+          ],
+          "save": "y"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$x",
+            [
+              {
+                "target_id": "$y",
+                "kind": "source"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-b",
+              "type": "concept",
+              "title": "purge-live-b",
+              "body": "purge-live-b body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$root",
+                  "$x"
+                ]
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$root"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$b"
+          ],
+          "save": "b_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$x"
+          ],
+          "save": "x_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.survivors",
+          "equals": [
+            "$b"
+          ]
+        },
+        {
+          "ref": "result.cascaded",
+          "length": 0
+        },
+        {
+          "ref": "b_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "x_after.status",
+          "equals": "active"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "A record is erased although it has support the purge never reached.",
       "production_seam": false
     }
   ]

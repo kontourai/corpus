@@ -999,7 +999,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
   // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
 
   async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
-    if (!this.services.allowPurge) {
+    if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const requested = validatePurgeInput(ids, evidence);

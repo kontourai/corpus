@@ -4,7 +4,7 @@
  * scrubbing, atomic refusal, codec round trips, and recovery. Both profiles run every
  * test, because a guarantee that holds for one adapter only is not the contract.
  */
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,6 +168,26 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     expect((await store.get('q'))?.status).toBe('active');
   });
 
+  test('records resting on a purged member of a support cycle are erased with it', async () => {
+    await store.create({ id: 'p', type: 'concept', title: 'p', body: 'p', category: 'engineering', provenance: { agent: 'creator' } });
+    await store.create({ id: 'q', type: 'concept', title: 'q', body: 'q', category: 'engineering', provenance: { agent: 'creator', source_ids: ['p'] } });
+    await store.link('p', [{ target_id: 'q', kind: 'source' }], { agent: 'editor' });
+    await store.create({ id: 'r', type: 'concept', title: 'r', body: 'r', category: 'engineering', provenance: { agent: 'creator', source_ids: ['q'] } });
+    const result = await store.purge(['p'], evidence);
+    expect(result).toMatchObject({ cascaded: ['q', 'r'], survivors: [] });
+  });
+
+  test('a record with a live supporter outside the purge keeps it, even when that supporter is in an older cycle', async () => {
+    await raw('root');
+    await store.create({ id: 'x', type: 'concept', title: 'x', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+    await store.create({ id: 'y', type: 'concept', title: 'y', body: 'y', category: 'engineering', provenance: { agent: 'creator', source_ids: ['x'] } });
+    await store.link('x', [{ target_id: 'y', kind: 'source' }], { agent: 'editor' });
+    await store.create({ id: 'b', type: 'concept', title: 'b', body: 'b', category: 'engineering', provenance: { agent: 'creator', source_ids: ['root', 'x'] } });
+    const result = await store.purge(['root'], evidence);
+    expect(result).toMatchObject({ cascaded: [], survivors: ['b'] });
+    expect((await store.get('x'))?.status).toBe('active');
+  });
+
   test('survivor links keep their support but lose labels that name an erased record', async () => {
     await raw('s1');
     await raw('s2');
@@ -208,6 +228,45 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     expect(await reopened.get('gone')).toEqual(first);
   });
 
+  test('refuses evidence of the wrong runtime type before writing anything', async () => {
+    await raw('typed');
+    const before = files(root);
+    for (const bad of [{ agent: { x: 1 }, rationale: 'r' }, { agent: 'a', rationale: 5 }, { agent: 'a', rationale: 'r', note: { y: 1 } }, { agent: '  ', rationale: 'r' }]) {
+      await expect(store.purge(['typed'], bad as never)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+    }
+    expect(files(root)).toEqual(before);
+  });
+
+  test('allowPurge must be exactly true', async () => {
+    await raw('strict');
+    for (const value of ['false', 'true', 1, {}]) {
+      await expect(open(profile, root, { allowPurge: value }).purge(['strict'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY' });
+    }
+  });
+
+  test('a journal temporary left by a crash is removed by the next locked operation, and other .tmp files are not', async () => {
+    await raw('secret', { body: 'ORPHAN-NEEDLE' });
+    const journal = JSON.stringify({ version: 1, transactionId: 't', operation: 'purge', phase: 'prepared', entries: [{ path: 'x.md', before: Buffer.from('ORPHAN-NEEDLE').toString('base64'), after: null }] });
+    writeFileSync(join(root, '.crashed-journal.tmp'), journal);
+    writeFileSync(join(root, '.someone-elses.tmp'), 'not a journal');
+    await store.get('secret');
+    expect(existsSync(join(root, '.crashed-journal.tmp'))).toBe(false);
+    expect(existsSync(join(root, '.someone-elses.tmp'))).toBe(true);
+  });
+
+  test('a purge whose commit marker cannot be written does not report success over a journal that holds erased content', async () => {
+    await raw('doomed', { body: 'MARKER-NEEDLE' });
+    const journalPath = join(root, '.station-knowledge-transaction.json');
+    const hooked = open(profile, root) as unknown as { files: { hooks: { beforeFileReplace?: (path: string) => void } } } & Store;
+    let writes = 0;
+    hooked.files.hooks.beforeFileReplace = (path) => {
+      if (path.endsWith('.station-knowledge-transaction.json') && ++writes === 2) throw new Error('disk full');
+    };
+    const result = await hooked.purge(['doomed'], evidence);
+    expect(result.purged).toEqual(['doomed']);
+    expect(existsSync(journalPath)).toBe(false);
+  });
+
   test('reindex rebuilds the graph and aliases with the tombstone links and without its aliases', async () => {
     await raw('a', { aliases: ['team/a'] });
     await raw('b');
@@ -239,7 +298,7 @@ describe('purge — vault layout', () => {
     expect(index().by_id['src-1']).toEqual({ path: 'archive/purged/src-1.md', archived: true });
     expect(index().by_path['archive/purged/src-1.md']).toBe('src-1');
     expect(Object.keys(files(root)).filter((path) => path.includes('zebra'))).toEqual([]);
-    expect(existsSync(join(root, 'engineering'))).toBe(true); // category folders are left; they hold no content
+    expect(existsSync(join(root, 'engineering'))).toBe(false); // the emptied category folders go too
   });
 
   test('derives a safe path for ids that are not lowercase path segments', async () => {
@@ -288,9 +347,29 @@ describe('purge — vault layout', () => {
     await store.create({ id: 'src', type: 'raw', title: 's', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
     await store.purge(['src'], evidence);
     const path = join(root, index().by_id.src.path);
-    const { writeFileSync } = await import('node:fs');
     writeFileSync(path, `${readFileSync(path, 'utf8')}\nsneaked content\n`);
     expect((await open('vault', root).get('src'))?.body).toBe('');
+  });
+
+  test('removes the emptied category folders, and only those', async () => {
+    await store.create({ id: 'only', type: 'raw', title: 'Only', body: 'x', category: 'private.person-739', provenance: { agent: 'creator' } });
+    await store.create({ id: 'kept', type: 'raw', title: 'Kept', body: 'x', category: 'private.other', provenance: { agent: 'creator' } });
+    mkdirSync(join(root, 'unrelated-empty'));
+    await store.purge(['only'], evidence);
+    expect(existsSync(join(root, 'private', 'person-739'))).toBe(false);
+    expect(existsSync(join(root, 'private', 'other'))).toBe(true);
+    expect(existsSync(join(root, 'unrelated-empty'))).toBe(true);
+  });
+
+  test('refuses to purge a vault that still holds migration artifacts, which keep erased paths and hashes', async () => {
+    await store.create({ id: 'src', type: 'raw', title: 'Zebra', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+    mkdirSync(join(root, '.corpus-store-migration'));
+    writeFileSync(join(root, '.corpus-store-migration', 'manifest.json'), '{}');
+    const before = files(root);
+    await expect(store.purge(['src'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.stringContaining('.corpus-store-migration') });
+    expect(files(root)).toEqual(before);
+    rmSync(join(root, '.corpus-store-migration'), { recursive: true });
+    await expect(store.purge(['src'], evidence)).resolves.toMatchObject({ purged: ['src'] });
   });
 
   test('a kit-v1 vault refuses purge as read-only', async () => {
