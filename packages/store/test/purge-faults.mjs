@@ -72,7 +72,7 @@ const controls = [
     args: conformance('purge-input-validation'), reason: /(purge|NOT_FOUND|must reject)/ },
   { id: 'orphan-journal-temp-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '    this.removeOrphanJournalTemporaries();\n', ''),
     args: focused('test/purge.test.ts'), reason: /journal temporary left by a crash/ },
-  { id: 'success-over-unscrubbed-journal', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (options.erasure && !markerPersisted) {', 'if (false) {'),
+  { id: 'success-over-unscrubbed-journal', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '            if (!markerPersisted) {', '            if (false) {'),
     args: focused('test/purge.test.ts'), reason: /commit marker cannot be written/ },
   { id: 'empty-folders-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (options.erasure) this.pruneEmptyDirectories(context.journal);', ''),
     args: conformance('purge-store-bytes'), reason: /person-739.* is still on disk/ },
