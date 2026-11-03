@@ -92,8 +92,8 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /cannot be removed fails the operation/ },
   { id: 'readback-skips-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "            this.pruneEmptyDirectories(context.journal);\n          }\n          this.observe(operation, 'applied-readback');", "          }\n          this.observe(operation, 'applied-readback');"),
     args: focused('test/purge.test.ts'), reason: /commit marker had to be skipped/ },
-  // A backslash is read as an ordinary character, so an escaped quote ends the string early.
-  { id: 'journal-temp-prefix-too-strict', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'at += code === 0x5c ? 2 : 1;', 'at += 1;'),
+  // Simple escapes (an escaped quote, newline, backslash) are no longer accepted.
+  { id: 'journal-temp-prefix-too-strict', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (next !== undefined && ', 'if (false && next !== undefined && '),
     args: focused('test/purge.test.ts'), reason: /every cut of a journal with escaped quotes/ },
   { id: 'journal-temp-head-truncated', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'startsLikeJournal(text)', 'startsLikeJournal(text.slice(0, 1024))'),
     args: focused('test/purge.test.ts'), reason: /very long id and operation/ },
