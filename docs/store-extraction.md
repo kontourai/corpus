@@ -380,7 +380,11 @@ and vault.
 The vault adapter selects its path index on every operation: canonical
 `path-index.json`, or the Knowledge Kit's `.graph-index.json` (`kit-v1`), which
 opens read-only. Both at once is refused, and a root that holds store data
-without either index is refused instead of being read as empty. The
+without either index is refused instead of being read as empty. `reindex` on a
+vault with no records writes the empty `path-index.json` next to the derived
+indexes, since those indexes alone would mark the root as occupied
+([corpus#43](https://github.com/kontourai/corpus/issues/43);
+`test/vault-empty-reindex.test.ts`). The
 `corpus-store migrate` bin converts a `kit-v1` vault through one journaled
 transaction of the store's transaction engine, which gains `readBytes` and
 `writeBytes` so the saved index keeps its exact bytes. It writes a hashed
