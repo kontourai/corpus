@@ -26,7 +26,7 @@ const cases = [
   ['blank', 'src/shared/source-refs.ts', 'v.trim().length > 0', 'true', 'structured source refs'],
   ['range-start', 'src/shared/source-refs.ts', '(start as number) < 1', '(start as number) < 0', 'structured source refs'],
   ['range-safe', 'src/shared/source-refs.ts', '!Number.isSafeInteger(end)', '!Number.isInteger(end)', 'structured source refs'],
-  ['sitting', 'src/shared/source-refs.ts', "Object.hasOwn(ref, 'sitting_id') && !bounded(sitting_id)", "false", 'structured source refs'],
+  ['sitting', 'src/shared/source-refs.ts', "sitting_id !== undefined && !bounded(sitting_id)", "false", 'structured source refs'],
   ['read', 'src/shared/record-schema.ts', "record.provenance.source_refs !== undefined && !validSourceRefs(record.provenance.source_refs)", 'false', 'invalid source refs on disk'],
 ];
 for (const [name, file, before, after, pattern] of cases) {
