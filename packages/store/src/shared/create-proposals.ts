@@ -152,7 +152,7 @@ export class CreateProposals {
     const existing = requestKeyHash ? this.list().find((proposal) => proposal.request_key_hash === requestKeyHash) : undefined;
     // Erased proposals retain only the key identity; do not compute or compare a
     // digest of the caller's content for a key whose proposal was erased.
-    if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError();
+    if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);
     const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
     if (existing) {
       if (existing.request_digest !== requestDigest) throw new RequestKeyConflictError();
@@ -366,6 +366,11 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if (!isNonemptyString(value.proposer_id)) throw corrupt('proposer_id is missing');
   if (!isRecord(value.evidence) || !isNonemptyString(value.evidence.agent) || !isNonemptyString(value.evidence.proposal)) {
     throw corrupt('evidence is invalid');
+  }
+  if (!erased && value.request_key_retired !== true && typeof value.request_digest === 'string') {
+    const evidence = value.evidence as Record<string, unknown>;
+    const actual = hash(canonical({ candidate: value.candidate, proposerId: value.proposer_id, evidence: { agent: evidence.agent, proposal: evidence.proposal } }));
+    if (actual !== value.request_digest) throw corrupt('request digest does not match proposal content');
   }
   if (!isNonemptyString(value.proposed_at) || !Number.isFinite(Date.parse(value.proposed_at))) {
     throw corrupt('proposed_at is invalid');

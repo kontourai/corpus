@@ -293,9 +293,9 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-0 of the 2 expected failures are bound to ref/kind/expected/actual, and 2 to
-specific error patterns. The remaining vectors check full erasure and partial
-scrubbing with retained key identity and retry refusal; they await corpus#41 and
+0 of the 4 expected failures are bound to ref/kind/expected/actual, and 4 to
+specific error patterns. The remaining vectors check full erasure, partial scrub, and retry ordering for
+blocked and erased proposals; they await corpus#41 and
 fail specifically because `purge` is unavailable.
 
 ### Host vectors
@@ -477,8 +477,12 @@ the proposal was erased; a conflicting reuse returns `REQUEST_KEY_CONFLICT`
 without writing. The owner decided that erasure retains the key identity, removes
 the input digest, and refuses all retries with that key without a content comparison.
 The shared proposal-write seam also retires the key and removes the old digest if
-a partial scrub changes hashed candidate or evidence content. The actual purge
-operation and both post-purge vectors remain expected failures pending corpus#41.
+a partial scrub changes hashed candidate or evidence content, marking the key
+as `request_key_retired`. Live keyed proposals with a mismatching stored digest
+are refused as corrupt. The actual purge
+operation and four purge-integration vectors remain expected failures pending corpus#41.
+On integration, key lookup must precede the purge source guard so an unchanged
+blocked proposal returns its receipt and an erased key returns uniform refusal.
 Five other `create-request-key-*` vectors exercise retries, conflicts,
 rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the

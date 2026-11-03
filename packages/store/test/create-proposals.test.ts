@@ -124,7 +124,7 @@ describe.each([
     expect(bytes).not.toContain(input.body); expect(bytes).not.toContain(evidence.proposal);
     const before = tree(root);
     for (const attempt of [input, { ...input, body: 'different' }]) {
-      expect(await code(store.proposeCreate(attempt, 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      await expect(store.proposeCreate(attempt, 'agent-a', evidence, options)).rejects.toMatchObject({ code: 'REQUEST_KEY_CONFLICT', message: expect.stringContaining('retired after content scrub') });
       expect(tree(root)).toEqual(before);
     }
     writeFileSync(path, JSON.stringify({ ...scrubbed, request_digest: 'a'.repeat(64), request_digest_version: 1 }));
@@ -507,6 +507,17 @@ describe.each([
       await expect(store.getProposal(proposalId)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
       await expect(store.listProposals()).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
     }
+  });
+
+  test('a live keyed proposal with tampered content is refused as corrupt', async () => {
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'tamper-key' });
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const proposal = JSON.parse(readFileSync(path, 'utf8')); proposal.candidate.body = 'tampered';
+    writeFileSync(path, JSON.stringify(proposal)); const before = tree(root);
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.listProposals()).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.applyCreate(id, 'reviewer')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    expect(tree(root)).toEqual(before);
   });
 
   test('keyed requests fail closed on corrupt neighbours and invalid metadata', async () => {

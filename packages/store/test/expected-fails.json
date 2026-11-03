@@ -14,5 +14,21 @@
     ],
     "awaits": "purge integration from corpus#41; post-scrub retry policy decided by owner",
     "errorPattern": "^missing adapter method: purge(?:\\n|$)"
+  },
+  "create-request-key-blocked-retry": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "purge integration from corpus#41; key lookup must precede purge source guard",
+    "errorPattern": "^missing adapter method: purge(?:\\n|$)"
+  },
+  "create-request-key-erased-source-retry": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "purge integration from corpus#41; key lookup must precede purge source guard",
+    "errorPattern": "^missing adapter method: purge(?:\\n|$)"
   }
 }
