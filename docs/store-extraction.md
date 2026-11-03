@@ -293,7 +293,11 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-The expected-fail list is empty.
+The expected-fail list holds one entry: `purge-journal-in-flight`, the window
+between a purge's first journal write and its commit marker (see
+[Owner decisions](../packages/store/README.md#owner-decisions)). Every other
+decision has shipped. 0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
+specific error patterns.
 
 ### Host vectors
 

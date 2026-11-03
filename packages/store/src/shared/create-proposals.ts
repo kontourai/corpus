@@ -7,8 +7,10 @@
  * Both profiles share this module; each supplies its own `createLocked`.
  */
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   CreateInput,
+  PurgeEvidence,
   CreateProposalListOptions,
   CreateProposalState,
   KitCreateProposal,
@@ -27,6 +29,7 @@ import type { ResolvedServices } from '../services.js';
 import { assertCreateFields } from './create-input.js';
 import { freshnessPatch } from './freshness.js';
 import type { KnowledgeFileTransactions } from './file-transactions.js';
+import { PURGED_CATEGORY, PURGED_TITLE, supportIds } from './purge.js';
 
 /**
  * Dot-named so it can never be a category directory (categories match `[a-z0-9_-]+`):
@@ -117,6 +120,8 @@ export class CreateProposals {
      * checks again.
      */
     assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
+    /** Purge: a candidate may not cite an erased record as a source. Runs before the profile's own checks. */
+    guard?: (candidate: CreateInput) => void,
   ): string {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
@@ -141,6 +146,17 @@ export class CreateProposals {
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
     freshnessPatch(stored);
+    // Purge reads a candidate's provenance and links to decide what rests on what, and
+    // `create` would quietly turn a number into text. A proposal states them as text.
+    const problem = candidateShapeProblem(stored);
+    if (problem) throw new MissingEvidenceError(`proposeCreate: ${problem}`);
+    // The reader refuses a link with an empty target or kind, so `create` would write a record
+    // nothing can read back (kontourai/corpus#56). Staging does not hand that to apply.
+    if ((stored.links ?? []).some((link) => link.target_id === '' || link.kind === '')) {
+      throw new MissingEvidenceError('proposeCreate: candidate links need a non-empty target_id and kind');
+    }
+    // A candidate may not cite an erased record as a source (purge, 2026-11-03).
+    guard?.(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a
     // type error and an id already taken are caught early.
     if (stored.id !== undefined) {
@@ -240,6 +256,73 @@ export class CreateProposals {
     });
   }
 
+  /**
+   * Purge (owner decision, 2026-11-03): erase every proposal that carries erased content.
+   *
+   * A proposal carries its whole candidate in every state, so the candidate is erased when
+   * it rests only on erased records (its support, as for a record, is `provenance.source_ids`
+   * plus `source` links, with at least one newly erased) or when `applyCreate` created a
+   * record that is now erased. The candidate becomes a content-free stub that keeps its type,
+   * provenance and link targets, `evidence.proposal` becomes `[purged]`, and `erasure` records
+   * who erased it and why. A pending one is also settled as `rejected` by the purging agent
+   * with the purge's rationale, so it can never apply. A proposal with other support left stays
+   * as it is, except that link labels aimed at erased records are dropped; a pending one of
+   * those is reported as blocked, because `applyCreate` will refuse the erased support.
+   * `newlyErased` holds the records this purge erases; `allErased` also holds earlier tombstones.
+   */
+  erase(
+    newlyErased: ReadonlySet<string>,
+    allErased: ReadonlySet<string>,
+    evidence: PurgeEvidence,
+    at: string,
+  ): { rejected: string[]; scrubbed: string[]; blocked: string[] } {
+    const rejected: string[] = [];
+    const scrubbed: string[] = [];
+    const blocked: string[] = [];
+    for (const proposal of this.list()) {
+      assertErasable(proposal);
+      if (proposal.erasure) continue; // already erased by an earlier purge
+      // A candidate's id is not a record yet, so it is not removed from its own support.
+      const support = supportIds({ provenance: proposal.candidate.provenance, links: proposal.candidate.links });
+      const createdErased = proposal.state === 'applied' && proposal.record_id !== undefined && newlyErased.has(proposal.record_id);
+      const restsOnErased =
+        support.some((id) => newlyErased.has(id)) && support.every((id) => allErased.has(id));
+      if (createdErased || restsOnErased) {
+        const pending = proposal.state === 'pending';
+        this.write({
+          ...proposal,
+          candidate: stubCandidate(proposal.candidate),
+          evidence: { agent: proposal.evidence.agent, proposal: PURGED_TITLE },
+          erasure: { at, agent: evidence.agent, rationale: evidence.rationale, ...(evidence.note ? { note: evidence.note } : {}) },
+          ...(pending
+            ? { state: 'rejected' as const, reviewer_id: evidence.agent, decided_at: at, rationale: evidence.rationale }
+            : proposal.state === 'rejected'
+              ? { rationale: PURGED_TITLE }
+              : {}),
+        });
+        (pending ? rejected : scrubbed).push(proposal.id);
+        if (pending) scrubbed.push(proposal.id);
+        continue;
+      }
+      const links = proposal.candidate.links;
+      if (links?.some((link) => newlyErased.has(link.target_id) && link.label !== undefined)) {
+        this.write({
+          ...proposal,
+          candidate: {
+            ...proposal.candidate,
+            links: links.map((link) => {
+              if (!newlyErased.has(link.target_id) || link.label === undefined) return link;
+              const { label: _label, ...unlabeled } = link;
+              return unlabeled;
+            }),
+          },
+        });
+      }
+      if (proposal.state === 'pending' && support.some((id) => newlyErased.has(id))) blocked.push(proposal.id);
+    }
+    return { rejected, scrubbed, blocked };
+  }
+
   /** The rationale `rejectCreate` stores, validated. */
   static rationale(value: unknown): string {
     if (!isNonemptyString(value)) {
@@ -275,6 +358,81 @@ function projectCandidate(candidate: CreateInput): CreateInput {
     if (value !== undefined) projected[key] = value;
   }
   return projected as unknown as CreateInput;
+}
+
+/**
+ * What purge needs of a candidate, stated once for staging and for purge: an agent that is
+ * a non-empty string, optional text `session_id` and `note`, `source_ids` and `links` that are
+ * null, missing or well-formed. Returns what is wrong, or null.
+ */
+function candidateShapeProblem(candidate: CreateInput): string | null {
+  const provenance = candidate.provenance as unknown;
+  if (!isRecord(provenance) || typeof provenance.agent !== 'string' || provenance.agent === '') {
+    return 'candidate provenance.agent must be a non-empty string';
+  }
+  for (const key of ['session_id', 'note'] as const) {
+    if (provenance[key] != null && typeof provenance[key] !== 'string') return `candidate provenance.${key} must be a string`;
+  }
+  const sourceIds = provenance.source_ids;
+  if (sourceIds != null && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
+    return 'candidate provenance.source_ids must be an array of strings';
+  }
+  const links = candidate.links as unknown;
+  if (
+    links != null &&
+    (!Array.isArray(links) ||
+      links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string' || (link.label != null && typeof link.label !== 'string')))
+  ) {
+    return 'candidate links must be an array of links with text target_id and kind';
+  }
+  if (typeof candidate.type !== 'string') return 'candidate type must be a string';
+  return null;
+}
+
+/**
+ * Purge decides from the candidate's provenance and links and trusts a stored `erasure`
+ * marker, so a proposal that does not have the shape those decisions need stops the purge
+ * instead of being skipped: a skipped proposal would keep erased content readable.
+ *
+ * The shape is what `proposeCreate` and `create` accept, not more: an agent is any non-empty
+ * string, and a null or missing `links` or `source_ids` is empty. An erased proposal must be
+ * exactly what `erase` writes, field for field, so a marker laid over retained content is
+ * corrupt rather than trusted.
+ */
+function assertErasable(proposal: KitCreateProposal): void {
+  const corrupt = (reason: string) =>
+    new KnowledgeStoreCorruptionError(`create proposal ${proposal.id} is corrupt: ${reason}`);
+  const { candidate } = proposal;
+  const problem = candidateShapeProblem(candidate);
+  if (problem) throw corrupt(problem);
+  if (!proposal.erasure) return;
+  const { erasure } = proposal;
+  const settled =
+    proposal.state !== 'pending' &&
+    isDeepStrictEqual(candidate, stubCandidate(candidate)) &&
+    isDeepStrictEqual(proposal.evidence, { agent: proposal.evidence.agent, proposal: PURGED_TITLE }) &&
+    (proposal.state === 'applied'
+      ? proposal.rationale === undefined
+      : proposal.rationale === PURGED_TITLE || proposal.rationale === erasure.rationale);
+  if (!settled) throw corrupt('an erased proposal is not what a purge writes');
+}
+
+/** What is left of a candidate once it is erased: identity, provenance and link targets, no content. */
+function stubCandidate(candidate: CreateInput): CreateInput {
+  const { provenance } = candidate;
+  return {
+    ...(candidate.id !== undefined ? { id: candidate.id } : {}),
+    type: candidate.type,
+    title: PURGED_TITLE,
+    body: '',
+    category: PURGED_CATEGORY,
+    provenance: {
+      agent: provenance.agent,
+      ...(provenance.session_id ? { session_id: provenance.session_id } : {}),
+      ...(provenance.source_ids?.length ? { source_ids: [...provenance.source_ids] } : {}),
+    },
+    links: (candidate.links ?? []).map(({ target_id, kind }) => ({ target_id, kind })),
+  };
 }
 
 function jsonClone(candidate: CreateInput): CreateInput {
@@ -328,6 +486,14 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
     if (!isNonemptyString(value.reviewer_id)) throw corrupt('reviewer_id is missing');
     if (!isNonemptyString(value.decided_at) || !Number.isFinite(Date.parse(value.decided_at))) {
       throw corrupt('decided_at is invalid');
+    }
+  }
+  if (value.erasure !== undefined) {
+    const erasure = value.erasure;
+    if (!isRecord(erasure) || !isNonemptyString(erasure.agent) || !isNonemptyString(erasure.rationale)
+      || !isNonemptyString(erasure.at) || !Number.isFinite(Date.parse(erasure.at))
+      || (erasure.note !== undefined && typeof erasure.note !== 'string')) {
+      throw corrupt('erasure is invalid');
     }
   }
   if (value.state === 'applied' && !isNonemptyString(value.record_id)) throw corrupt('record_id is missing');

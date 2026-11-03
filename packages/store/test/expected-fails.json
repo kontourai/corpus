@@ -1,1 +1,10 @@
-{}
+{
+  "purge-journal-in-flight": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "Deferred: erasure transactions keep their pre-purge images in the prepared journal, because rollback needs them. Closing the window needs a roll-forward journal, which is a separate change to the transaction engine. The committed journal is already scrubbed (purge-journal-erasure).",
+    "errorPattern": "^in-flight journal still holds erased content in "
+  }
+}
