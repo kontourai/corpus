@@ -380,6 +380,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
         ...(input.provenance.source_ids?.length
           ? { source_ids: input.provenance.source_ids }
           : {}),
+        ...(input.provenance.source_refs !== undefined ? { source_refs: input.provenance.source_refs } : {}),
         ...(input.provenance.note ? { note: input.provenance.note } : {}),
       },
       links,
@@ -786,11 +787,12 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string> {
     return this.files.mutate('proposeCreate', () =>
       this.proposals.stage(candidate, proposerId, evidence, (id) =>
         isSafePathSegment(id) && this.readRecord(id) !== null,
-      ),
+      options),
     );
   }
 

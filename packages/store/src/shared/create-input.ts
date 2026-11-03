@@ -1,6 +1,7 @@
 import type { CreateInput } from '../contracts.js';
 import { MissingEvidenceError } from '../errors.js';
 import { isValidCategory } from './category.js';
+import { validSourceRefs } from './source-refs.js';
 import { VALID_TYPES } from './record-schema.js';
 
 /**
@@ -30,6 +31,9 @@ export function assertCreateFields(input: CreateInput, op: string): void {
   }
   if (!isValidCategory(input.category)) {
     throw new MissingEvidenceError(`${op}: invalid category: ${input.category}`);
+  }
+  if (input.provenance?.source_refs !== undefined && !validSourceRefs(input.provenance.source_refs)) {
+    throw new MissingEvidenceError(`${op}: invalid provenance.source_refs`);
   }
   if (!input.provenance?.agent) {
     throw new MissingEvidenceError(

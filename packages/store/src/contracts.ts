@@ -32,9 +32,24 @@ export interface KitReverseLink {
   kind: string;
 }
 
+/** Known source-reference kinds. Other kinds require a future validated registry entry. */
+export interface KitSourceRefRegistry {
+  'session-transcript': {
+    kind: 'session-transcript';
+    harness: string;
+    session_id: string;
+    transcript_ref: string;
+    sitting_id?: string;
+    /** Inclusive, one-based line range in the referenced transcript. */
+    range?: { start: number; end: number };
+  };
+}
+export type KitSourceRef = KitSourceRefRegistry[keyof KitSourceRefRegistry];
+
 /** Immutable creation provenance (store-contract.md §4.1). */
 export interface KitProvenance {
   source_ids?: string[];
+  source_refs?: KitSourceRef[];
   agent: string;
   session_id?: string;
   note?: string;
@@ -162,6 +177,11 @@ export interface KitCreateProposal {
   proposer_id: string;
   evidence: ProposeEvidence;
   proposed_at: string; // ISO-8601
+  /** SHA-256 key and input digests for keyed proposals; not the caller's key. */
+  request_key_hash?: string;
+  request_digest?: string;
+  /** Digest algorithm and canonicalization version. */
+  request_digest_version?: 1;
   /** Set once the proposal is settled. */
   reviewer_id?: string;
   decided_at?: string; // ISO-8601
@@ -185,6 +205,7 @@ export type KnowledgeStoreErrorCode =
   | 'SLUG_CONFLICT'
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
+  | 'REQUEST_KEY_CONFLICT'
   | 'ROOT_BINDING_MISMATCH'
   /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
@@ -292,6 +313,7 @@ export interface KnowledgeStoreCreateProposals {
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string>;
   /**
    * Create the record in one transaction and settle the proposal as `applied`.

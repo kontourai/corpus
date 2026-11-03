@@ -10,6 +10,7 @@ import type {
   KitRecord,
   KitRecordType,
 } from '../contracts.js';
+import { validSourceRefs } from './source-refs.js';
 import { isRecord } from '../is-record.js';
 import { KnowledgeStoreCorruptionError } from '../errors.js';
 
@@ -70,6 +71,7 @@ export function assertKitRecord(
   if (
     !isRecord(record.provenance) ||
     !isNonemptyString(record.provenance.agent) ||
+    (record.provenance.source_refs !== undefined && !validSourceRefs(record.provenance.source_refs)) ||
     (record.provenance.source_ids !== undefined &&
       !isStringArray(record.provenance.source_ids)) ||
     (record.provenance.session_id !== undefined &&

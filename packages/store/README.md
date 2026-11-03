@@ -58,7 +58,7 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   Decided by the delivery orchestrator under the owner's standing direction to
   deliver flow-agents#669–#673 ([corpus#40](https://github.com/kontourai/corpus/issues/40));
   the owner may override it.
-  - `proposeCreate(candidate, proposerId, evidence)` stores a `pending`
+  - `proposeCreate(candidate, proposerId, evidence, { requestKey }?)` stores a `pending`
     proposal that carries the whole candidate (a `CreateInput`, provenance
     included) and `evidence` (`agent` and `proposal`, as for `propose`). It
     returns the proposal id. The candidate must have the fields `create` requires.
@@ -311,6 +311,16 @@ The same identity is required on the construction-free observation port. Hosts
 with a runtime-home resolver must additionally check that resolver against the
 captured home. Record data remains identical on re-read; whitespace/style may
 normalize except for the approved top-level lossy plain tokens.
+
+### Owner decision: create request keys (2026-11-03)
+
+The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in any state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key digest and proposal share one transaction and are retained with the proposal, including after rejection or record purge. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be nonempty and at most 1024 UTF-8 bytes.
+
+Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.
+
+### Owner decision: structured source references (2026-11-03)
+
+The orchestrator decided in [#46](https://github.com/kontourai/corpus/issues/46), subject to owner override, that optional `provenance.source_refs` carries attribution only. It neither authorizes reading `transcript_ref` nor constitutes review evidence; `note` remains free text and must not be parsed. The currently validated kind is `session-transcript`: `harness`, `session_id`, and `transcript_ref` are required, `sitting_id` and `range` are optional. A range is an inclusive one-based `{ start, end }` line range. Unknown fields and kinds are refused. Strings are nonempty and at most 4096 UTF-8 bytes; at most 256 references are accepted. The kind registry can grow through a future validated contract change.
 
 ### Owner decision: adapter root binding (2026-11-03)
 

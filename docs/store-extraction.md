@@ -434,7 +434,7 @@ queries: lists, `get`, `getLinks`, `reindex` and the vault's identity scan see
 records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
 required-field checks used by `create` in both profiles and by `proposeCreate`.
 
-Six `create-proposal-*` vectors join the store vectors (129 per profile). All
+Six `create-proposal-*` vectors joined the store vectors (129 per profile at that decision). All
 implemented, so the expected-fail list stays empty. Tests: `test/create-proposals.test.ts`
 runs on both profiles and covers self-approval, working-set exclusion (including
 history, expiry and `reindex`), rollback of the record when the settled proposal
@@ -442,6 +442,23 @@ cannot be written, refusal of corrupt proposal files, a read-only vault, and tha
 no path outside the supplied root is touched. `npm run proof:proposals` injects
 faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
+
+The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds an
+optional `requestKey` to `proposeCreate`. A retry with matching candidate,
+proposer and evidence returns the original proposal ID, including after
+settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
+The key digest and input digest are retained with the proposal in the same
+transaction. Four `create-request-key-*` vectors exercise retries, conflicts,
+rejection and unkeyed calls in both profiles. The proposal tests also check that
+conflicts do not change store bytes and that a retry after apply returns the
+original receipt.
+
+The [structured source-reference decision](https://github.com/kontourai/corpus/issues/46)
+adds optional `provenance.source_refs` to create inputs. Session transcript
+references carry bounded, validated attribution through proposal storage and
+record creation. They neither authorize transcript access nor constitute review
+evidence; `note` remains free text. Both store profiles run the source-reference
+survival and validation conformance vectors.
 
 The [root-binding decision](https://github.com/kontourai/corpus/issues/47)
 adds a host-verifiable adapter binding based on a canonical root and a scaffolded

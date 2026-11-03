@@ -33,6 +33,11 @@ export class SelfApprovalError extends Error {
   }
 }
 
+export class RequestKeyConflictError extends Error {
+  readonly code: KnowledgeStoreErrorCode = 'REQUEST_KEY_CONFLICT';
+  constructor() { super('proposeCreate: request key already used with different input'); this.name = 'RequestKeyConflictError'; }
+}
+
 export class RootBindingMismatchError extends Error {
   readonly code = 'ROOT_BINDING_MISMATCH' as const;
   constructor() { super('adapter is not bound to the authorized root'); this.name = 'RootBindingMismatchError'; }
@@ -112,6 +117,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof AmbiguousIdError ||
     error instanceof SlugConflictError ||
     error instanceof SelfApprovalError ||
+    error instanceof RequestKeyConflictError ||
     error instanceof RootBindingMismatchError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||
