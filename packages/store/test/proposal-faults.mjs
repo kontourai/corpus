@@ -53,6 +53,26 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'partial-scrub-retains-digest',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const contentChanged = proposal.request_digest !== undefined &&\n      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));", 'const contentChanged = false;') }],
+    checks: [{ label: 'unit', args: unit('partial content scrub'), failure: /request_key_retired|to be true/ }],
+  },
+  {
+    name: 'erased-key-retry',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError();", "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) return existing.id;") }],
+    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /REQUEST_KEY_CONFLICT/ }],
+  },
+  {
+    name: 'erased-key-digest-retained',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;', 'const serialized = proposal;') }],
+    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /request_digest/ }],
+  },
+  {
+    name: 'erased-key-corruption-accepted',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (value.request_digest !== undefined || value.request_digest_version !== undefined) throw corrupt('erased proposal retains request digest');", "if (false) throw corrupt('erased proposal retains request digest');") }],
+    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /promise resolved/ }],
+  },
+  {
     name: 'request-key-well-formed',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "Buffer.from(key, 'utf8').toString('utf8') !== key", 'false') }],
     checks: [
@@ -93,12 +113,12 @@ const injections = [
   },
   {
     name: 'request-key-conflict-write',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';"), 'if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (metadata.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';"), 'if (existing.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (existing.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],
     checks: [{ label: 'unit', args: unit('request key retries'), failure: /to deeply equal/ }],
   },
   {
     name: 'request-key-retry-duplicates',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '          return existing.id;', '          continue;') }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '      return existing.id;', '      // injected: mint a duplicate') }],
     checks: [
       { label: 'unit', args: unit('request key retries'), failure: /to be 'generated-/ },
       { label: 'vector', args: vectors('create-request-key-retry'), failure: /create-request-key-retry/ },

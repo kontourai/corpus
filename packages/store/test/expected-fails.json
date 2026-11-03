@@ -4,7 +4,15 @@
       "default",
       "vault"
     ],
-    "awaits": "purge integration and owner reconciliation of request-key retention with corpus#41 erasure",
+    "awaits": "purge integration from corpus#41; post-erasure retry policy decided by owner",
+    "errorPattern": "^missing adapter method: purge(?:\\n|$)"
+  },
+  "create-request-key-after-partial-scrub": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "purge integration from corpus#41; post-scrub retry policy decided by owner",
     "errorPattern": "^missing adapter method: purge(?:\\n|$)"
   }
 }
