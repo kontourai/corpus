@@ -130,6 +130,11 @@ export class CreateProposals {
     // `create` would quietly turn a number into text. A proposal states them as text.
     const problem = candidateShapeProblem(stored);
     if (problem) throw new MissingEvidenceError(`proposeCreate: ${problem}`);
+    // The reader refuses a link with an empty target or kind, so `create` would write a record
+    // nothing can read back (kontourai/corpus#56). Staging does not hand that to apply.
+    if ((stored.links ?? []).some((link) => link.target_id === '' || link.kind === '')) {
+      throw new MissingEvidenceError('proposeCreate: candidate links need a non-empty target_id and kind');
+    }
     // A candidate may not cite an erased record as a source (purge, 2026-11-03).
     guard?.(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a

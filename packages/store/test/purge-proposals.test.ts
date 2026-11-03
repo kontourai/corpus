@@ -265,6 +265,8 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     ['a numeric link label', { links: [{ target_id: 'x', kind: 'related', label: 3 }] }],
     ['links that are not an array', { links: 'x' }],
     ['a non-string type', { type: 5 }],
+    ['an empty link target', { links: [{ target_id: '', kind: 'related' }] }],
+    ['an empty link kind', { links: [{ target_id: 'x', kind: '' }] }],
   ])('proposeCreate refuses %s, so no accepted proposal can stop a later purge', async (_name, change) => {
     await raw('unrelated');
     await expect(store.proposeCreate({ ...candidate([]), ...change } as never, 'proposer-1', proposal())).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });

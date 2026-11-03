@@ -129,7 +129,9 @@ silent behavior.
     left stays pending and is listed as `proposalsBlocked`: `applyCreate` refuses it
     with `PURGED` because its candidate still cites an erased record, and a reviewer
     should reject it. `proposeCreate` refuses such a candidate up front, and also a candidate whose
-    provenance (`agent`, `session_id`, `note`, `source_ids`) or links hold anything but text
+    provenance (`agent`, `session_id`, `note`, `source_ids`) or links hold anything but text,
+    or a link has an empty `target_id` or `kind` (the reader refuses such a record;
+    [#56](https://github.com/kontourai/corpus/issues/56) tracks `create` itself)
     (purge reads them to decide what rests on what, and `create` would quietly turn a
     number into text), so no accepted proposal can stop a later purge. The
     log entry a created record starts with keeps `proposal_id` but never the

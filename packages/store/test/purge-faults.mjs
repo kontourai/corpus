@@ -136,6 +136,8 @@ const controls = [
     args: focused('test/purge-proposals.test.ts'), reason: /healthy store stays purgeable/ },
   { id: 'proposal-staging-shape-unchecked', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (problem) throw new MissingEvidenceError(`proposeCreate: ${problem}`);", ''),
     args: focused('test/purge-proposals.test.ts'), reason: /no accepted proposal can stop a later purge/ },
+  { id: 'proposal-empty-link-accepted', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "link.target_id === '' || link.kind === ''", 'false'),
+    args: focused('test/purge-proposals.test.ts'), reason: /empty link (target|kind)/ },
 ];
 
 function run(label, args, success) {
