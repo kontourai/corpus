@@ -408,8 +408,16 @@ export const KIT_V1_PATH_INDEX_FILE = '.graph-index.json';
 /** Derived indexes whose presence proves records were written here. */
 const DERIVED_INDEX_FILES = ['graph-index.json', 'alias-index.json'];
 
+/** Stands in for the id `create` will generate when sizing a proposal's candidate. */
+const PLACEHOLDER_RECORD_ID = '00000000-0000-0000-0000-000000000000';
+const PLACEHOLDER_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 const CREATE_IDENTITY_MAX_ENTRIES = 10_000;
-const CREATE_IDENTITY_MAX_FILE_BYTES = 16 * 1024 * 1024;
+/**
+ * The largest serialized note the vault accepts. Every identity scan and destination check
+ * reads a note with this bound, so a larger note would make each later `create` fail.
+ * `create`, `proposeCreate` and `applyCreate` refuse a record that would exceed it.
+ */
+export const VAULT_NOTE_MAX_BYTES = 16 * 1024 * 1024;
 const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
 export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
@@ -509,7 +517,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
           continue;
         }
         if (!entry.name.toLowerCase().endsWith('.md')) continue;
-        const text = this.files.readText(path, Math.min(CREATE_IDENTITY_MAX_FILE_BYTES, remainingBytes));
+        const text = this.files.readText(path, Math.min(VAULT_NOTE_MAX_BYTES, remainingBytes));
         if (text === null) return true;
         remainingBytes -= Buffer.byteLength(text);
         if (remainingBytes < 0) return true;
@@ -627,7 +635,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         if (
           this.files.readText(
             this.resolveStorePath(relPath),
-            CREATE_IDENTITY_MAX_FILE_BYTES,
+            VAULT_NOTE_MAX_BYTES,
           ) !== null
         )
           throw new KnowledgeStoreCorruptionError(
@@ -729,7 +737,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
    * in-memory index but does not save it, so a caller writing multiple records in one
    * op (e.g. `supersede`) persists the index once at the end.
    */
-  private writeRecord(rawRecord: KitRecord, pathIndex: PathIndex): void {
+  private writeRecord(
+    rawRecord: KitRecord,
+    pathIndex: PathIndex,
+    options: { enforceNoteBound?: string } = {},
+  ): void {
     // Unconditionally sanitize `links` on the single write path every
     // mutation funnels through — closes the gap the Wave-2 code review
     // named: label sanitization previously only happened inside
@@ -784,6 +796,16 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       targetRelPath = newRelPath;
     }
 
+    const text = this.renderNote(record, pathIndex);
+    // A new record has nothing on disk yet, so a refusal here leaves nothing written.
+    if (options.enforceNoteBound) this.assertNoteFits(text, options.enforceNoteBound);
+
+    const absPath = this.resolveStorePath(targetRelPath);
+    this.files.writeText(absPath, text);
+  }
+
+  /** The note's exact bytes: frontmatter plus the rendered body. */
+  private renderNote(record: KitRecord, pathIndex: PathIndex): string {
     const {
       body: _body,
       [BODY_SENTINEL_FRONTMATTER_KEY]: _staleSentinel,
@@ -801,13 +823,20 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     if (sentinel !== BODY_END_SENTINEL_BASE) {
       frontmatterFields[BODY_SENTINEL_FRONTMATTER_KEY] = sentinel;
     }
-    const text = serializeMarkdown(
+    return serializeMarkdown(
       frontmatterFields as Record<string, unknown>,
       obsidianBody,
     );
+  }
 
-    const absPath = this.resolveStorePath(targetRelPath);
-    this.files.writeText(absPath, text);
+  /** A note over {@link VAULT_NOTE_MAX_BYTES} would make every later identity scan fail. */
+  private assertNoteFits(text: string, operation: string): void {
+    const bytes = Buffer.byteLength(text);
+    if (bytes > VAULT_NOTE_MAX_BYTES) {
+      throw new MissingEvidenceError(
+        `${operation}: the record serializes to a ${bytes}-byte note, but vault notes are limited to ${VAULT_NOTE_MAX_BYTES} bytes`,
+      );
+    }
   }
 
   /** Move an active record to `archive/` (supersede-not-delete invariant, A.5). */
@@ -1128,7 +1157,31 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const links = mergeLinks(explicitLinks, wikilinks);
     assertCompiledSource(input.type, links, (target) => this.readRecord(target, pathIndex));
 
-    const record: KitRecord = {
+    const record = this.newRecord(input, id, now, aliases, links, fresh, origin);
+
+    this.writeRecord(record, pathIndex, { enforceNoteBound: 'create' });
+    this.savePathIndex(pathIndex);
+
+    const graph = this.loadGraph();
+    addLinksToGraph(graph, id, links);
+    this.saveGraph(graph);
+
+    if (aliasIndex) this.saveAliasIndex(aliasIndex);
+
+    return id;
+  }
+
+  /** The record `create` stores for `input`; also what `proposeCreate` sizes before it stages one. */
+  private newRecord(
+    input: CreateInput,
+    id: string,
+    now: string,
+    aliases: string[],
+    links: KitLink[],
+    fresh: ReturnType<typeof freshnessPatch>,
+    origin?: (at: string) => KitMutationLogEntry,
+  ): KitRecord {
+    return {
       id,
       type: input.type,
       title: input.title,
@@ -1153,17 +1206,27 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       mutation_log: origin ? [origin(now)] : [],
       body: input.body,
     };
+  }
 
-    this.writeRecord(record, pathIndex);
-    this.savePathIndex(pathIndex);
-
-    const graph = this.loadGraph();
-    addLinksToGraph(graph, id, links);
-    this.saveGraph(graph);
-
-    if (aliasIndex) this.saveAliasIndex(aliasIndex);
-
-    return id;
+  /**
+   * Refuse a candidate that `create` would refuse for size, before a proposal stages it.
+   * The note is sized as it would render now with a stand-in id when none is given, so a
+   * candidate right at the bound can still be refused by `applyCreate`, which checks again.
+   */
+  private assertCandidateFits(candidate: CreateInput): void {
+    const aliases = normalizeAliases(candidate.aliases);
+    const links = mergeLinks(candidate.links ?? [], extractWikilinks(candidate.body));
+    const record = this.newRecord(
+      candidate,
+      candidate.id || PLACEHOLDER_RECORD_ID,
+      // Every ISO timestamp is the same length; reading the clock here would shift `proposed_at`.
+      PLACEHOLDER_TIMESTAMP,
+      aliases,
+      links,
+      freshnessPatch(candidate),
+      // The applied record's origin entry is small and fixed; its size is not worth a dry run.
+    );
+    this.assertNoteFits(this.renderNote(record, this.loadPathIndex()), 'proposeCreate');
   }
 
   /** The path index accelerates lookup; only physical records can prove absence. */
@@ -1192,7 +1255,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         if (!entry.name.toLowerCase().endsWith('.md')) continue;
         const text = this.files.readText(
           path,
-          Math.min(CREATE_IDENTITY_MAX_FILE_BYTES, remainingBytes),
+          Math.min(VAULT_NOTE_MAX_BYTES, remainingBytes),
         );
         if (text === null)
           throw new KnowledgeStoreCorruptionError(
@@ -1445,8 +1508,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     evidence: ProposeEvidence,
   ): Promise<string> {
     return this.mutate('proposeCreate', () =>
-      this.proposals.stage(candidate, proposerId, evidence, (id) =>
-        this.readRecord(id, this.loadPathIndex()) !== null,
+      this.proposals.stage(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => this.readRecord(id, this.loadPathIndex()) !== null,
+        (validated) => this.assertCandidateFits(validated),
       ),
     );
   }

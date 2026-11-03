@@ -98,6 +98,8 @@ export class CreateProposals {
     proposerId: string,
     evidence: ProposeEvidence,
     recordExists: (id: string) => boolean,
+    /** A profile's own limit on the record the candidate would become; throws to refuse. */
+    assertFits?: (candidate: CreateInput) => void,
   ): string {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
@@ -135,6 +137,7 @@ export class CreateProposals {
         throw new MissingEvidenceError('proposeCreate: record id already exists');
       }
     }
+    assertFits?.(stored);
 
     const id = this.services.ids();
     if (!isSafePathSegment(id) || id.length > 200) {
