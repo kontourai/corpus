@@ -1,6 +1,6 @@
 # Store extraction evidence
 
-Publication preparation at `0.1.0-next.0` adds an owner-dispatched
+Publication preparation at `0.1.0-next.1` adds an owner-dispatched
 [workspace publish workflow](../README.md#publishing-the-store-workspaces).
 The packed TypeScript consumer now pins `@types/node@24.19.2` alongside
 `typescript@5.9.3`, with install scripts disabled. It optionally exports the

@@ -9,7 +9,7 @@ The extraction preserved Station semantics at
 `2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`; its only codec change preserves text
 scalars from old Knowledge Kit writers. Later changes implement the owner's
 decisions one at a time; see [Owner decisions](#owner-decisions). Version
-`0.1.0-next.0` is the first npm candidate, published only after owner bootstrap
+`0.1.0-next.1` is the prepared npm candidate, published only after owner bootstrap
 and trusted-publisher setup through the
 [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
 
