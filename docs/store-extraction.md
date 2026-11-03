@@ -493,3 +493,7 @@ evidence; `note` remains free text. Both store profiles run the source-reference
 survival and validation conformance vectors. Validation copies reference objects
 before persistence, rejects sparse arrays, and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
+
+The vault's proposal-size estimate serializes validated `source_refs` with the
+candidate, so attribution bytes count toward the note bound before a keyed or
+unkeyed proposal is staged. The apply path enforces the final note bound again.
