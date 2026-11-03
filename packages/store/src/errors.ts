@@ -33,6 +33,16 @@ export class RecordPurgedError extends Error {
   }
 }
 
+/** The reviewer of a create proposal is its proposer. Carries the verb and ids, never content. */
+export class SelfApprovalError extends Error {
+  readonly code: KnowledgeStoreErrorCode = 'SELF_APPROVAL';
+
+  constructor(proposalId: string) {
+    super(`applyCreate: proposal ${proposalId} cannot be applied by its proposer`);
+    this.name = 'SelfApprovalError';
+  }
+}
+
 export class AmbiguousIdError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'AMBIGUOUS_ID';
   readonly matches: string[];
@@ -107,6 +117,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof AmbiguousIdError ||
     error instanceof SlugConflictError ||
     error instanceof RecordPurgedError ||
+    error instanceof SelfApprovalError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||
     error instanceof KnowledgeStoreCorruptionError ||

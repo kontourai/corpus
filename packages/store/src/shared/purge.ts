@@ -63,13 +63,17 @@ export function assertNoPurgedSupport(
  * references, not support. Ids may name records outside the store; those are never
  * purged, so they count as remaining support.
  */
-export function supportIds(record: KitRecord): string[] {
+export function supportIds(record: {
+  id?: string;
+  provenance?: { source_ids?: readonly string[] };
+  links?: readonly { target_id: string; kind: string }[];
+}): string[] {
   const ids = new Set<string>();
   for (const id of record.provenance?.source_ids ?? []) ids.add(id);
   for (const link of record.links ?? []) {
     if (link.kind === 'source') ids.add(link.target_id);
   }
-  ids.delete(record.id);
+  if (record.id !== undefined) ids.delete(record.id);
   return [...ids].sort();
 }
 
@@ -81,9 +85,11 @@ function referenceIds(record: KitRecord): string[] {
   return [...ids].sort();
 }
 
-export type PurgePlan = PurgeResult & {
+export type PurgePlan = Omit<PurgeResult, 'proposalsRejected' | 'proposalsScrubbed' | 'proposalsBlocked'> & {
   /** Every id this call tombstones: requested targets plus the cascade. */
   erased: ReadonlySet<string>;
+  /** `erased` plus every earlier tombstone. */
+  allErased: ReadonlySet<string>;
   /** For each cascaded record, the support that was entirely purged. */
   via: Map<string, string[]>;
   /** For each survivor, the purged ids it rests on. */
@@ -153,13 +159,14 @@ export function planPurge(
     else if (referenced.length > 0) referrers.push(record.id);
     if (referenced.length > 0) lost.set(record.id, referenced);
   }
-  return { purged, cascaded, survivors, referrers, alreadyPurged, erased: newlyGone, via, lost };
+  const allErased = new Set([...gone, ...newlyGone]);
+  return { purged, cascaded, survivors, referrers, alreadyPurged, erased: newlyGone, allErased, via, lost };
 }
 
 // Evidence keys that hold identities or fixed vocabulary, never caller prose.
 const KEPT_EVIDENCE = new Set([
   'superseded_by_id', 'proposer_id', 'concept_id', 'superseded_count',
-  'targetStatus', 'fields', 'cause', 'via', 'purged_ids',
+  'targetStatus', 'fields', 'cause', 'via', 'purged_ids', 'proposal_id',
 ]);
 // Ops whose rationale and note are the audit record itself.
 const AUDIT_OPS = new Set(['purged', 'support-purged', 'reference-purged']);
@@ -276,6 +283,7 @@ function unlabelErased(entry: KitMutationLogEntry, erased: ReadonlySet<string>):
 /** Input checks shared by both adapters; they run before any read or write. */
 export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
   const text = (value: unknown) => typeof value === 'string' && value.trim() !== '';
+  const bounded = (value: string, limit: number) => Buffer.byteLength(value) <= limit;
   if (!text(evidence?.agent)) {
     throw new MissingEvidenceError('purge: missing required evidence field: agent');
   }
@@ -284,6 +292,10 @@ export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): strin
   }
   if (evidence.note !== undefined && typeof evidence.note !== 'string') {
     throw new MissingEvidenceError('purge: evidence note must be a string');
+  }
+  // These are copied into tombstones and proposals, which must stay loadable.
+  if (!bounded(evidence.agent, 1024) || !bounded(evidence.rationale, 16 * 1024) || !bounded(evidence.note ?? '', 16 * 1024)) {
+    throw new MissingEvidenceError('purge: agent must be at most 1 KiB, rationale and note at most 16 KiB');
   }
   if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
     throw new MissingEvidenceError('purge: ids must be a non-empty array of record ids');

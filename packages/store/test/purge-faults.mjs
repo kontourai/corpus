@@ -106,6 +106,21 @@ const controls = [
   // Accept a \\u escape for a character JSON.stringify would write raw.
   { id: 'foreign-needless-unicode-escape-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (!control && !surrogate) return false;', ''),
     args: focused('test/purge.test.ts'), reason: /left alone/ },
+  // Create proposals (#42) carry their whole candidate outside every record path.
+  { id: 'proposal-erasure-skipped', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);', 'const proposals = { rejected: [] as string[], scrubbed: [] as string[], blocked: [] as string[] };'),
+    args: conformance('purge-proposal-sole-support-rejected', 'purge-proposal-record-erased', 'purge-store-bytes'), reason: /(proposalsRejected|proposalsScrubbed|after\.|is still on disk)/ },
+  { id: 'proposal-pending-not-rejected', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "? { state: 'rejected' as const,", "? { state: 'pending' as const,"),
+    args: conformance('purge-proposal-sole-support-rejected'), reason: /after\.state/ },
+  { id: 'proposal-created-record-not-followed', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const createdErased = proposal.state === 'applied' && proposal.record_id !== undefined && newlyErased.has(proposal.record_id);", 'const createdErased = false;'),
+    args: conformance('purge-proposal-record-erased'), reason: /(proposalsScrubbed|after\.)/ },
+  { id: 'proposal-candidate-kept', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'candidate: stubCandidate(proposal.candidate),', 'candidate: proposal.candidate,'),
+    args: conformance('purge-proposal-sole-support-rejected'), reason: /after\.candidate/ },
+  { id: 'proposal-evidence-kept', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'evidence: { agent: proposal.evidence.agent, proposal: PURGED_TITLE },', 'evidence: proposal.evidence,'),
+    args: conformance('purge-proposal-sole-support-rejected'), reason: /after\.evidence/ },
+  { id: 'proposal-partial-support-erased', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'support.some((id) => newlyErased.has(id)) && support.every((id) => allErased.has(id));', 'support.some((id) => newlyErased.has(id));'),
+    args: conformance('purge-proposal-other-support-blocked'), reason: /(proposalsBlocked|after\.)/ },
+  { id: 'proposal-cites-tombstone', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'guard?.(stored);', ''),
+    args: conformance('purge-proposal-cites-tombstone'), reason: /proposeCreate must reject/ },
 ];
 
 function run(label, args, success) {

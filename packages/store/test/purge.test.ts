@@ -132,7 +132,7 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     await compiled('z-child', ['a-source']);
     await compiled('m-child', ['a-source']);
     const result = await store.purge(['b-source', 'a-source', 'b-source'], evidence);
-    expect(result).toEqual({ purged: ['b-source', 'a-source'], cascaded: ['m-child', 'z-child'], survivors: [], referrers: [], alreadyPurged: [] });
+    expect(result).toEqual({ purged: ['b-source', 'a-source'], cascaded: ['m-child', 'z-child'], survivors: [], referrers: [], alreadyPurged: [], proposalsRejected: [], proposalsScrubbed: [], proposalsBlocked: [] });
   });
 
   test('a record whose support was purged earlier cascades with the last support', async () => {

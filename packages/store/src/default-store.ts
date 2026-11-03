@@ -11,11 +11,15 @@ import type {
   ApplyEvidence,
   CategoryListOptions,
   CreateInput,
+  CreateProposalListOptions,
+  KitCreateProposal,
   KitLink,
+  KitMutationLogEntry,
   KitRecord,
   KitRecordType,
   KitReverseLink,
   KnowledgeStoreAdapter,
+  KnowledgeStoreCreateProposals,
   KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
@@ -37,6 +41,8 @@ import {
   ReadOnlyStoreError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
+import { assertCreateFields } from './shared/create-input.js';
+import { CreateProposals } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
@@ -71,7 +77,6 @@ import {
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
-  VALID_TYPES,
 } from './shared/record-schema.js';
 import {
   appendUniqueLinks,
@@ -86,13 +91,14 @@ export type { ReindexResult };
 
 export interface KitDefaultStoreOptions extends StoreOptions {}
 
-export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStorePurger {
+export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly recordsDir: string;
   private readonly graphPath: string;
   private readonly aliasPath: string;
   private readonly files: KnowledgeFileTransactions;
+  private readonly proposals: CreateProposals;
 
   constructor(options: KitDefaultStoreOptions) {
     if (!options?.storeRoot) throw new Error('storeRoot is required');
@@ -104,6 +110,8 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     mkdirSync(this.recordsDir, { recursive: true });
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
+    this.proposals = new CreateProposals(this.files, this.root, this.services);
+    Object.defineProperty(this, "proposals", { enumerable: false });
   }
 
   // ── Internal: record file access ─────────────────────────────────────────
@@ -317,36 +325,11 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     return this.files.mutate('create', () => this.createLocked(input));
   }
 
-  private createLocked(input: CreateInput): string {
-    if (!input.type) {
-      throw new MissingEvidenceError('create: missing required field: type');
-    }
-    if (!VALID_TYPES.has(input.type)) {
-      throw new MissingEvidenceError(
-        `create: type must be one of raw, compiled, concept, snapshot, person; got: ${input.type}`,
-      );
-    }
-    if (!input.title?.trim()) {
-      throw new MissingEvidenceError('create: missing required field: title');
-    }
-    if (typeof input.body !== 'string' || input.body.trim() === '') {
-      throw new MissingEvidenceError('create: missing required field: body');
-    }
-    if (!input.category) {
-      throw new MissingEvidenceError(
-        'create: missing required field: category',
-      );
-    }
-    if (!isValidCategory(input.category)) {
-      throw new MissingEvidenceError(
-        `create: invalid category: ${input.category}`,
-      );
-    }
-    if (!input.provenance?.agent) {
-      throw new MissingEvidenceError(
-        'create: missing required provenance field: provenance.agent',
-      );
-    }
+  private createLocked(
+    input: CreateInput,
+    origin?: (at: string) => KitMutationLogEntry,
+  ): string {
+    assertCreateFields(input, 'create');
 
     const id = input.id || this.services.ids();
     if (!isSafePathSegment(id)) {
@@ -405,7 +388,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
         ...(input.provenance.note ? { note: input.provenance.note } : {}),
       },
       links,
-      mutation_log: [],
+      mutation_log: origin ? [origin(now)] : [],
       body: input.body,
     };
 
@@ -818,6 +801,62 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     this.writeRecord(updatedConcept);
   }
 
+  // ── create proposals (owner decision, 2026-11-03) ──────────────────────
+
+  async proposeCreate(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+  ): Promise<string> {
+    return this.files.mutate('proposeCreate', () =>
+      this.proposals.stage(candidate, proposerId, evidence, (id) =>
+        isSafePathSegment(id) && this.readRecord(id) !== null,
+      (stored) =>
+        assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          isSafePathSegment(id) ? this.readRecord(id) : null,
+        ),
+      ),
+    );
+  }
+
+  async applyCreate(proposalId: string, reviewerId: string): Promise<string> {
+    return this.files.mutate('applyCreate', () => this.applyCreateLocked(proposalId, reviewerId));
+  }
+
+  async rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void> {
+    return this.files.mutate('rejectCreate', () => this.rejectCreateLocked(proposalId, reviewerId, rationale));
+  }
+
+  private applyCreateLocked(proposalId: string, reviewerId: string): string {
+    const proposal = this.proposals.pendingFor('applyCreate', proposalId, reviewerId);
+    let at = '';
+    const recordId = this.createLocked(proposal.candidate, (now) => {
+      at = now;
+      return this.proposals.applyOrigin(proposal, reviewerId, now);
+    });
+    this.proposals.settle(proposal, { state: 'applied', reviewerId, at, recordId });
+    return recordId;
+  }
+
+  private rejectCreateLocked(proposalId: string, reviewerId: string, rationale: string): void {
+    const proposal = this.proposals.pendingFor('rejectCreate', proposalId, reviewerId);
+    const reason = CreateProposals.rationale(rationale);
+    this.proposals.settle(proposal, {
+      state: 'rejected',
+      reviewerId,
+      at: new Date(this.services.clock()).toISOString(),
+      rationale: reason,
+    });
+  }
+
+  async getProposal(proposalId: string): Promise<KitCreateProposal | null> {
+    return this.files.read(() => this.proposals.get(proposalId));
+  }
+
+  async listProposals(options: CreateProposalListOptions = {}): Promise<KitCreateProposal[]> {
+    return this.files.read(() => this.proposals.list(options));
+  }
+
   // ── supersede (Addendum A.5/A.6) ──────────────────────────────────────
 
   async supersede(
@@ -1034,7 +1073,17 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     }
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
-    return { purged: plan.purged, cascaded: plan.cascaded, survivors: plan.survivors, referrers: plan.referrers, alreadyPurged: plan.alreadyPurged };
+    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

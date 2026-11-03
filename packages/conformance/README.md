@@ -14,6 +14,8 @@ These vectors describe expected results from the public Knowledge Kit store cont
 - Expiry is `created_at + ttl_seconds`; explicit `expires_at` takes precedence.
 - `purge` tombstones records and everything that rests only on them (2026-11-02). The `purge-*` vectors cover the tombstone shape, the cascade and its cycle rule, survivors, every read path, the bytes on disk (no content and no digest of it, before and after rebuilding the derived indexes), refusal of any mutation that would revive a tombstone, input validation and the transaction journal. They call `purge` on the adapter, so an adapter under test must be built with purge enabled (`allowPurge: true` in Corpus Store); an adapter that does not implement `purge` fails them rather than skipping.
 
+- Create proposals (`create-proposal-*` vectors): `proposeCreate` stages a `pending` proposal and creates no record; `applyCreate(proposalId, reviewerId)` creates it, linked back to the proposal; the proposer applying is refused with `SELF_APPROVAL`; `rejectCreate(proposalId, reviewerId, rationale)` keeps the proposal as `rejected`; pending and rejected proposals stay out of `get` and every list, and are read through `listProposals({ state })`. A store that does not implement them lists the vectors as expected failures.
+
 The original study's non-public vectors and implementation-source citations were excluded. Contract-only replacements cover compiled-source rejection, TTL anchoring, and absolute-expiry precedence. Conflicting alternatives were replaced with the decisions above. Storage fault and read-facade vectors still require adapter-specific harnesses; their expectations are not waived.
 
 ```js

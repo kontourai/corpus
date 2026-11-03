@@ -176,6 +176,62 @@ export interface PurgeResult {
   referrers: string[];
   /** Requested ids that were already tombstones; they are left unchanged. */
   alreadyPurged: string[];
+  /**
+   * Pending create proposals that rested only on erased records. Each is rejected with
+   * the purge's rationale and its candidate is erased, so it can never be applied.
+   */
+  proposalsRejected: string[];
+  /**
+   * Create proposals, pending or settled, whose candidate was erased because it rested
+   * only on erased records or created one. Includes `proposalsRejected`.
+   */
+  proposalsScrubbed: string[];
+  /**
+   * Pending create proposals with some erased support and some left. They stay pending
+   * but `applyCreate` refuses them with `PURGED`; a reviewer should reject them.
+   */
+  proposalsBlocked: string[];
+}
+
+// ── Create proposals (owner decision, 2026-11-03) ──────────────────────────
+
+/** A create proposal is `pending` until a reviewer settles it as `applied` or `rejected`. */
+export type CreateProposalState = 'pending' | 'applied' | 'rejected';
+
+/**
+ * A staged request to create a record. It is not a record: the candidate is held
+ * here whole, and no record exists under its id until the proposal is `applied`.
+ * Proposals are never in `get`, lists or the working set; read them through
+ * `getProposal` and `listProposals`.
+ */
+export interface KitCreateProposal {
+  /** The proposal's own identity, distinct from the record it may create. */
+  id: string;
+  state: CreateProposalState;
+  /** The complete `CreateInput`, including its provenance, as `create` will receive it. */
+  candidate: CreateInput;
+  proposer_id: string;
+  evidence: ProposeEvidence;
+  proposed_at: string; // ISO-8601
+  /** Set once the proposal is settled. */
+  reviewer_id?: string;
+  decided_at?: string; // ISO-8601
+  /** `rejected` only: why the reviewer refused it. */
+  rationale?: string;
+  /** `applied` only: the record this proposal created. */
+  record_id?: string;
+  /**
+   * Set when a `purge` erased this proposal's candidate (owner decision, 2026-11-03):
+   * the proposal rested only on erased records, or created one. `candidate` is then a
+   * content-free stub and `evidence.proposal` is `[purged]`. A `pending` proposal is
+   * also settled as `rejected` by the purging agent, with the purge's rationale.
+   */
+  erasure?: { at: string; agent: string; rationale: string; note?: string };
+}
+
+export interface CreateProposalListOptions {
+  /** One state or several. Omitted means every state. */
+  state?: CreateProposalState | CreateProposalState[];
 }
 
 // ── Error contract (store-contract.md §8.1) ────────────────────────────────
@@ -185,6 +241,8 @@ export type KnowledgeStoreErrorCode =
   | 'NOT_FOUND'
   | 'AMBIGUOUS_ID'
   | 'SLUG_CONFLICT'
+  /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
+  | 'SELF_APPROVAL'
   /**
    * The operation names a purged record (owner decision, 2026-11-02): a tombstone
    * can be read but never updated, linked to or from, proposed against, superseded
@@ -301,6 +359,44 @@ export interface KnowledgeStorePurger {
    * history in lists.
    */
   purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult>;
+}
+
+/**
+ * Transactional create proposals (owner decision, 2026-11-03). Kept off
+ * `KnowledgeStoreAdapter` so existing implementers of that interface need no
+ * change. Both bundled adapters implement it. `applyCreate` and `rejectCreate` are
+ * distinct from the concept-proposal verbs `apply` and `reject`, which take
+ * `(targetId, proposerId, evidence)` and are unchanged.
+ */
+export interface KnowledgeStoreCreateProposals {
+  /**
+   * Stage a request to create `candidate`. Returns the proposal id; the proposal is
+   * `pending` and no record exists. The candidate is checked against the same
+   * required fields as `create`, and `evidence` needs `agent` and `proposal`.
+   * `proposerId` is an identity, not a record id. Put session, transcript and
+   * source references in `candidate.provenance`: they become the created record's
+   * provenance on `applyCreate`.
+   */
+  proposeCreate(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+  ): Promise<string>;
+  /**
+   * Create the record in one transaction and settle the proposal as `applied`.
+   * Returns the new record's id. The record's mutation log carries an
+   * `apply-create` entry naming the proposal, its proposer and its evidence.
+   * Refuses `SELF_APPROVAL` when `reviewerId` is the proposer, and `NOT_FOUND` for an
+   * unknown proposal. A proposal that is not `pending` is refused with
+   * `MISSING_EVIDENCE`. Every `create` requirement applies at this point; a failure
+   * leaves the proposal `pending` and writes nothing.
+   */
+  applyCreate(proposalId: string, reviewerId: string): Promise<string>;
+  /** Settle a pending proposal as `rejected`, keeping it with `rationale`. Creates no record. */
+  rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
+  getProposal(proposalId: string): Promise<KitCreateProposal | null>;
+  /** The explicit proposals query. Ordered by `proposed_at`, then id. */
+  listProposals(options?: CreateProposalListOptions): Promise<KitCreateProposal[]>;
 }
 
 /**

@@ -17,11 +17,15 @@ import type {
   ApplyEvidence,
   CategoryListOptions,
   CreateInput,
+  CreateProposalListOptions,
+  KitCreateProposal,
   KitLink,
+  KitMutationLogEntry,
   KitRecord,
   KitRecordType,
   KitReverseLink,
   KnowledgeStoreAdapter,
+  KnowledgeStoreCreateProposals,
   KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
@@ -42,6 +46,8 @@ import {
   ReadOnlyStoreError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
+import { assertCreateFields } from './shared/create-input.js';
+import { CreateProposals, PROPOSALS_DIRECTORY } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
@@ -76,7 +82,6 @@ import {
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
-  VALID_TYPES,
 } from './shared/record-schema.js';
 import {
   appendUniqueLinks,
@@ -428,7 +433,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
  */
 const TOMBSTONE_DIR = 'archive/purged';
 
-export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStorePurger {
+export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly sourcesDir: string;
@@ -438,6 +443,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   private readonly kitV1PathIndexPath: string;
   private readonly aliasPath: string;
   private readonly files: KnowledgeFileTransactions;
+  private readonly proposals: CreateProposals;
 
   constructor(options: KitObsidianStoreOptions) {
     if (!options?.storeRoot) throw new Error('storeRoot is required');
@@ -457,6 +463,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     mkdirSync(this.root, { recursive: true });
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
+    this.proposals = new CreateProposals(this.files, this.root, this.services);
+    Object.defineProperty(this, "proposals", { enumerable: false });
   }
 
   // ── Internal: path index (id -> {path, archived}) ─────────────────────────
@@ -487,6 +495,19 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   /**
+   * A proposal file: `<root>/.corpus-proposals/*.json`. Their number is unbounded and they
+   * are not records, so the record-identity scans neither count nor read them. Anything
+   * else under that directory, such as a note, is still scanned.
+   */
+  private isProposalFile(directory: string, entry: { name: string; kind: string }): boolean {
+    return (
+      entry.kind === 'file' &&
+      entry.name.endsWith('.json') &&
+      directory === join(this.root, PROPOSALS_DIRECTORY)
+    );
+  }
+
+  /**
    * True when the root already holds store data: a derived index, or a markdown
    * note whose frontmatter has an `id` or a `type`. Plain notes do not count.
    * Unreadable frontmatter or an exceeded bound counts as occupied (fail closed).
@@ -501,6 +522,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     while (directories.length > 0) {
       const directory = directories.pop()!;
       for (const entry of this.files.listDirectoryEntries(directory)) {
+        if (this.isProposalFile(directory, entry)) continue;
         if (++entries > CREATE_IDENTITY_MAX_ENTRIES) return true;
         const path = join(directory, entry.name);
         if (entry.kind === 'directory') {
@@ -1118,36 +1140,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     return this.mutate('create', () => this.createLocked(input));
   }
 
-  private createLocked(input: CreateInput): string {
-    if (!input.type) {
-      throw new MissingEvidenceError('create: missing required field: type');
-    }
-    if (!VALID_TYPES.has(input.type)) {
-      throw new MissingEvidenceError(
-        `create: type must be one of raw, compiled, concept, snapshot, person; got: ${input.type}`,
-      );
-    }
-    if (!input.title?.trim()) {
-      throw new MissingEvidenceError('create: missing required field: title');
-    }
-    if (typeof input.body !== 'string' || input.body.trim() === '') {
-      throw new MissingEvidenceError('create: missing required field: body');
-    }
-    if (!input.category) {
-      throw new MissingEvidenceError(
-        'create: missing required field: category',
-      );
-    }
-    if (!isValidCategory(input.category)) {
-      throw new MissingEvidenceError(
-        `create: invalid category: ${input.category}`,
-      );
-    }
-    if (!input.provenance?.agent) {
-      throw new MissingEvidenceError(
-        'create: missing required provenance field: provenance.agent',
-      );
-    }
+  private createLocked(
+    input: CreateInput,
+    origin?: (at: string) => KitMutationLogEntry,
+  ): string {
+    assertCreateFields(input, 'create');
 
     const id = input.id || this.services.ids();
     const pathIndex = this.loadPathIndex();
@@ -1195,7 +1192,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         ...(input.provenance.note ? { note: input.provenance.note } : {}),
       },
       links,
-      mutation_log: [],
+      mutation_log: origin ? [origin(now)] : [],
       body: input.body,
     };
 
@@ -1224,6 +1221,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     while (directories.length > 0) {
       const directory = directories.pop()!;
       for (const entry of this.files.listDirectoryEntries(directory)) {
+        if (this.isProposalFile(directory, entry)) continue;
         if (++entries > CREATE_IDENTITY_MAX_ENTRIES)
           throw new KnowledgeStoreCorruptionError(
             'Obsidian identity inspection exceeds its entry bound',
@@ -1488,6 +1486,62 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
     this.writeRecord(updated, pathIndex);
     this.savePathIndex(pathIndex);
+  }
+
+  // ── create proposals (owner decision, 2026-11-03) ──────────────────────
+
+  async proposeCreate(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+  ): Promise<string> {
+    return this.mutate('proposeCreate', () =>
+      this.proposals.stage(candidate, proposerId, evidence, (id) =>
+        this.readRecord(id, this.loadPathIndex()) !== null,
+      (stored) =>
+        assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          this.readRecord(id, this.loadPathIndex()),
+        ),
+      ),
+    );
+  }
+
+  async applyCreate(proposalId: string, reviewerId: string): Promise<string> {
+    return this.mutate('applyCreate', () => this.applyCreateLocked(proposalId, reviewerId));
+  }
+
+  async rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void> {
+    return this.mutate('rejectCreate', () => this.rejectCreateLocked(proposalId, reviewerId, rationale));
+  }
+
+  private applyCreateLocked(proposalId: string, reviewerId: string): string {
+    const proposal = this.proposals.pendingFor('applyCreate', proposalId, reviewerId);
+    let at = '';
+    const recordId = this.createLocked(proposal.candidate, (now) => {
+      at = now;
+      return this.proposals.applyOrigin(proposal, reviewerId, now);
+    });
+    this.proposals.settle(proposal, { state: 'applied', reviewerId, at, recordId });
+    return recordId;
+  }
+
+  private rejectCreateLocked(proposalId: string, reviewerId: string, rationale: string): void {
+    const proposal = this.proposals.pendingFor('rejectCreate', proposalId, reviewerId);
+    const reason = CreateProposals.rationale(rationale);
+    this.proposals.settle(proposal, {
+      state: 'rejected',
+      reviewerId,
+      at: new Date(this.services.clock()).toISOString(),
+      rationale: reason,
+    });
+  }
+
+  async getProposal(proposalId: string): Promise<KitCreateProposal | null> {
+    return this.files.read(() => this.proposals.get(proposalId));
+  }
+
+  async listProposals(options: CreateProposalListOptions = {}): Promise<KitCreateProposal[]> {
+    return this.files.read(() => this.proposals.list(options));
   }
 
   // ── propose (§6.4) ─────────────────────────────────────────────────────
@@ -1969,7 +2023,17 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     this.savePathIndex(pathIndex);
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
-    return { purged: plan.purged, cascaded: plan.cascaded, survivors: plan.survivors, referrers: plan.referrers, alreadyPurged: plan.alreadyPurged };
+    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

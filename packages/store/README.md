@@ -112,6 +112,26 @@ silent behavior.
     id cannot be created again. `get` returns it and `getLinks` keeps its link
     ids; lists treat it as history, so only `includeHistory: true` returns it,
     with no content.
+  - **Create proposals.** A proposal holds its whole candidate in every state, in
+    `.corpus-proposals/`, so a purge erases proposals itself. A proposal's support is
+    its candidate's `provenance.source_ids` plus its `source` links, as for a record.
+    One that rests only on erased records (support that is non-empty, entirely erased
+    and including one this purge erases) is erased; a pending one is also settled as
+    `rejected` by the purging agent with the purge's rationale, so it can never apply
+    (`proposalsRejected`). An applied proposal is erased when the record it created
+    is purged, and a rejected one when it rests only on erased records
+    (`proposalsScrubbed`, which includes the rejected ones). Erasing keeps `id`,
+    `state`, `proposer_id`, `evidence.agent`, the settlement identity and times, the
+    candidate's type, provenance and link targets, and `record_id`; it replaces the
+    title, body, category and `evidence.proposal` (and a settled rationale) with
+    `[purged]`/empty, drops tags, aliases, expiry and link labels, and adds
+    `erasure` (`at`, `agent`, `rationale`, `note`). A pending proposal with support
+    left stays pending and is listed as `proposalsBlocked`: `applyCreate` refuses it
+    with `PURGED` because its candidate still cites an erased record, and a reviewer
+    should reject it. `proposeCreate` refuses such a candidate up front, and the
+    log entry a created record starts with keeps `proposal_id` but never the
+    proposal's text once the record is erased. A corrupt proposal stops the purge
+    before anything is written.
   - **Read paths and projections.** The slug aliases leave the alias index, the
     graph index rebuilds from tombstone links, and `reindex` reproduces the same
     result. In the vault the file moves to `archive/purged/<id>.md`, the path
@@ -149,8 +169,51 @@ silent behavior.
     filesystem snapshot, and search or vector indexes a host built from
     `get`/lists (the host must rebuild them from the working set).
 
-Every decision is implemented except the journal window named above, which is
-the single entry on the expected-fail list.
+
+- **A new record can be proposed, then applied or rejected (2026-11-03).**
+  Decided by the delivery orchestrator under the owner's standing direction to
+  deliver flow-agents#669–#673 ([corpus#40](https://github.com/kontourai/corpus/issues/40));
+  the owner may override it.
+  - `proposeCreate(candidate, proposerId, evidence)` stores a `pending`
+    proposal that carries the whole candidate (a `CreateInput`, provenance
+    included) and `evidence` (`agent` and `proposal`, as for `propose`). It
+    returns the proposal id. The candidate must have the fields `create` requires.
+    **No record exists until apply**: `get` and every list return nothing for it.
+  - `applyCreate(proposalId, reviewerId)` creates the record in one transaction with
+    every `create` requirement, so a refusal (a source-less `compiled`
+    candidate, a taken id or slug) leaves the proposal `pending` and writes
+    nothing. It returns the new record id. The record's first mutation-log entry,
+    `apply-create`, names the proposal, its proposer and its evidence, and the
+    proposal records `record_id`. A reviewer who is the proposer is refused with
+    `SELF_APPROVAL`; the identity is the `proposerId` string, so a host that
+    needs more than self-comparison must authorize reviewers itself.
+  - `rejectCreate(proposalId, reviewerId, rationale)` keeps the proposal as
+    `rejected` with its rationale and creates nothing. A proposer may reject
+    (withdraw) its own proposal. Only a `pending` proposal can be applied or
+    rejected; a settled one is refused with `MISSING_EVIDENCE`.
+  - Proposals are stored under `<storeRoot>/.corpus-proposals/`, outside every record
+    path, index and list, so pending and rejected proposals are never in the
+    working set, `get`, `getLinks` or `reindex`, with or without `includeHistory`.
+    The directory's dot name cannot be a category, so a vault may still keep
+    notes in a `proposals` category. The vault's record-identity scans do not
+    count or read the `.json` files there, so retained proposals never reach
+    their entry bounds; anything else placed in that directory is still scanned.
+    A proposal over 16 MiB (less headroom for settlement), with blank evidence, or
+    with an explicit id or a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
+    accepted proposal can break `listProposals` or be left unsettleable. The size
+    of the record a proposal creates is `create`'s concern, not bounded here.
+    Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
+    is `pending`, `applied`, `rejected` or a list of them (omitted means all).
+  - The create-proposal verbs are separate from the concept-proposal `apply` and
+    `reject`, which take `(targetId, proposerId, evidence)` and are unchanged.
+  - **The store discovers no root.** The host constructs the adapter over the
+    root it authorized. A CLI default remains a CLI concern. A vault opened
+    read-only (`kit-v1`) refuses `proposeCreate`, `applyCreate` and `rejectCreate`
+    with `READ_ONLY`.
+  - `purge` reaches proposals; see the purge decision above.
+
+Every decision is implemented except the journal window named in the purge
+decision, which is the single entry on the expected-fail list.
 
 ## Host composition
 
