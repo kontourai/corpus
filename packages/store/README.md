@@ -16,8 +16,9 @@ and trusted-publisher setup through the
 ## Owner decisions
 
 The [conformance vectors](../conformance/README.md) encode the owner's
-2026-10-13 decisions. A decision not yet implemented is an explicit entry in
-[the expected-fail list](test/expected-fails.json), never silent behavior.
+2026-10-13 and 2026-11-02 decisions. A decision not yet implemented is an
+explicit entry in [the expected-fail list](test/expected-fails.json), never
+silent behavior.
 
 - **Proposals may target any record type.** `propose`, `apply` and `reject`
   accept a target of every type, not only `concept`. The target and proposer
@@ -54,7 +55,88 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   count. Only creation is checked: existing compiled records without a source
   stay readable, listable and updatable.
 
-Every decision is implemented, and the expected-fail list is empty.
+- **Purge erases records, and nothing else deletes them.** *(2026-11-02; this
+  reverses the earlier rule that no operation deletes a record.)* `purge(ids,
+  {agent, rationale, note?})` is an explicit, audited, privileged operation, and
+  supersede stays the default for ordinary change. The owner's conditions: it is
+  explicit and audited, it is privileged, supersede remains the default, and the
+  tombstone keeps no plain content hash.
+
+  - **Privileged.** The store cannot tell who may erase. `purge` is on a separate
+    type, `KnowledgeStorePurger`, and an adapter refuses it with `READ_ONLY`
+    before any I/O unless the host built it with `allowPurge: true`, which a host
+    sets only after its own authorization. `agent` and `rationale` are required.
+    Both are kept in the log, so neither may carry the erased content.
+  - **Targets.** Exact record ids only, never aliases or prefixes. Every id must
+    exist (`NOT_FOUND`) or nothing is written. Purging a tombstone again is a
+    no-op that reports it in `alreadyPurged`.
+  - **Tombstone.** Each target and each cascaded record is rewritten in place
+    with `status: purged`. It keeps `id`, `type`, `created_at`, provenance
+    (`agent`, `session_id`, `source_ids`), link targets and kinds, and its
+    mutation log reduced to `op`, `at`, `agent` plus identity references. It ends
+    with a `purged` entry holding `agent`, `rationale`, `note` and the cause:
+    `requested`, or `sole-support-purged` with the support (`via`) that went. It
+    drops title (now `[purged]`), body, tags, aliases, expiry, link labels,
+    provenance `note`, the free-text log fields (`note`, `rationale`, proposal
+    and reason text, link labels) and every unknown frontmatter field. Its
+    category becomes `purged`, because a category path can name a data subject.
+    **No content hash is kept**, not even of the title: for short content a hash
+    lets anyone holding the tombstone confirm a guess. A keyed integrity
+    reference may be added by a later, owner-approved change; today there is
+    none. Surface#351 calls this retention state `deleted`; the stored
+    `status: purged` is the same fact, and the id, provenance and `purged` entry
+    are the erasure trace it asks for.
+  - **Cascade.** A record's support is `provenance.source_ids` plus the targets of
+    its `source` links. `related`, `proposes` and `supersedes` links are
+    references, not support. A record is tombstoned when it rested on something
+    real before the purge and rests on nothing real after it. An id that is not a
+    record in the store (an outside conversation id, say) counts as real support.
+    Records that only support each other do not keep erased content alive, so a
+    cycle falls with its root. The rule repeats to a fixed point, so it is
+    transitive.
+  - **Survivors.** A record with other support survives untouched except for two
+    things. Its log gains a `support-purged` entry (`agent`, `rationale`, the
+    purged ids), and the labels of its links to erased records are dropped,
+    because a label can repeat the erased title. A record that only links to an
+    erased record gets the same label change and a `reference-purged` entry.
+    `PurgeResult` lists `purged`, `cascaded`, `survivors`, `referrers` and
+    `alreadyPurged`. The store does not scrub survivor *content* that may
+    reproduce erased content; review those ids. Surface#351 splits the work the
+    same way: the store represents the erasure, the producer removes
+    reproductions.
+  - **A tombstone is permanent and read-only.** `update`, `link`, `propose`,
+    `apply`, `reject`, `supersede` and `retire` refuse it with `PURGED`, so do
+    new `source` links, `source_ids` and compiled sources that name it, and its
+    id cannot be created again. `get` returns it and `getLinks` keeps its link
+    ids; lists treat it as history, so only `includeHistory: true` returns it,
+    with no content.
+  - **Read paths and projections.** The slug aliases leave the alias index, the
+    graph index rebuilds from tombstone links, and `reindex` reproduces the same
+    result. In the vault the file moves to `archive/purged/<id>.md` and the
+    path index loses the title slug, and every record that linked to it is
+    re-rendered, so no generated `[[link]]` section still names the erased
+    title. The `dimensions` frontmatter is not written to a tombstone.
+  - **Recoverable publication.** The transaction journal holds base64
+    before-images of every file it touches so an interrupted write can roll
+    back. For a purge, the commit marker drops them, so a journal left by a
+    crash after the commit marker holds no erased content. *Deferred:* between
+    the first journal write and the commit marker the journal still holds the
+    pre-purge files, because rollback needs them. A crash in that window leaves
+    them on disk until the next locked read recovers it, and unlinking a file is
+    not secure erasure. `purge-journal-in-flight` records this on the
+    expected-fail list. Closing it needs a roll-forward journal, which is a
+    separate change to the transaction engine.
+  - **Not covered.** Copies outside the store's transaction: backups, a
+    filesystem snapshot, search or vector indexes a host built from `get`/lists
+    (the host must rebuild them from the working set), and the `corpus-store
+    migrate` manifest under `.corpus-store-migration/`, which holds a sha256 of
+    every file as it was before a purge. These are whole-file hashes, not hashes
+    of the content alone, but they are still a trace, and `--reverse` refuses
+    once those files change. A host should delete that directory once the
+    migration is verified.
+
+Every decision is implemented except the journal window named above, which is
+the single entry on the expected-fail list.
 
 ## Host composition
 
@@ -194,8 +276,9 @@ recomputes them from `category`; shortening a category removes obsolete fields.
 They stay out of returned records. Names must be unique identifiers and may not
 replace record fields. Omit the option to preserve ordinary unknown frontmatter.
 
-- `@kontourai/corpus-store`: constructors, record/evidence/interface types,
-  service option types, reindex result type and standalone lock.
+- `@kontourai/corpus-store`: constructors, record/evidence/interface types
+  (including `KnowledgeStorePurger`, `PurgeEvidence` and `PurgeResult`), service
+  option types (including `allowPurge`), reindex result type and standalone lock.
 - `@kontourai/corpus-store/errors`: the unchanged domain and persistence error
   constructors/classifier. Persistence errors do not gain new codes here.
 - `@kontourai/corpus-store/observation`: construction-free bounded filesystem

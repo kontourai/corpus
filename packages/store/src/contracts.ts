@@ -7,8 +7,12 @@ export type KitRecordType =
   | 'snapshot'
   | 'person';
 
-/** Lifecycle status (Addendum B.1). Records without a `status` are treated as `active`. */
-export type KitRecordStatus = 'active' | 'implemented' | 'retired';
+/**
+ * Lifecycle status (Addendum B.1). Records without a `status` are treated as `active`.
+ * `purged` marks a tombstone written by `purge` (owner decision, 2026-11-02). It is
+ * terminal and is never set by `retire`.
+ */
+export type KitRecordStatus = 'active' | 'implemented' | 'retired' | 'purged';
 
 /** A directed link from a source record to a target record (store-contract.md §2.1). */
 export interface KitLink {
@@ -142,6 +146,38 @@ export interface RetireEvidence {
   note?: string;
 }
 
+/**
+ * `purge` evidence (owner decision, 2026-11-02). `agent` and `rationale` are kept in
+ * the tombstone's `purged` mutation-log entry, so neither may carry the erased
+ * content itself. `note` is kept too.
+ */
+export interface PurgeEvidence {
+  agent: string;
+  rationale: string;
+  note?: string;
+}
+
+/** What one `purge` call changed. Every list holds record ids, never content. */
+export interface PurgeResult {
+  /** The requested ids that this call tombstoned. */
+  purged: string[];
+  /** Records tombstoned because every record they rest on is purged. */
+  cascaded: string[];
+  /**
+   * Records that rest on a purged record and on something else. They keep their
+   * support and their log records the purge. A host should review these: the
+   * store does not scrub survivor content that may reproduce erased content.
+   */
+  survivors: string[];
+  /**
+   * Records that link to a purged record without resting on it. Their log records
+   * the purge too. Review them like survivors.
+   */
+  referrers: string[];
+  /** Requested ids that were already tombstones; they are left unchanged. */
+  alreadyPurged: string[];
+}
+
 // ── Error contract (store-contract.md §8.1) ────────────────────────────────
 
 export type KnowledgeStoreErrorCode =
@@ -150,12 +186,19 @@ export type KnowledgeStoreErrorCode =
   | 'AMBIGUOUS_ID'
   | 'SLUG_CONFLICT'
   /**
+   * The operation names a purged record (owner decision, 2026-11-02): a tombstone
+   * can be read but never updated, linked to or from, proposed against, superseded
+   * or cited as a source, so erased content cannot come back under its identity.
+   */
+  | 'PURGED'
+  /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
    * Kit contract has no notion of a non-writing adapter, so this code is not part
    * of the upstream error vocabulary. Thrown by adapters that implement
    * `KnowledgeStoreAdapter` over a derived, read-only projection (e.g. Station's
    * conversation-history root) from every one of the eight mutation verbs
-   * (`create`/`update`/`link`/`propose`/`apply`/`reject`/`supersede`/`retire`).
+   * (`create`/`update`/`link`/`propose`/`apply`/`reject`/`supersede`/`retire`/`purge`).
+   * `purge` also throws it from an adapter built without `allowPurge: true`.
    * A conformant, non-Station reader of the same contract will not encounter this
    * code, because a non-Station adapter never returns it.
    */
@@ -233,6 +276,31 @@ export interface KnowledgeStoreAdapter {
     type: KitRecordType,
     options?: ListOptions,
   ): Promise<KitRecord[]>;
+}
+
+/**
+ * The privileged half of the contract, kept off `KnowledgeStoreAdapter` so a host
+ * can hand callers the ordinary adapter type and keep this one for its own
+ * authorization path. The type split is not enforcement: the adapter also refuses
+ * `purge` unless it was built with `allowPurge: true`.
+ */
+export interface KnowledgeStorePurger {
+  /**
+   * Erase records and everything that rests only on them (owner decision,
+   * 2026-11-02). Supersede stays the default for ordinary change; purge is the
+   * explicit, audited, privileged exception, refused unless the host built the
+   * adapter with `allowPurge: true`. Targets are exact ids, never handles. Each
+   * target and each cascaded record becomes a tombstone that keeps its id, type,
+   * created_at, provenance (without its note), link targets and kinds, and mutation
+   * history reduced to who, what and when. It drops its title, body, tags, aliases,
+   * expiry, link labels, free-text log fields and unknown fields, and its category
+   * becomes `purged`. No content hash is kept. Support is `provenance.source_ids`
+   * plus `source` links: a record whose support is entirely purged is tombstoned
+   * too; one with other support survives and its log records the purge. Every id
+   * must exist, or nothing is written. A tombstone is read-only and counts as
+   * history in lists.
+   */
+  purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult>;
 }
 
 /**

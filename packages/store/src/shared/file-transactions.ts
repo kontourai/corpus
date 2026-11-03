@@ -230,7 +230,17 @@ export class KnowledgeFileTransactions {
     return this.mutate('read-repair', body);
   }
 
-  async mutate<T>(operation: string, body: () => T | Promise<T>): Promise<T> {
+  /**
+   * `erasure` marks a transaction whose before-images are content that must not
+   * outlive it. The prepared journal still holds them, because rollback needs them,
+   * but the commit marker drops them, so a journal left behind by a crash after the
+   * commit marker holds no erased content.
+   */
+  async mutate<T>(
+    operation: string,
+    body: () => T | Promise<T>,
+    options: { erasure?: boolean } = {},
+  ): Promise<T> {
     if (this.storage.getStore()) return body();
     let release: () => void | Promise<void>;
     try {
@@ -283,6 +293,10 @@ export class KnowledgeFileTransactions {
           this.hooks.afterFilePublish?.(path);
         }
         context.journal.phase = 'committed';
+        if (options.erasure) {
+          // A committed journal is only cleanup debris and is never rolled back.
+          for (const entry of context.journal.entries) entry.before = null;
+        }
         this.persistJournal(context.journal);
         this.hooks.afterCommitMarker?.(context.journal);
         this.removeJournal();

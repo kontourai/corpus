@@ -19,8 +19,14 @@ export interface StoreOptions {
   ids?: () => string;
   diagnostics?: Diagnostics;
   transactionObserver?: (operation: string, outcome: string) => void;
+  /**
+   * Default-deny switch for `purge`. A host sets it only after its own authorization,
+   * since the store has no notion of who may erase records. Without it `purge`
+   * throws `READ_ONLY` before any I/O.
+   */
+  allowPurge?: boolean;
 }
-export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'coordinationIdentity' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver'>;
+export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'coordinationIdentity' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver' | 'allowPurge'>;
 export const serviceScope = new AsyncLocalStorage<ResolvedServices>();
 export function resolveServices(options: Omit<StoreOptions, 'storeRoot'>): ResolvedServices {
   if (typeof options?.lock !== 'function') throw new Error('Explicit lock is required');

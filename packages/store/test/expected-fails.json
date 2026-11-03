@@ -1,106 +1,10 @@
 {
-  "purge-tombstone-shape": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-tombstone-links": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-cascade-sole-dependency": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-survivor-keeps-support": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-source-ids-support": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-read-paths": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-store-bytes": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-refuses-tombstone-mutation": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-input-validation": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-idempotent": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
-  },
-  "purge-journal-erasure": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "1 !== 23"
-  },
   "purge-journal-in-flight": {
     "profiles": [
       "default",
       "vault"
     ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "1 !== 23"
-  },
-  "purge-cascade-cycle": {
-    "profiles": [
-      "default",
-      "vault"
-    ],
-    "awaits": "Owner decision 2026-11-02: purge with tombstones and a sole-dependency cascade (kontourai/corpus#39).",
-    "errorPattern": "^missing adapter method: purge"
+    "awaits": "Deferred: erasure transactions keep their pre-purge images in the prepared journal, because rollback needs them. Closing the window needs a roll-forward journal, which is a separate change to the transaction engine. The committed journal is already scrubbed (purge-journal-erasure).",
+    "errorPattern": "^in-flight journal still holds erased content in "
   }
 }

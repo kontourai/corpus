@@ -23,6 +23,16 @@ export class KnowledgeRecordNotFoundError extends Error {
   }
 }
 
+/** A mutation named a tombstone. The message carries the verb and id, never content. */
+export class RecordPurgedError extends Error {
+  readonly code: KnowledgeStoreErrorCode = 'PURGED';
+
+  constructor(op: string, id: string) {
+    super(`${op}: record ${id} was purged`);
+    this.name = 'RecordPurgedError';
+  }
+}
+
 export class AmbiguousIdError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'AMBIGUOUS_ID';
   readonly matches: string[];
@@ -96,6 +106,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof KnowledgeRecordNotFoundError ||
     error instanceof AmbiguousIdError ||
     error instanceof SlugConflictError ||
+    error instanceof RecordPurgedError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||
     error instanceof KnowledgeStoreCorruptionError ||
