@@ -133,7 +133,7 @@ export class CreateProposals {
     const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
     if (requestKeyHash) {
       for (const existing of this.list()) {
-        const metadata = existing as KitCreateProposal & { request_key_hash?: string; request_digest?: string };
+        const metadata = existing;
         if (metadata.request_key_hash === requestKeyHash) {
           if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();
           return existing.id;
@@ -168,7 +168,7 @@ export class CreateProposals {
         proposer_id: proposerId,
         evidence: { agent, proposal },
         proposed_at: new Date(this.services.clock()).toISOString(),
-        ...(requestKeyHash ? { request_key_hash: requestKeyHash, request_digest: requestDigest } : {}),
+        ...(requestKeyHash ? { request_key_hash: requestKeyHash, request_digest: requestDigest, request_digest_version: 1 as const } : {}),
       },
       MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
     );
@@ -305,6 +305,7 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if ((value.request_key_hash !== undefined || value.request_digest !== undefined) &&
       (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash) ||
        typeof value.request_digest !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_digest))) throw corrupt('invalid request key metadata');
+  if (value.request_digest_version !== undefined && value.request_digest_version !== 1) throw corrupt('unsupported request digest version');
   if (!PROPOSAL_STATES.includes(value.state as CreateProposalState)) throw corrupt('invalid state');
   if (!isRecord(value.candidate)) throw corrupt('candidate is not an object');
   if (!isNonemptyString(value.proposer_id)) throw corrupt('proposer_id is missing');

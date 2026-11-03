@@ -162,6 +162,11 @@ export interface KitCreateProposal {
   proposer_id: string;
   evidence: ProposeEvidence;
   proposed_at: string; // ISO-8601
+  /** SHA-256 key and input digests for keyed proposals; not the caller's key. */
+  request_key_hash?: string;
+  request_digest?: string;
+  /** Digest algorithm and canonicalization version. */
+  request_digest_version?: 1;
   /** Set once the proposal is settled. */
   reviewer_id?: string;
   decided_at?: string; // ISO-8601

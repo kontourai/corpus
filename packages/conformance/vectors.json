@@ -7987,6 +7987,54 @@
           "expect_error": "REQUEST_KEY_CONFLICT"
         },
         {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "other",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "different"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
           "call": "listProposals",
           "args": [],
           "save": "all"
@@ -8133,7 +8181,7 @@
           "call": "proposeCreate",
           "args": [
             {
-              "id": "two",
+              "id": "one",
               "type": "raw",
               "title": "key",
               "body": "body",

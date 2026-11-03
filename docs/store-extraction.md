@@ -434,7 +434,7 @@ queries: lists, `get`, `getLinks`, `reindex` and the vault's identity scan see
 records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
 required-field checks used by `create` in both profiles and by `proposeCreate`.
 
-Six `create-proposal-*` vectors join the store vectors (129 per profile). All
+Six `create-proposal-*` vectors joined the store vectors (129 per profile at that decision). All
 implemented, so the expected-fail list stays empty. Tests: `test/create-proposals.test.ts`
 runs on both profiles and covers self-approval, working-set exclusion (including
 history, expiry and `reindex`), rollback of the record when the settled proposal
