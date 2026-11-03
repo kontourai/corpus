@@ -1,5 +1,7 @@
-import { constants, closeSync, fstatSync, linkSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
+import { constants, closeSync, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
+import { KnowledgeFileTransactions } from './shared/file-transactions.js';
+import type { StoreOptions } from './services.js';
 import { join } from 'node:path';
 import { RootBindingMismatchError } from './errors.js';
 
@@ -19,21 +21,16 @@ function binding(root: string): string {
   const canonical = realpathSync(root);
   return createHash('sha256').update(JSON.stringify([canonical, marker(canonical)])).digest('hex');
 }
-/** Scaffold an identity only if absent, then capture the root binding. */
-export function scaffoldRootBinding(root: string): string {
-  const canonical = realpathSync(root);
-  const path = join(canonical, MARKER);
-  const temporary = join(canonical, `.corpus-root-id-${randomBytes(16).toString('hex')}.tmp`);
-  try {
-    writeFileSync(temporary, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
-    try { linkSync(temporary, path); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-  } finally {
-    try { unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  }
-  return binding(canonical);
+/** Explicitly initialize an existing unbound root under the host's transaction lock. */
+export async function initializeRootBinding(options: StoreOptions): Promise<void> {
+  const files = new KnowledgeFileTransactions(options.storeRoot, {}, options);
+  await files.mutate('initializeRootBinding', () => {
+    const path = join(options.storeRoot, MARKER);
+    if (files.readText(path, 64) === null) files.writeText(path, randomBytes(32).toString('hex'));
+  });
+  binding(options.storeRoot); // validate existing and newly written markers
 }
+export function captureRootBinding(root: string): string { return binding(root); }
 /** Read-only comparison against a host-authorized root; this does not authorize the root. */
 export function assertAdapterBoundTo(adapter: { rootBinding(): string }, root: string): void {
   let expected: string;

@@ -442,3 +442,10 @@ cannot be written, refusal of corrupt proposal files, a read-only vault, and tha
 no path outside the supplied root is touched. `npm run proof:proposals` injects
 faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
+
+The [root-binding decision](https://github.com/kontourai/corpus/issues/47)
+adds a host-verifiable adapter binding based on a canonical root and a scaffolded
+identity marker. Both profiles have match, mismatch, alias and re-scaffolding
+vectors. Existing unmarked roots require explicit initialization before a new
+adapter can attest them; this preserves legacy vault reads without writing to
+the vault. The host still authorizes the root.

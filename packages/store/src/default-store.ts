@@ -1,4 +1,6 @@
-import { scaffoldRootBinding } from './root-binding.js';
+import { captureRootBinding } from './root-binding.js';
+import { scaffoldNewRootIdentity } from './shared/file-transactions.js';
+import { RootBindingMismatchError } from './errors.js';
 /**
  * Station-owned implementation of the Knowledge Kit's published file format:
  * records/<id>.md with graph and alias indexes. No Kit-private imports.
@@ -6,7 +8,7 @@ import { scaffoldRootBinding } from './root-binding.js';
  * the checked-in knowledge-store contract and shared adapter tests.
  * See docs/guides/knowledge.md#store-formats-and-external-edits.
  */
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type {
   ApplyEvidence,
@@ -82,7 +84,7 @@ export interface KitDefaultStoreOptions extends StoreOptions {}
 export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
   private readonly services: ResolvedServices;
   private readonly root: string;
-  private readonly binding: string;
+  private readonly binding: string | undefined;
   private readonly recordsDir: string;
   private readonly graphPath: string;
   private readonly aliasPath: string;
@@ -96,15 +98,18 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     this.recordsDir = join(this.root, 'records');
     this.graphPath = join(this.root, 'graph-index.json');
     this.aliasPath = join(this.root, 'alias-index.json');
+    const newRoot = !existsSync(this.root);
     mkdirSync(this.recordsDir, { recursive: true });
-    this.binding = scaffoldRootBinding(this.root);
+    if (newRoot) scaffoldNewRootIdentity(this.root);
+    try { this.binding = captureRootBinding(this.root); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
   }
 
-  rootBinding(): string { return this.binding; }
+  rootBinding(): string { if (!this.binding) throw new RootBindingMismatchError(); return this.binding; }
 
   // ── Internal: record file access ─────────────────────────────────────────
 

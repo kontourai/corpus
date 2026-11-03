@@ -1,4 +1,6 @@
-import { scaffoldRootBinding } from './root-binding.js';
+import { captureRootBinding } from './root-binding.js';
+import { scaffoldNewRootIdentity } from './shared/file-transactions.js';
+import { RootBindingMismatchError } from './errors.js';
 /**
  * Station-owned Kit-format adapter with an Obsidian vault layout.
  * Disk layout, external-edit behavior, and the original H1/M1/M2 regression
@@ -416,7 +418,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
   private readonly services: ResolvedServices;
   private readonly root: string;
-  private readonly binding: string;
+  private readonly binding: string | undefined;
   private readonly sourcesDir: string;
   private readonly dimensions: readonly string[];
   private readonly graphPath: string;
@@ -441,15 +443,18 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     this.pathIndexPath = join(this.root, PATH_INDEX_FILE);
     this.kitV1PathIndexPath = join(this.root, KIT_V1_PATH_INDEX_FILE);
     this.aliasPath = join(this.root, 'alias-index.json');
+    const newRoot = !existsSync(this.root);
     mkdirSync(this.root, { recursive: true });
-    this.binding = scaffoldRootBinding(this.root);
+    if (newRoot) scaffoldNewRootIdentity(this.root);
+    try { this.binding = captureRootBinding(this.root); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     this.files = new KnowledgeFileTransactions(this.root, {}, this.services);
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
   }
 
-  rootBinding(): string { return this.binding; }
+  rootBinding(): string { if (!this.binding) throw new RootBindingMismatchError(); return this.binding; }
 
   // ── Internal: path index (id -> {path, archived}) ─────────────────────────
 

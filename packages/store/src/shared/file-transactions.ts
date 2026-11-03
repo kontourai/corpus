@@ -1,11 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
   constants,
   fstatSync,
   fsyncSync,
   lstatSync,
+  linkSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -833,5 +834,18 @@ export class KnowledgeFileTransactions {
       if (error instanceof KnowledgeStoreCorruptionError) throw error;
       throw new KnowledgeStoreUnavailableError({ cause: error });
     }
+  }
+}
+
+/** Atomically create the identity marker when scaffolding a new root. */
+export function scaffoldNewRootIdentity(root: string): void {
+  const temporary = join(root, `.corpus-root-id-${randomBytes(16).toString('hex')}.tmp`);
+  try {
+    writeFileSync(temporary, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
+    try { linkSync(temporary, join(root, '.corpus-root-id')); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  } finally {
+    try { unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
 }
