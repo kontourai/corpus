@@ -64,7 +64,7 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /zebra-quartz-memo/ },
   { id: 'journal-keeps-before-images', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'for (const entry of context.journal.entries) entry.before = null;', ''),
     args: conformance('purge-journal-erasure'), reason: /still holds erased content in the journal|journal must/ },
-  { id: 'purge-always-allowed', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (!this.services.allowPurge) {', 'if (!this.services.allowPurge && false) {'),
+  { id: 'purge-always-allowed', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (this.services.allowPurge !== true) {', 'if (this.services.allowPurge !== true && false) {'),
     args: focused('test/purge.test.ts'), reason: /is refused without allowPurge/ },
   { id: 'partial-write-on-missing-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan', '    requested = requested.filter((id) => records.has(id));\n    const plan'),
     args: conformance('purge-input-validation'), reason: /NOT_FOUND|must reject/ },
