@@ -137,11 +137,40 @@ describe.each([
     await store.create(candidate({ id: 'unrelated' }));
     const sparse = new Array(1);
     const inherited = Object.assign(Object.create({ kind: 'session-transcript' }), { harness: 'h', session_id: 's', transcript_ref: 't' });
-    for (const invalid of [sparse, [inherited]]) {
+    const hidden = { ...ref }; Object.defineProperty(hidden, 'kind', { value: 'session-transcript', enumerable: false });
+    const customJson = [ref]; Object.defineProperty(customJson, 'toJSON', { value: () => [], enumerable: false });
+    for (const invalid of [sparse, [inherited], [hidden], customJson]) {
       const before = tree(root);
-      expect(await code(store.create(candidate({ id: 'invalid-ref', provenance: { agent: 'writer', source_refs: invalid } })))).toBe('MISSING_EVIDENCE');
+      const bad = candidate({ id: 'invalid-ref', provenance: { agent: 'writer', source_refs: invalid } });
+      expect(await code(store.create(bad))).toBe('MISSING_EVIDENCE');
+      expect(await code(store.proposeCreate(bad, 'writer', evidence))).toBe('MISSING_EVIDENCE');
       expect(tree(root)).toEqual(before);
     }
+  });
+
+  test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'é'.repeat(2048), session_id: 'x'.repeat(4096), transcript_ref: 't', sitting_id: undefined, range: undefined };
+    const withBoundary = { ...ref, range: { start: 1, end: 1 } };
+    const refs = Array.from({ length: 256 }, () => withBoundary);
+    const input = candidate({ id: 'boundary', provenance: { agent: 'writer', source_refs: refs } });
+    await store.create(input);
+    expect((await store.get('boundary'))?.provenance.source_refs).toEqual(refs.map(({ sitting_id: _sitting, ...rest }) => rest));
+    const proposal = await store.proposeCreate(candidate({ id: 'undefined-optionals', provenance: { agent: 'writer', source_refs: [ref] } }), 'writer', evidence);
+    expect((await store.getProposal(proposal))?.candidate.provenance.source_refs).toEqual([{ kind: ref.kind, harness: ref.harness, session_id: ref.session_id, transcript_ref: ref.transcript_ref }]);
+    expect(await code(store.create(candidate({ id: 'too-many-bytes', provenance: { agent: 'writer', source_refs: [{ ...withBoundary, harness: 'é'.repeat(2049) }] } })))).toBe('MISSING_EVIDENCE');
+  });
+
+  test('updating a record with shared YAML aliases keeps bounded serialized size', async () => {
+    await store.create(candidate({ id: 'yaml-alias-record' }));
+    const file = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: yaml-alias-record'))?.[0];
+    expect(file).toBeDefined(); const path = join(root, file!);
+    const original = readFileSync(path, 'utf8');
+    let extra = '\nanchor_0: &alias_0 [x]';
+    for (let n = 1; n <= 14; n++) extra += `\nanchor_${n}: &alias_${n} [*alias_${n - 1}, *alias_${n - 1}]`;
+    writeFileSync(path, original.replace('\n---\n', `${extra}\n---\n`));
+    await store.update('yaml-alias-record', { tags: ['updated'] }, { agent: 'writer' });
+    expect(Buffer.byteLength(readFileSync(path))).toBeLessThan(20000);
+    expect((await store.get('yaml-alias-record'))?.tags).toContain('updated');
   });
 
   test('structured source refs survive staging and creation and reject invalid shapes', async () => {
