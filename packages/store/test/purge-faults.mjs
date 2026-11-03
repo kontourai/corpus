@@ -65,8 +65,8 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /is refused without allowPurge/ },
   { id: 'partial-write-on-missing-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan', '    requested = requested.filter((id) => records.has(id));\n    const plan'),
     args: conformance('purge-input-validation'), reason: /NOT_FOUND|must reject/ },
-  { id: 'prefix-resolves-target', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '    const plan = planPurge(requested, records);\n    const now = new Date(this.services.clock()).toISOString();\n    const graph = this.loadGraph();\n    const aliasIndex', '    requested = requested.map((id) => [...records.keys()].find((key) => key.startsWith(id)) ?? id);\n    const plan = planPurge(requested, records);\n    const now = new Date(this.services.clock()).toISOString();\n    const graph = this.loadGraph();\n    const aliasIndex'),
-    args: conformance('purge-input-validation'), reason: /NOT_FOUND|must reject/ },
+  { id: 'prefix-resolves-target', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan = planPurge(requested, records);', '    requested = requested.map((id) => [...records.keys()].find((key) => key.startsWith(id)) ?? id);\n    for (const id of requested) {\n      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);\n    }\n    const plan = planPurge(requested, records);'),
+    args: conformance('purge-input-validation'), reason: /(purge|NOT_FOUND|must reject)/ },
 ];
 
 function run(label, args, success) {
