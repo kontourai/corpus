@@ -33,7 +33,7 @@ export interface KitReverseLink {
 }
 
 /** Known source-reference kinds. Other kinds require a future validated registry entry. */
-export interface KitSourceRefRegistry {
+export type KitSourceRefRegistry = {
   'session-transcript': {
     kind: 'session-transcript';
     harness: string;

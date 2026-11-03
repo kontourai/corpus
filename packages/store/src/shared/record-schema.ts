@@ -71,7 +71,6 @@ export function assertKitRecord(
   if (
     !isRecord(record.provenance) ||
     !isNonemptyString(record.provenance.agent) ||
-    (record.provenance.source_refs !== undefined && !validSourceRefs(record.provenance.source_refs)) ||
     (record.provenance.source_ids !== undefined &&
       !isStringArray(record.provenance.source_ids)) ||
     (record.provenance.session_id !== undefined &&
@@ -81,6 +80,7 @@ export function assertKitRecord(
   ) {
     invalid('provenance.agent is required');
   }
+  if (isRecord(record.provenance) && record.provenance.source_refs !== undefined && !validSourceRefs(record.provenance.source_refs)) invalid('invalid provenance.source_refs');
   if (
     !isNonemptyString(record.created_at) ||
     !Number.isFinite(Date.parse(record.created_at))

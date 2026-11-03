@@ -128,6 +128,22 @@ describe.each([
     expect(await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' })).toBe(receipt);
   });
 
+  test('direct create safely stores shared reference objects and rejects sparse or inherited shapes', async () => {
+    const range = { start: 1, end: 2 };
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't', range };
+    const refs = Array.from({ length: 60 }, () => ref);
+    await store.create(candidate({ id: 'shared-refs', provenance: { agent: 'writer', source_refs: refs } }));
+    expect((await store.get('shared-refs'))?.provenance.source_refs).toEqual(refs);
+    await store.create(candidate({ id: 'unrelated' }));
+    const sparse = new Array(1);
+    const inherited = Object.assign(Object.create({ kind: 'session-transcript' }), { harness: 'h', session_id: 's', transcript_ref: 't' });
+    for (const invalid of [sparse, [inherited]]) {
+      const before = tree(root);
+      expect(await code(store.create(candidate({ id: 'invalid-ref', provenance: { agent: 'writer', source_refs: invalid } })))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('structured source refs survive staging and creation and reject invalid shapes', async () => {
     const refs = [{ kind: 'session-transcript' as const, harness: 'harness', session_id: 's-1', transcript_ref: 'opaque-ref', sitting_id: 'sit-1', range: { start: 1, end: 7 } }];
     const input = candidate({ provenance: { agent: 'writer', source_refs: refs, note: 'free text' } });
@@ -139,6 +155,9 @@ describe.each([
       [{ ...refs[0], extra: 'no' }], [{ ...refs[0], kind: 'future' }],
       [{ ...refs[0], harness: 'x'.repeat(4097) }], [{ ...refs[0], range: { start: 4, end: 3 } }],
       [{ ...refs[0], range: { start: 1, end: 2, extra: true } }],
+      [{ ...refs[0], range: { start: 0, end: 2 } }], [{ ...refs[0], range: { start: 1, end: Number.MAX_SAFE_INTEGER + 1 } }],
+      [{ ...refs[0], harness: '   ' }], [{ ...refs[0], sitting_id: 'x'.repeat(4097) }],
+      Array.from({ length: 257 }, () => refs[0]),
     ]) {
       const bad = candidate({ id: 'invalid', provenance: { agent: 'writer', source_refs: invalid as never } });
       const before = tree(root);
@@ -146,6 +165,19 @@ describe.each([
       expect(await code(store.create(bad))).toBe('MISSING_EVIDENCE');
       expect(tree(root)).toEqual(before);
     }
+  });
+
+  test('invalid source refs on disk are reported as corrupt provenance', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'marker', session_id: 's', transcript_ref: 't' };
+    await store.create(candidate({ id: 'bad-source-read', provenance: { agent: 'writer', source_refs: [ref] } }));
+    const file = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: bad-source-read'))?.[0];
+    expect(file).toBeDefined();
+    const path = join(root, file!);
+    const text = readFileSync(path, 'utf8');
+    expect(text).toContain('harness: marker');
+    writeFileSync(path, text.replace('harness: marker', 'harness: 123'));
+    await expect(store.get('bad-source-read')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError', message: expect.stringContaining('provenance.source_refs') });
+    await expect(store.listByType('raw')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
   });
 
   test('pending and rejected proposals are outside the working set and every ordinary read', async () => {
