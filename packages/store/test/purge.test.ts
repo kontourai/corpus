@@ -502,13 +502,53 @@ describe('purge — vault layout', () => {
     const noteBytes = (id: string) => Buffer.byteLength(readFileSync(join(root, index().by_id[id].path), 'utf8'));
 
     test('drops the prose of its purge entry when the full entry would not fit', async () => {
-      await noteNearBound('near', 200);
-      await store.purge(['near'], { agent: 'privacy-officer', rationale: 'r'.repeat(600) });
+      await noteNearBound('near', 900);
+      await store.purge(['near'], { agent: 'privacy-officer', rationale: 'r'.repeat(1500) });
       const stone = (await store.get('near'))!;
       expect(stone.status).toBe('purged');
-      expect(stone.mutation_log!.at(-1)).toEqual({ op: 'purged', at: expect.any(String), agent: 'privacy-officer', evidence: { cause: 'requested', compact: true } });
+      // The rationale is cut to 256 JSON bytes, so a projection still has a non-empty reason, and the entry says it was cut.
+      expect(stone.mutation_log!.at(-1)).toEqual({
+        op: 'purged',
+        at: expect.any(String),
+        agent: 'privacy-officer',
+        rationale: 'r'.repeat(254),
+        evidence: { cause: 'requested', compact: true, rationale_truncated: true, rationale_bytes: 1500 },
+      });
       expect(stone.provenance.source_ids).toHaveLength(9);
       expect(noteBytes('near')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+    });
+
+    test.each([
+      ['type', 'type: concept\n', (pad: number) => `type: '${'t'.repeat(Math.max(0, pad - 2))}'\n`, 'omitted_type_bytes'],
+      ['created_at', /created_at: [^\n]+\n/, (pad: number) => `created_at: '2026-01-01T00:00:00.${'0'.repeat(Math.max(0, pad - 22))}Z'\n`, 'omitted_created_at_bytes'],
+    ] as const)('a note read from outside that is made of a very long %s can still be erased', async (name, target, field, omitted) => {
+      await store.create({ id: 'odd', type: 'concept', title: 't', body: 'b', category: 'engineering', provenance: { agent: 'creator' } });
+      const path = join(root, index().by_id.odd.path);
+      const text = readFileSync(path, 'utf8');
+      const match = typeof target === 'string' ? target : text.match(target)![0];
+      // Grow the field until the note is exactly at the limit (its length is linear in `pad`).
+      const others = Buffer.byteLength(text) - Buffer.byteLength(match);
+      let pad = VAULT_NOTE_MAX_BYTES - others;
+      for (let i = 0; i < 3; i++) pad += VAULT_NOTE_MAX_BYTES - (others + Buffer.byteLength(field(pad)));
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(path, text.replace(match, field(pad)));
+      expect(noteBytes('odd')).toBe(VAULT_NOTE_MAX_BYTES);
+      expect(await open('vault', root).get('odd')).toMatchObject({ id: 'odd' });
+      await store.purge(['odd'], { agent: 'privacy-officer', rationale: 'erasure request 42' });
+      const stone = (await store.get('odd'))!;
+      expect(stone.status).toBe('purged');
+      expect(stone.mutation_log![0].evidence).toHaveProperty(omitted);
+      expect(noteBytes('odd')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+      expect(name).toBeTruthy();
+    });
+
+    test('keeps a rationale of at most 64 bytes in the minimal shape, cut and flagged, so a projection never sees an empty reason', async () => {
+      await noteNearBound('tiny', 5);
+      await store.purge(['tiny'], { agent: 'privacy-officer', rationale: 'é'.repeat(500) });
+      const entry = (await store.get('tiny'))!.mutation_log![0];
+      expect(entry.rationale).toBe('é'.repeat(31)); // 2 quote bytes + 31 two-byte characters
+      expect(entry.evidence).toMatchObject({ compact: true, rationale_truncated: true, rationale_bytes: 1000, omitted_source_ids: 9 });
+      expect(noteBytes('tiny')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
     });
 
     test('also drops an agent or session id too long to keep, so a note made of them can still be erased', async () => {
@@ -536,7 +576,7 @@ describe('purge — vault layout', () => {
       expect(stone).toMatchObject({ id: 'edge', status: 'purged', provenance: { agent: 'creator' }, links: [] });
       expect(stone.provenance).not.toHaveProperty('source_ids');
       expect(stone.mutation_log).toEqual([
-        { op: 'purged', at: expect.any(String), agent: 'privacy-officer', evidence: { cause: 'requested', compact: true, omitted_source_ids: 9, omitted_links: 0, omitted_log_entries: 0 } },
+        { op: 'purged', at: expect.any(String), agent: 'privacy-officer', rationale: 'erasure request 42', evidence: { cause: 'requested', compact: true, omitted_source_ids: 9, omitted_links: 0, omitted_log_entries: 0 } },
       ]);
       expect(noteBytes('edge')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
       // The vault is still usable: a later create scans every note with the bound.

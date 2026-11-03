@@ -167,6 +167,9 @@ export function planPurge(
 const KEPT_EVIDENCE = new Set([
   'superseded_by_id', 'proposer_id', 'concept_id', 'superseded_count',
   'targetStatus', 'fields', 'cause', 'via', 'purged_ids', 'proposal_id',
+  'compact', 'rationale_truncated', 'rationale_bytes', 'omitted_source_ids', 'omitted_links',
+  'omitted_log_entries', 'omitted_agent_bytes', 'omitted_session_id_bytes', 'omitted_type_bytes',
+  'omitted_created_at_bytes',
 ]);
 // Ops whose rationale and note are the audit record itself.
 const AUDIT_OPS = new Set(['purged', 'support-purged', 'reference-purged']);
@@ -211,6 +214,35 @@ function auditEntry(
  * always writes `full`.
  */
 export type TombstoneShape = 'full' | 'compact' | 'minimal';
+/** The rationale a shortened tombstone keeps, as JSON bytes: enough to say why, never empty. */
+const COMPACT_RATIONALE_BYTES = 256;
+const MINIMAL_RATIONALE_BYTES = 64;
+
+/**
+ * The leading part of `text` that fits `maxBytes` once written as JSON, cut between characters
+ * (a surrogate pair is never split). `text` is non-empty, and one character is at most 12 JSON
+ * bytes, so the result is never empty at these limits.
+ */
+function leadingJson(text: string, maxBytes: number): { text: string; truncated: boolean } {
+  let out = '';
+  let used = 2; // the quotes
+  for (const character of text) {
+    const size = Buffer.byteLength(JSON.stringify(character)) - 2;
+    if (used + size > maxBytes) return { text: out, truncated: true };
+    out += character;
+    used += size;
+  }
+  return { text: out, truncated: false };
+}
+
+/** A shortened tombstone's `rationale` field and the evidence that says how much of it is left. */
+function shortRationale(evidence: PurgeEvidence, maxBytes: number): { rationale: string; evidence: Record<string, unknown> } {
+  const kept = leadingJson(evidence.rationale, maxBytes);
+  return {
+    rationale: kept.text,
+    evidence: kept.truncated ? { rationale_truncated: true, rationale_bytes: Buffer.byteLength(evidence.rationale) } : {},
+  };
+}
 export const TOMBSTONE_SHAPES: readonly TombstoneShape[] = ['full', 'compact', 'minimal'];
 
 /** The tombstone that replaces `record`. `via` is set for a cascaded record. */
@@ -229,14 +261,18 @@ export function tombstoneOf(
       typeof value === 'string' && Buffer.byteLength(JSON.stringify(value)) <= 256;
     const agent = record.provenance.agent;
     const session = record.provenance.session_id;
+    const minimal = shortRationale(evidence, MINIMAL_RATIONALE_BYTES);
+    // A note read from outside this store can carry a type or timestamp of any length.
+    const type = short(record.type) ? record.type : ('[omitted]' as KitRecord['type']);
+    const createdAt = short(record.created_at) ? record.created_at : at;
     return {
       id: record.id,
-      type: record.type,
+      type,
       title: PURGED_TITLE,
       body: '',
       category: PURGED_CATEGORY,
       status: 'purged',
-      created_at: record.created_at,
+      created_at: createdAt,
       updated_at: at,
       provenance: {
         agent: short(agent) ? agent : '[omitted]',
@@ -248,14 +284,18 @@ export function tombstoneOf(
           op: 'purged',
           at,
           agent: evidence.agent,
+          rationale: minimal.rationale,
           evidence: {
             cause,
             compact: true,
+            ...minimal.evidence,
             omitted_source_ids: record.provenance.source_ids?.length ?? 0,
             omitted_links: record.links?.length ?? 0,
             omitted_log_entries: record.mutation_log?.length ?? 0,
             ...(short(agent) ? {} : { omitted_agent_bytes: Buffer.byteLength(agent) }),
             ...(session === undefined || short(session) ? {} : { omitted_session_id_bytes: Buffer.byteLength(session) }),
+            ...(short(record.type) ? {} : { omitted_type_bytes: Buffer.byteLength(record.type) }),
+            ...(short(record.created_at) ? {} : { omitted_created_at_bytes: Buffer.byteLength(record.created_at) }),
           },
         },
       ],
@@ -281,7 +321,10 @@ export function tombstoneOf(
     mutation_log: [
       ...(record.mutation_log ?? []).map(scrubEntry),
       shape === 'compact'
-        ? { op: 'purged', at, agent: evidence.agent, evidence: { cause, compact: true } }
+        ? (() => {
+            const compact = shortRationale(evidence, COMPACT_RATIONALE_BYTES);
+            return { op: 'purged', at, agent: evidence.agent, rationale: compact.rationale, evidence: { cause, compact: true, ...compact.evidence } };
+          })()
         : auditEntry('purged', at, evidence, via ? { cause, via } : { cause }),
     ],
   };

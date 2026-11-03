@@ -146,6 +146,12 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /without its prose/ },
   { id: 'tombstone-keeps-long-agent', file: purge, mutate: (s) => swap(s, "agent: short(agent) ? agent : '[omitted]',", 'agent,'),
     args: focused('test/purge.test.ts'), reason: /agent or session id too long to keep/ },
+  { id: 'tombstone-keeps-long-type', file: purge, mutate: (s) => swap(s, "const type = short(record.type) ? record.type : ('[omitted]' as KitRecord['type']);", 'const type = record.type;'),
+    args: focused('test/purge.test.ts'), reason: /made of a very long type can still be erased/ },
+  { id: 'shortened-tombstone-drops-rationale', file: purge, mutate: (s) => swap(s, 'rationale: minimal.rationale,', ''),
+    args: focused('test/purge.test.ts'), reason: /rationale of at most 64 bytes/ },
+  { id: 'tombstone-measure-overflow-fatal', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'if (!(error instanceof RangeError)) throw error;', 'throw error;'),
+    args: focused('test/purge.test.ts'), reason: /made of a very long (type|created_at) can still be erased/ },
 ];
 
 function run(label, args, success) {

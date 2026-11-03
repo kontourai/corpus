@@ -2079,7 +2079,13 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     let stone = tombstoneOf(record, at, evidence, via);
     for (const shape of TOMBSTONE_SHAPES) {
       stone = tombstoneOf(record, at, evidence, via, shape);
-      if (Buffer.byteLength(this.renderNote(stone, pathIndex)) <= VAULT_NOTE_MAX_BYTES) break;
+      try {
+        if (Buffer.byteLength(this.renderNote(stone, pathIndex)) <= VAULT_NOTE_MAX_BYTES) break;
+      } catch (error) {
+        // The YAML writer recurses on a multi-megabyte scalar and overflows the stack: that shape
+        // cannot be written at all, which is the same as not fitting.
+        if (!(error instanceof RangeError)) throw error;
+      }
     }
     return stone;
   }

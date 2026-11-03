@@ -106,6 +106,7 @@ silent behavior.
     reproduce erased content; review those ids. Surface#351 splits the work the
     same way: the store represents the erasure, the producer removes
     reproductions.
+
     In a vault, a survivor or referrer is re-rendered and gains a log entry, which
     can grow a note that already sits near the vault note limit (16 MiB, see the
     note-limit decision), and every note a purge writes is held to that limit
@@ -117,16 +118,27 @@ silent behavior.
     different, because nothing the host does to a record changes what the
     tombstone must keep, and erasure must always be possible. A tombstone that
     would pass the limit (a note made mostly of provenance ids) falls back to a
-    `purged` entry without prose or `via` (`compact: true`), and then to identity
-    plus that entry with counts of what it dropped (`omitted_source_ids`,
-    `omitted_links`, `omitted_log_entries`, and an agent or session id over 256
-    bytes: `[omitted]` and `omitted_agent_bytes` / `omitted_session_id_bytes`).
-    The default layout has no such limit and always writes the full tombstone.
-    **This is a narrow departure from "a tombstone keeps provenance, links and a
-    purge entry", made so that erasure is never blocked**: it applies only to a
-    vault note within a few hundred bytes of 16 MiB that is mostly metadata, and
-    what was lost is counted in the entry. The owner may prefer to refuse such a
-    purge instead; that is a one-line change in `fittingTombstone`.
+    `purged` entry without `via` and with the rationale cut to 256 bytes as JSON
+    (`compact: true`, and `rationale_truncated` and `rationale_bytes` when it was
+    cut), and then to identity plus that entry with the rationale cut to 64 bytes
+    and counts of what it dropped (`omitted_source_ids`, `omitted_links`,
+    `omitted_log_entries`). In that last shape an agent, session id, `type` or
+    `created_at` over 256 bytes as JSON is replaced (`[omitted]`, dropped, or the
+    purge time) and counted (`omitted_agent_bytes`, `omitted_session_id_bytes`,
+    `omitted_type_bytes`, `omitted_created_at_bytes`). A rationale is therefore
+    never empty, so a consumer that needs a reason for the erasure always has
+    one. The default layout has no such limit and always writes the full
+    tombstone. **This is a narrow departure from "a tombstone keeps provenance,
+    links and a purge entry", made so that erasure is not blocked**: it applies
+    only when the full tombstone would exceed 16 MiB, which needs a note of
+    that size made mostly of metadata, and what was lost is counted in the
+    entry. A record id cannot be dropped, and the vault does not cap it as the
+    default layout does ([#58](https://github.com/kontourai/corpus/issues/58)),
+    so a purge of a record whose id alone fills the limit is still refused. The
+    owner may prefer to refuse every such purge instead; that is a one-line
+    change in `fittingTombstone`. Whether a consumer such as Surface needs a
+    different bounded rationale is tracked in
+    [#57](https://github.com/kontourai/corpus/issues/57).
   - **A tombstone is permanent and read-only.** `update`, `link`, `propose`,
     `apply`, `reject`, `supersede` and `retire` refuse it with `PURGED`, so do
     new `source` links, `source_ids` and compiled sources that name it, and its
