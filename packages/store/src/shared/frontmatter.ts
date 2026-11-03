@@ -9,6 +9,7 @@ interface SourceState { yaml: string; scalars: SavedScalar[] }
 const SOURCE = Symbol('corpus.frontmatter.source');
 const ROOT_STRINGS = new Set(['id', 'type', 'title', 'category', 'status', 'created_at', 'updated_at', 'expires_at', '_body_sentinel']);
 const PROVENANCE_STRINGS = new Set(['agent', 'session_id', 'note']);
+const SOURCE_REF_STRINGS = new Set(['kind', 'harness', 'session_id', 'transcript_ref', 'sitting_id']);
 const LINK_STRINGS = new Set(['target_id', 'kind', 'label']);
 const LOG_STRINGS = new Set(['op', 'at', 'agent', 'note']);
 const EVIDENCE_STRINGS: Record<string, Set<string>> = {
@@ -39,6 +40,7 @@ function fieldType(path: Path, meta: unknown): 'string' | 'number' | 'container'
   if (root === 'provenance') {
     if (path.length === 2 && PROVENANCE_STRINGS.has(String(index))) return 'string';
     if (index === 'source_ids') return path.length === 2 ? 'container' : 'string';
+    if (index === 'source_refs' && path.length === 4 && typeof key === 'number' && SOURCE_REF_STRINGS.has(String(evidenceKey))) return 'string';
   }
   if (root === 'links') {
     if (path.length === 2) return 'container';

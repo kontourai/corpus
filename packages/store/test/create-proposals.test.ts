@@ -344,7 +344,7 @@ describe.each([
     const path = join(root, file!);
     const text = readFileSync(path, 'utf8');
     expect(text).toContain('harness: marker');
-    writeFileSync(path, text.replace('harness: marker', 'harness: 123'));
+    writeFileSync(path, text.replace('harness: marker', 'harness: [invalid]'));
     await expect(store.get('bad-source-read')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError', message: expect.stringContaining('provenance.source_refs') });
     await expect(store.listByType('raw')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
   });
