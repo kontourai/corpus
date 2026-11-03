@@ -57,7 +57,7 @@ const controls = [
     args: conformance('purge-read-paths'), reason: /by_alias/ },
   { id: 'vault-title-path-survives', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'const target = this.tombstonePath(id, pathIndex);', 'const target = entry.path;'),
     args: conformance('purge-store-bytes'), reason: /ember-zebra-interview.* is still on disk/ },
-  { id: 'vault-survivors-not-rerendered', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "this.writeRecord(survivorOf(op, records.get(id)!, now, evidence, plan.erased, plan.lost.get(id)!), pathIndex);", 'void 0;'),
+  { id: 'vault-survivors-not-rerendered', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'this.writeRecord(kept, pathIndex);', 'void kept;'),
     args: focused('test/purge.test.ts'), reason: /zebra-quartz-memo/ },
   { id: 'journal-keeps-before-images', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'for (const entry of context.journal.entries) entry.before = null;', ''),
     args: conformance('purge-journal-erasure'), reason: /still holds erased content in the journal|journal must/ },
