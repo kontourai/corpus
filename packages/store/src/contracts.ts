@@ -177,6 +177,11 @@ export interface KitCreateProposal {
   proposer_id: string;
   evidence: ProposeEvidence;
   proposed_at: string; // ISO-8601
+  /** SHA-256 key and input digests for keyed proposals; not the caller's key. */
+  request_key_hash?: string;
+  request_digest?: string;
+  /** Digest algorithm and canonicalization version. */
+  request_digest_version?: 1;
   /** Set once the proposal is settled. */
   reviewer_id?: string;
   decided_at?: string; // ISO-8601
@@ -200,6 +205,7 @@ export type KnowledgeStoreErrorCode =
   | 'SLUG_CONFLICT'
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
+  | 'REQUEST_KEY_CONFLICT'
   /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
    * Kit contract has no notion of a non-writing adapter, so this code is not part
@@ -306,6 +312,7 @@ export interface KnowledgeStoreCreateProposals {
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string>;
   /**
    * Create the record in one transaction and settle the proposal as `applied`.

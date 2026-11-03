@@ -7,6 +7,7 @@
  * Both profiles share this module; each supplies its own `createLocked`.
  */
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import type {
   CreateInput,
   CreateProposalListOptions,
@@ -20,6 +21,7 @@ import {
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
   SelfApprovalError,
+  RequestKeyConflictError,
 } from '../errors.js';
 import { isRecord } from '../is-record.js';
 import { isSafePathSegment } from '../path-safety.js';
@@ -98,6 +100,7 @@ export class CreateProposals {
     proposerId: string,
     evidence: ProposeEvidence,
     recordExists: (id: string) => boolean,
+    options?: { requestKey?: string },
   ): string {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
@@ -122,6 +125,21 @@ export class CreateProposals {
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
     freshnessPatch(stored);
+    const key = options?.requestKey;
+    if (key !== undefined && (typeof key !== 'string' || !key.trim() || Buffer.byteLength(key) > 1024)) {
+      throw new MissingEvidenceError('proposeCreate: requestKey must be a non-empty string of at most 1024 bytes');
+    }
+    const requestKeyHash = key === undefined ? undefined : hash(key);
+    const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
+    if (requestKeyHash) {
+      for (const existing of this.list()) {
+        const metadata = existing;
+        if (metadata.request_key_hash === requestKeyHash) {
+          if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();
+          return existing.id;
+        }
+      }
+    }
     // Id rules belong to each profile's create, which runs at apply. Here only a
     // type error and an id already taken are caught early.
     if (stored.id !== undefined) {
@@ -150,6 +168,7 @@ export class CreateProposals {
         proposer_id: proposerId,
         evidence: { agent, proposal },
         proposed_at: new Date(this.services.clock()).toISOString(),
+        ...(requestKeyHash ? { request_key_hash: requestKeyHash, request_digest: requestDigest, request_digest_version: 1 as const } : {}),
       },
       MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
     );
@@ -283,6 +302,10 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   }
   if (!isRecord(value)) throw corrupt('not an object');
   if (value.id !== id) throw corrupt('id does not match its filename');
+  if ((value.request_key_hash !== undefined || value.request_digest !== undefined) &&
+      (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash) ||
+       typeof value.request_digest !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_digest))) throw corrupt('invalid request key metadata');
+  if (value.request_digest_version !== undefined && value.request_digest_version !== 1) throw corrupt('unsupported request digest version');
   if (!PROPOSAL_STATES.includes(value.state as CreateProposalState)) throw corrupt('invalid state');
   if (!isRecord(value.candidate)) throw corrupt('candidate is not an object');
   if (!isNonemptyString(value.proposer_id)) throw corrupt('proposer_id is missing');
@@ -302,4 +325,14 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if (value.state === 'applied' && !isNonemptyString(value.record_id)) throw corrupt('record_id is missing');
   if (value.state === 'rejected' && !isNonemptyString(value.rationale)) throw corrupt('rationale is missing');
   return value as unknown as KitCreateProposal;
+}
+
+function hash(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }

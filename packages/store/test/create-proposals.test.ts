@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -86,6 +87,37 @@ describe.each([
     expect(await store.get('proposed-record')).toBeNull();
     expect(await store.get(proposalId)).toBeNull();
     expect(await store.listByType('raw')).toEqual([]);
+  });
+
+  test('request key retries return the original receipt and conflicts write nothing', async () => {
+    const options = { requestKey: 'request-1' };
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
+    const before = tree(root);
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect(tree(root)).toEqual(before);
+    expect(await code(store.proposeCreate(candidate({ title: 'different' }), 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+    expect(await code(store.proposeCreate(candidate(), 'agent-b', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(await code(store.proposeCreate(candidate(), 'agent-a', { ...evidence, proposal: 'different' }, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+    expect(await store.listProposals()).toHaveLength(1);
+    await store.applyCreate(id, 'reviewer');
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect((await store.getProposal(id))?.state).toBe('applied');
+    const other = await store.proposeCreate(candidate({ id: 'other' }), 'agent-a', evidence);
+    await store.rejectCreate(other, 'reviewer', 'no');
+    const rejected = await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' });
+    await store.rejectCreate(rejected, 'reviewer', 'no');
+    expect(await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' })).toBe(rejected);
+  });
+
+  test('keyed proposal recovers after a crash during publication', async () => {
+    const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/keyed-proposal-crash.ts', import.meta.url)), base, _profile], { encoding: 'utf8', timeout: 30_000 });
+    expect(child.status, child.stderr).toBe(99);
+    const input = candidate({ id: 'crash-record', title: 'Crash', body: 'body', provenance: { agent: 'writer' } });
+    const receipt = await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' });
+    expect((await store.listProposals()).map((proposal) => proposal.id)).toEqual([receipt]);
+    expect(await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' })).toBe(receipt);
   });
 
   test('structured source refs survive staging and creation and reject invalid shapes', async () => {

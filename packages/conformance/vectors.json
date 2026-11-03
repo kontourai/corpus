@@ -7815,6 +7815,403 @@
       ]
     },
     {
+      "id": "create-request-key-retry",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "Request key reuse mints a duplicate or accepts different input.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "retry"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$first",
+            "reviewer"
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "settled"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "retry",
+          "equals": "$first"
+        },
+        {
+          "ref": "settled",
+          "equals": "$first"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        }
+      ]
+    },
+    {
+      "id": "create-request-key-conflict",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "Request key reuse mints a duplicate or accepts different input.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "different",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "other",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "different"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 1
+        },
+        {
+          "ref": "all.0.id",
+          "equals": "$first"
+        },
+        {
+          "ref": "all.0.candidate.title",
+          "equals": "key"
+        }
+      ]
+    },
+    {
+      "id": "create-request-key-rejected",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "Request key reuse mints a duplicate or accepts different input.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "rejectCreate",
+          "args": [
+            "$first",
+            "reviewer",
+            "no"
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-record",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "key-1"
+            }
+          ],
+          "save": "retry"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "retry",
+          "equals": "$first"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        },
+        {
+          "ref": "all.0.state",
+          "equals": "rejected"
+        }
+      ]
+    },
+    {
+      "id": "create-request-key-optional",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "Request key reuse mints a duplicate or accepts different input.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "one",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "one",
+              "type": "raw",
+              "title": "key",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            }
+          ],
+          "save": "second"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 2
+        }
+      ]
+    },
+    {
       "id": "source-refs-survive",
       "source": [
         {

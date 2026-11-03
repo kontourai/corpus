@@ -777,11 +777,12 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string> {
     return this.files.mutate('proposeCreate', () =>
       this.proposals.stage(candidate, proposerId, evidence, (id) =>
         isSafePathSegment(id) && this.readRecord(id) !== null,
-      ),
+      options),
     );
   }
 
