@@ -480,3 +480,7 @@ The keyed recovery tests crash before and after publication, verify the prepared
 journal is resolved, and pin the original receipt after the complete after-image.
 Keyed corruption checks fail closed; `proof:proposals` includes replayable key
 conflict, duplicate retry, corrupt-neighbour and recovery injections.
+
+Key metadata is retained in the proposal file, not copied into the created note.
+The vault note-size check still runs before a new keyed proposal is staged; a
+refusal leaves the key available, and a matching settled retry returns its receipt.
