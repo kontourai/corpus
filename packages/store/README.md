@@ -311,3 +311,7 @@ The same identity is required on the construction-free observation port. Hosts
 with a runtime-home resolver must additionally check that resolver against the
 captured home. Record data remains identical on re-read; whitespace/style may
 normalize except for the approved top-level lossy plain tokens.
+
+### Owner decision: structured source references (2026-11-03)
+
+The orchestrator decided in [#46](https://github.com/kontourai/corpus/issues/46), subject to owner override, that optional `provenance.source_refs` carries attribution only. It neither authorizes reading `transcript_ref` nor constitutes review evidence; `note` remains free text and must not be parsed. The currently validated kind is `session-transcript`: `harness`, `session_id`, and `transcript_ref` are required, `sitting_id` and `range` are optional. A range is an inclusive one-based `{ start, end }` line range. Unknown fields and kinds are refused. Strings are nonempty and at most 4096 UTF-8 bytes; at most 256 references are accepted. The kind registry can grow through a future validated contract change.

@@ -1147,6 +1147,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         ...(input.provenance.source_ids?.length
           ? { source_ids: input.provenance.source_ids }
           : {}),
+        ...(input.provenance.source_refs !== undefined ? { source_refs: input.provenance.source_refs } : {}),
         ...(input.provenance.note ? { note: input.provenance.note } : {}),
       },
       links,

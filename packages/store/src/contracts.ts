@@ -32,9 +32,24 @@ export interface KitReverseLink {
   kind: string;
 }
 
+/** Known source-reference kinds. Other kinds require a future validated registry entry. */
+export interface KitSourceRefRegistry {
+  'session-transcript': {
+    kind: 'session-transcript';
+    harness: string;
+    session_id: string;
+    transcript_ref: string;
+    sitting_id?: string;
+    /** Inclusive, one-based line range in the referenced transcript. */
+    range?: { start: number; end: number };
+  };
+}
+export type KitSourceRef = KitSourceRefRegistry[keyof KitSourceRefRegistry];
+
 /** Immutable creation provenance (store-contract.md §4.1). */
 export interface KitProvenance {
   source_ids?: string[];
+  source_refs?: KitSourceRef[];
   agent: string;
   session_id?: string;
   note?: string;

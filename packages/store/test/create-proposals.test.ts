@@ -88,6 +88,26 @@ describe.each([
     expect(await store.listByType('raw')).toEqual([]);
   });
 
+  test('structured source refs survive staging and creation and reject invalid shapes', async () => {
+    const refs = [{ kind: 'session-transcript' as const, harness: 'harness', session_id: 's-1', transcript_ref: 'opaque-ref', sitting_id: 'sit-1', range: { start: 1, end: 7 } }];
+    const input = candidate({ provenance: { agent: 'writer', source_refs: refs, note: 'free text' } });
+    const id = await store.proposeCreate(input, 'writer', evidence);
+    expect((await store.getProposal(id))?.candidate.provenance.source_refs).toEqual(refs);
+    await store.applyCreate(id, 'reviewer');
+    expect((await store.get('proposed-record'))?.provenance.source_refs).toEqual(refs);
+    for (const invalid of [
+      [{ ...refs[0], extra: 'no' }], [{ ...refs[0], kind: 'future' }],
+      [{ ...refs[0], harness: 'x'.repeat(4097) }], [{ ...refs[0], range: { start: 4, end: 3 } }],
+      [{ ...refs[0], range: { start: 1, end: 2, extra: true } }],
+    ]) {
+      const bad = candidate({ id: 'invalid', provenance: { agent: 'writer', source_refs: invalid as never } });
+      const before = tree(root);
+      expect(await code(store.proposeCreate(bad, 'writer', evidence))).toBe('MISSING_EVIDENCE');
+      expect(await code(store.create(bad))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('pending and rejected proposals are outside the working set and every ordinary read', async () => {
     await store.create({ ...candidate({ id: 'ordinary' }), title: 'Ordinary' });
     const pending = await store.proposeCreate(candidate({ id: 'pending-record', aliases: ['pending-slug'], ttl_seconds: 1 }), 'agent-a', evidence);
