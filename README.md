@@ -77,7 +77,7 @@ The [publish workflow](.github/workflows/publish-npm.yml) publishes only
 `@kontourai/corpus` package has its own workflow, described
 [above](#publishing-the-root-package). Dispatch `publish-npm.yml`
 on `main` with an exact `version` matching both workspace manifests;
-the prepared candidate is `0.1.0-next.1`. Release-please does not manage these
+the release candidate is `0.1.0-next.1`. Release-please does not manage these
 workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
