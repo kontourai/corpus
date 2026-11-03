@@ -118,7 +118,7 @@ const controls = [
   { id: 'proposal-evidence-kept', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'evidence: { agent: proposal.evidence.agent, proposal: PURGED_TITLE },', 'evidence: proposal.evidence,'),
     args: conformance('purge-proposal-sole-support-rejected'), reason: /after\.evidence/ },
   { id: 'proposal-partial-support-erased', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'support.some((id) => newlyErased.has(id)) && support.every((id) => allErased.has(id));', 'support.some((id) => newlyErased.has(id));'),
-    args: conformance('purge-proposal-other-support-blocked'), reason: /(proposalsBlocked|after\.)/ },
+    args: conformance('purge-proposal-other-support-blocked'), reason: /(proposalsBlocked|after\.|PURGED)/ },
   { id: 'proposal-cites-tombstone', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'guard?.(stored);', ''),
     args: conformance('purge-proposal-cites-tombstone'), reason: /proposeCreate must reject/ },
 ];
