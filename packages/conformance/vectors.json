@@ -8514,7 +8514,8 @@
               "agent": "eraser",
               "rationale": "requested"
             }
-          ]
+          ],
+          "save": "purged"
         },
         {
           "call": "proposeCreate",
@@ -8571,6 +8572,22 @@
         }
       ],
       "expected": [
+        {
+          "ref": "purged.purged",
+          "length": 1
+        },
+        {
+          "ref": "purged.purged.0",
+          "equals": "$r"
+        },
+        {
+          "ref": "purged.proposalsScrubbed",
+          "length": 1
+        },
+        {
+          "ref": "purged.proposalsScrubbed.0",
+          "equals": "$p"
+        },
         {
           "ref": "retry",
           "equals": "$p"
