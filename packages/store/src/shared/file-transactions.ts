@@ -1,11 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
   constants,
   fstatSync,
   fsyncSync,
   lstatSync,
+  linkSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -983,5 +984,55 @@ export class KnowledgeFileTransactions {
       if (error instanceof KnowledgeStoreCorruptionError) throw error;
       throw new KnowledgeStoreUnavailableError({ cause: error });
     }
+  }
+}
+
+/** Atomically create the identity marker when scaffolding a new root. */
+export function scaffoldNewRootIdentity(root: string): void {
+  const temporary = join(root, `.corpus-root-id-${randomBytes(16).toString('hex')}.tmp`);
+  try {
+    const fd = openSync(temporary, 'wx', 0o600);
+    try { writeFileSync(fd, randomBytes(32).toString('hex')); fsyncSync(fd); } finally { closeSync(fd); }
+    try { linkSync(temporary, join(root, '.corpus-root-id')); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  } finally {
+    try { unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const fd = openSync(root, constants.O_RDONLY);
+    try { fsyncSync(fd); } finally { closeSync(fd); }
+  }
+}
+
+/** Finish a scaffold interrupted after linking a fully fsynced marker. */
+export function settleScaffoldMarker(root: string): void {
+  const marker = join(root, '.corpus-root-id');
+  let markerInfo;
+  try { markerInfo = lstatSync(marker); } catch (error) { if (isMissing(error)) return; throw error; }
+  if (!markerInfo.isFile() || markerInfo.isSymbolicLink() || markerInfo.nlink !== 2) return;
+  for (const name of readdirSync(root)) {
+    if (!/^\.corpus-root-id-[a-f0-9]{32}\.tmp$/.test(name)) continue;
+    const temporary = join(root, name);
+    let fd: number;
+    try {
+      const entry = lstatSync(temporary);
+      if (!entry.isFile() || entry.isSymbolicLink()) continue;
+      fd = openSync(temporary, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch {
+      // A lookalike may be a symlink, socket, inaccessible or concurrently removed.
+      // It is not authority to delete; keep looking for the marker's actual twin.
+      continue;
+    }
+    try {
+      const info = fstatSync(fd); const current = lstatSync(marker); const entry = lstatSync(temporary);
+      if (!info.isFile() || info.size !== 64 || (info.mode & 0o777) !== 0o600 ||
+          (process.getuid !== undefined && info.uid !== process.getuid()) ||
+          info.dev !== current.dev || info.ino !== current.ino || current.nlink !== 2 ||
+          entry.dev !== info.dev || entry.ino !== info.ino ||
+          !/^[a-f0-9]{64}$/.test(readFileSync(fd, 'utf8'))) continue;
+      unlinkSync(temporary);
+    } catch (error) { if (!isMissing(error)) throw error; else continue; }
+    finally { closeSync(fd); }
+    const directory = openSync(root, constants.O_RDONLY); try { fsyncSync(directory); } finally { closeSync(directory); }
+    return;
   }
 }

@@ -70,7 +70,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -98,6 +98,11 @@ function invalidConfigurations(): void {
 void invalidConfigurations;
 // The concept-proposal apply and reject keep their signatures; the create-proposal verbs are separate methods.
 // Compile-time only: none of this runs.
+function bindingTypes(adapter: KnowledgeStoreAdapter, root: string): RootBoundAdapter {
+  assertAdapterBoundTo(adapter, root);
+  return adapter;
+}
+void bindingTypes;
 function proposalTypes(): void {
   const conceptApply: Parameters<KitDefaultStoreAdapter['apply']> = ['target', 'proposer', { agent: 'a', new_body: 'b', rationale: 'r' }];
   const conceptReject: Parameters<KitObsidianStoreAdapter['reject']> = ['target', 'proposer', { agent: 'a', reason: 'r' }];

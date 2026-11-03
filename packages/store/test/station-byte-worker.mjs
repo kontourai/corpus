@@ -37,7 +37,10 @@ for (const [profile, Station, Corpus] of [['default', StationDefault, KitDefault
       if (fixtureName === 'kit-sequence') assert.deepEqual(after.mutation_log[0], before.mutation_log[0]);
     }
   }
-  const stationFiles = files(stationRoot); assert.deepEqual(files(corpusRoot), stationFiles);
+  const stationFiles = files(stationRoot);
+  // Corpus adds a root identity marker; all Station-owned files must still match.
+  assert.deepEqual(files(corpusRoot), [...stationFiles, '.corpus-root-id'].sort());
+  assert.match(readFileSync(join(corpusRoot, '.corpus-root-id'), 'utf8'), /^[a-f0-9]{64}$/);
   const results = stationFiles.map((file) => {
     const stationBytes = readFileSync(join(stationRoot, file)); const corpusBytes = readFileSync(join(corpusRoot, file));
     const equal = stationBytes.equals(corpusBytes);

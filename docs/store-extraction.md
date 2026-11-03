@@ -531,3 +531,19 @@ fields as strings, like other store string fields.
 The vault's proposal-size estimate serializes validated `source_refs` with the
 candidate, so attribution bytes count toward the note bound before a keyed or
 unkeyed proposal is staged. The apply path enforces the final note bound again.
+
+The [root-binding decision](https://github.com/kontourai/corpus/issues/47)
+adds a host-verifiable adapter binding based on a canonical root and a scaffolded
+identity marker. Both profiles have match, mismatch, alias and re-scaffolding
+vectors. Existing unmarked roots require explicit initialization before a new
+adapter can attest them; this preserves legacy vault reads without writing to
+the vault. The host still authorizes the root. Initialization is an explicit host-authorized
+write, even for a kit-v1 vault; it does not enable record mutation there.
+Initialization publishes markers without replacing a concurrent scaffold and can
+recover a matching temporary link left after a completed marker was published.
+Additional hard links to the marker, including hard-link snapshots, make binding
+checks fail closed. Remove the extra links and reconstruct the adapter to restore
+the binding.
+
+A purge-enabled adapter's root binding and marker survive purge and reindex;
+both profiles test the real purge path and still reject a different root.

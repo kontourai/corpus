@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dump, load } from 'js-yaml';
-import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
 
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
@@ -59,6 +59,48 @@ export async function makeHarness(profile) {
     return result;
   }
   const specials = {
+    async 'root-binding'({ operation }) {
+      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy', 'purge'].includes(operation.mode), 'unknown root-binding mode');
+      if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
+      if (operation.mode === 'purge') {
+        const initial = adapter.rootBinding(); const marker = await readFile(join(root, '.corpus-root-id'), 'utf8');
+        await adapter.create(input('binding-purge'));
+        await adapter.purge(['binding-purge'], { agent: 'eraser', rationale: 'requested' });
+        await adapter.reindex();
+        assert.equal((await adapter.get('binding-purge')).status, 'purged');
+        assert.equal(adapter.rootBinding(), initial); assert.equal(await readFile(join(root, '.corpus-root-id'), 'utf8'), marker);
+        assert.equal(createStore(profile, root, coordinationDirectory).rootBinding(), initial);
+        assertAdapterBoundTo(adapter, root);
+        const other = join(base, 'other'); createStore(profile, other, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, other), { code: 'ROOT_BINDING_MISMATCH' });
+      }
+      if (operation.mode === 'legacy') {
+        const legacy = join(base, 'legacy'); await mkdir(legacy);
+        const unbound = createStore(profile, legacy, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(unbound, legacy), { code: 'ROOT_BINDING_MISMATCH' });
+        await assert.rejects(readFile(join(legacy, '.corpus-root-id')), { code: 'ENOENT' });
+        const options = { storeRoot: legacy, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+        await initializeRootBinding(options); const bound = createStore(profile, legacy, coordinationDirectory);
+        const before = bound.rootBinding(); const bytes = await readFile(join(legacy, '.corpus-root-id'), 'utf8');
+        await initializeRootBinding(options);
+        assert.equal(await readFile(join(legacy, '.corpus-root-id'), 'utf8'), bytes);
+        assert.equal(createStore(profile, legacy, coordinationDirectory).rootBinding(), before);
+        assertAdapterBoundTo(bound, legacy);
+      }
+      if (operation.mode === 'alias') {
+        const alias = join(base, 'alias'); await symlink(root, alias);
+        assertAdapterBoundTo(adapter, alias);
+      }
+      if (operation.mode === 'mismatch') {
+        const other = join(base, 'other'); createStore(profile, other, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, other), { code: 'ROOT_BINDING_MISMATCH' });
+      }
+      if (operation.mode === 'rescaffold') {
+        await rm(root, { recursive: true, force: true }); createStore(profile, root, coordinationDirectory);
+        assert.throws(() => assertAdapterBoundTo(adapter, root), { code: 'ROOT_BINDING_MISMATCH' });
+      }
+      return { check: true };
+    },
     async 'body-not-frontmatter'({ values }) {
       const text = await readFile(await recordPath(profile, root, values.a), 'utf8');
       const end = text.indexOf('\n---\n', 4);

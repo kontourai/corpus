@@ -15507,6 +15507,150 @@
           "length": 2
         }
       ]
+    },
+    {
+      "id": "root-binding-match",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "An adapter is accepted for a different authorized root.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "match"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-mismatch",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "An adapter is accepted for a different authorized root.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "mismatch"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-alias",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "A symlinked alias of the authorized root is falsely rejected.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "alias"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-rescaffold",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "An adapter is accepted for a different authorized root.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "rescaffold"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-legacy",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "Legacy roots are silently modified or initialization changes an existing binding.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "legacy"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-after-purge",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "A purge changes or detaches the adapter root binding.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "purge"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
     }
   ]
 }

@@ -266,6 +266,7 @@ export type KnowledgeStoreErrorCode =
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
   | 'REQUEST_KEY_CONFLICT'
+  | 'ROOT_BINDING_MISMATCH'
   /**
    * The operation names a purged record (owner decision, 2026-11-02): a tombstone
    * can be read but never updated, linked to or from, proposed against, superseded
@@ -289,6 +290,11 @@ export interface KnowledgeStoreError extends Error {
   code: KnowledgeStoreErrorCode;
   /** Populated on AMBIGUOUS_ID — the colliding full ids (Addendum H.3). */
   matches?: string[];
+}
+
+/** A store that exposes an opaque binding for host composition. */
+export interface RootBoundAdapter extends KnowledgeStoreAdapter {
+  rootBinding(): string;
 }
 
 // ── Adapter contract (store-contract.md §8 + Addendum A.6/B.5, Addendum H) ─
