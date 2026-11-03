@@ -44,6 +44,18 @@ const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
 /** Caps on what settlement adds (reviewer id, rationale, record id), so the headroom above always holds. */
 const MAX_REVIEWER_BYTES = 1024;
+/**
+ * Stands in for the reviewer when a profile sizes the record before it is applied. DEL is one
+ * JSON byte but four YAML bytes (`\x7F`), the largest expansion a reviewer id can have, and
+ * 1022 of them are the most `MAX_REVIEWER_BYTES` of serialized JSON allows.
+ */
+const WORST_CASE_REVIEWER = '\u007f'.repeat(MAX_REVIEWER_BYTES - 2);
+/** `stage` refuses a longer proposal id. */
+const MAX_PROPOSAL_ID_LENGTH = 200;
+/** All digits: YAML quotes a digit string, so this is the dearest 200-character id to write. */
+const PROPOSAL_ID_STAND_IN = '1'.repeat(MAX_PROPOSAL_ID_LENGTH);
+/** Every ISO timestamp has this length; sizing must not read the clock. */
+const SIZING_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 /** An explicit candidate id lands in the settled proposal as `record_id`. */
 const MAX_CANDIDATE_ID_BYTES = 1024;
 const MAX_RATIONALE_BYTES = 16 * 1024;
@@ -101,6 +113,14 @@ export class CreateProposals {
     proposerId: string,
     evidence: ProposeEvidence,
     recordExists: (id: string) => boolean,
+    /**
+     * A profile's own limit on the record the candidate would become; throws to refuse. It gets
+     * the `apply-create` entry the record would start with, with stand-ins for the reviewer and
+     * proposal ids that are only known at apply. It is a margin, not a guarantee: `applyCreate`
+     * checks again.
+     */
+    assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
+    /** Purge: a candidate may not cite an erased record as a source. Runs before the profile's own checks. */
     guard?: (candidate: CreateInput) => void,
   ): string {
     if (!isNonemptyString(proposerId)) {
@@ -150,9 +170,17 @@ export class CreateProposals {
         throw new MissingEvidenceError('proposeCreate: record id already exists');
       }
     }
+    assertFits?.(
+      stored,
+      this.applyOrigin(
+        { id: PROPOSAL_ID_STAND_IN, proposer_id: proposerId, evidence: { agent, proposal } },
+        WORST_CASE_REVIEWER,
+        SIZING_TIMESTAMP,
+      ),
+    );
 
     const id = this.services.ids();
-    if (!isSafePathSegment(id) || id.length > 200) {
+    if (!isSafePathSegment(id) || id.length > MAX_PROPOSAL_ID_LENGTH) {
       throw new MissingEvidenceError('proposeCreate: proposal id must be a safe single path segment');
     }
     if (this.get(id)) throw new MissingEvidenceError('proposeCreate: proposal id already exists');
@@ -194,7 +222,11 @@ export class CreateProposals {
   }
 
   /** The `apply-create` log entry the created record starts with: its link back to the proposal. */
-  applyOrigin(proposal: KitCreateProposal, reviewerId: string, at: string): KitMutationLogEntry {
+  applyOrigin(
+    proposal: Pick<KitCreateProposal, 'id' | 'proposer_id' | 'evidence'>,
+    reviewerId: string,
+    at: string,
+  ): KitMutationLogEntry {
     return {
       op: APPLY_CREATE_OP,
       at,

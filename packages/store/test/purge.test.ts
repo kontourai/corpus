@@ -10,6 +10,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { VAULT_NOTE_MAX_BYTES } from '../src/obsidian-store.js';
 import { startsLikeJournal } from '../src/shared/file-transactions.js';
 import {
   KitDefaultStoreAdapter,
@@ -418,6 +419,45 @@ describe('purge — vault layout', () => {
     const path = join(root, index().by_id.src.path);
     writeFileSync(path, `${readFileSync(path, 'utf8')}\nsneaked content\n`);
     expect((await open('vault', root).get('src'))?.body).toBe('');
+  });
+
+  test('purging the last record leaves a vault that opens, lists, reindexes and still accepts records', async () => {
+    await store.create({ id: 'only', type: 'raw', title: 'Only', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+    await store.purge(['only'], evidence);
+    expect(existsSync(join(root, 'path-index.json'))).toBe(true);
+    // Lose the derived indexes, as the empty-vault fix covers: the path index is what tells an occupied vault from a new one.
+    rmSync(join(root, 'graph-index.json'));
+    rmSync(join(root, 'alias-index.json'));
+    const reopened = open('vault', root);
+    expect((await reopened.get('only'))?.status).toBe('purged');
+    expect(await reopened.listByType('raw')).toEqual([]);
+    expect((await reopened.listByType('raw', { includeHistory: true })).map((r) => r.id)).toEqual(['only']);
+    await expect(reopened.reindex()).resolves.toMatchObject({ records: 1 });
+    expect(index().by_id.only).toEqual({ path: 'archive/purged/only.md', archived: true });
+    const next = await reopened.create({ type: 'raw', title: 'Next', body: 'y', category: 'engineering', provenance: { agent: 'creator' } });
+    expect((await open('vault', root).get(next))?.body).toBe('y');
+    // A third open, after the new record, still reads both.
+    expect((await open('vault', root).listByType('raw', { includeHistory: true })).length).toBe(2);
+  });
+
+  test('refuses, writing nothing, a purge that would push a survivor note past the vault note bound', async () => {
+    await store.create({ id: 's1', type: 'raw', title: 's1', body: 'x', category: 'engineering', provenance: { agent: 'creator' } });
+    await store.create({ id: 's2', type: 'raw', title: 's2', body: 'y', category: 'engineering', provenance: { agent: 'creator' } });
+    // A concept note is its body plus about 1 KiB of frontmatter; leave less room than the purge's log entry needs.
+    const slack = 1500;
+    const body = 'b'.repeat(VAULT_NOTE_MAX_BYTES - 1300 - slack);
+    await store.create({ id: 'big', type: 'concept', title: 'big', body, category: 'engineering', provenance: { agent: 'creator', source_ids: ['s1', 's2'] } });
+    const before = files(root);
+    await expect(store.purge(['s1'], { agent: 'privacy-officer', rationale: 'r'.repeat(4000) })).rejects.toMatchObject({
+      code: 'MISSING_EVIDENCE',
+      message: expect.stringContaining('limited to 16777216 bytes'),
+    });
+    expect(files(root)).toEqual(before);
+    expect((await store.get('s1'))?.status).toBe('active');
+    // With room, the same purge goes through and the note stays within the bound.
+    await expect(store.purge(['s1'], { agent: 'privacy-officer', rationale: 'short' })).resolves.toMatchObject({ survivors: ['big'] });
+    expect(Buffer.byteLength(readFileSync(join(root, index().by_id.big.path), 'utf8'))).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+    await expect(store.create({ type: 'raw', title: 'after', body: 'z', category: 'engineering', provenance: { agent: 'creator' } })).resolves.toEqual(expect.any(String));
   });
 
   test('removes the emptied category folders, and only those', async () => {

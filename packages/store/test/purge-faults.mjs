@@ -138,6 +138,8 @@ const controls = [
     args: focused('test/purge-proposals.test.ts'), reason: /no accepted proposal can stop a later purge/ },
   { id: 'proposal-empty-link-accepted', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "link.target_id === '' || link.kind === ''", 'false'),
     args: focused('test/purge-proposals.test.ts'), reason: /empty link (target|kind)/ },
+  { id: 'purge-ignores-note-bound', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });", 'this.writeRecord(kept, pathIndex);'),
+    args: focused('test/purge.test.ts'), reason: /past the vault note bound/ },
 ];
 
 function run(label, args, success) {

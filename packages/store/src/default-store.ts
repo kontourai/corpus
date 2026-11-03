@@ -809,12 +809,16 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     evidence: ProposeEvidence,
   ): Promise<string> {
     return this.files.mutate('proposeCreate', () =>
-      this.proposals.stage(candidate, proposerId, evidence, (id) =>
-        isSafePathSegment(id) && this.readRecord(id) !== null,
-      (stored) =>
-        assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
-          isSafePathSegment(id) ? this.readRecord(id) : null,
-        ),
+      this.proposals.stage(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => isSafePathSegment(id) && this.readRecord(id) !== null,
+        undefined, // the default layout has no note size to check
+        (stored) =>
+          assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+            isSafePathSegment(id) ? this.readRecord(id) : null,
+          ),
       ),
     );
   }
