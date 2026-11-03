@@ -16,6 +16,10 @@ const run = (label, pattern, good, testFile = 'test/create-proposals.test.ts') =
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['digest-omitted-refs', 'src/shared/create-proposals.ts',
+    'hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }))',
+    'hash(canonical({ candidate: existing && stored.provenance.source_refs === undefined ? { ...stored, provenance: { ...stored.provenance, source_refs: existing.candidate.provenance.source_refs } } : stored, proposerId, evidence: { agent, proposal } }))',
+    'keyed retry with omitted source references'],
   ['digest-refs', 'src/shared/create-proposals.ts',
     ['hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }))'],
     ['hash(canonical({ candidate: { ...stored, provenance: { ...stored.provenance, source_refs: undefined } }, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: { ...proposal.candidate, provenance: { ...proposal.candidate.provenance, source_refs: undefined } }, proposerId: proposal.proposer_id, evidence: proposal.evidence }))'],

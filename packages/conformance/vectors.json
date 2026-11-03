@@ -12470,6 +12470,151 @@
           "length": 1
         }
       ]
+    },
+    {
+      "id": "source-refs-purge-scrub",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "Purged record or proposal retains transcript attribution.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-ref-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "sensitive-ref",
+                    "sitting_id": "sit"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-erasure"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$r"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ],
+          "save": "purged"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "tombstone"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "scrubbed"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "source-ref-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "sensitive-ref",
+                    "sitting_id": "sit"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-erasure"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "purged.proposalsScrubbed",
+          "length": 1
+        },
+        {
+          "ref": "purged.proposalsScrubbed.0",
+          "equals": "$p"
+        },
+        {
+          "ref": "tombstone.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "tombstone.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_key_retired",
+          "equals": true
+        }
+      ]
     }
   ]
 }

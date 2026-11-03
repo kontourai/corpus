@@ -30,5 +30,13 @@
     ],
     "awaits": "purge integration from corpus#41; key lookup must precede purge source guard",
     "errorPattern": "^missing adapter method: purge(?:\\n|$)"
+  },
+  "source-refs-purge-scrub": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "purge integration from corpus#41; current sibling tombstones explicitly omit source_refs",
+    "errorPattern": "^missing adapter method: purge(?:\\n|$)"
   }
 }
