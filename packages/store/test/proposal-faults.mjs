@@ -75,8 +75,8 @@ const injections = [
       },
     ],
     checks: [
-      { label: 'unit', args: unit('outside the working set'), failure: /not\.toContain|expected \[[^\]]*\] to deeply equal|pending-record/ },
-      { label: 'vector', args: vectors('create-proposal-working-set-exclusion', 'create-proposal-apply'), failure: /create-proposal-working-set-exclusion/ },
+      { label: 'unit', args: unit('outside the working set'), failure: /to not include 'pending-record'/ },
+      { label: 'vector', args: vectors('create-proposal-working-set-exclusion', 'create-proposal-apply'), failure: /"id": "create-proposal-working-set-exclusion",\s+"error": "Expected values to be strictly deep-equal/ },
     ],
   },
 ];
