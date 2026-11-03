@@ -102,6 +102,35 @@ describe.each([
     expect(await store.listProposals()).toHaveLength(3);
   });
 
+  test('erasure scrubs request digest and refuses every retry for the retained key', async () => {
+    const input = candidate({ id: 'erased-record' }); const options = { requestKey: 'erased-request' };
+    const id = await store.proposeCreate(input, 'agent-a', evidence, options);
+    await store.applyCreate(id, 'reviewer');
+    // Exercise the shared proposal-write seam used by the sibling purge implementation.
+    // This is a simulated scrub, not proof that the unmerged purge operation ran.
+    const internal = store as unknown as {
+      files: { mutate<T>(op: string, body: () => T): Promise<T> };
+      proposals: { get(id: string): Record<string, unknown>; write(value: Record<string, unknown>): void };
+    };
+    await internal.files.mutate('simulate-erasure', () => {
+      const proposal = internal.proposals.get(id);
+      internal.proposals.write({ ...proposal, candidate: { ...input, title: '[purged]', body: '', category: 'purged' }, evidence: { agent: evidence.agent, proposal: '[purged]' }, erasure: { at: '2026-11-03T00:00:00.000Z', agent: 'eraser', rationale: 'requested' } });
+    });
+    const path = join(root, '.corpus-proposals', `${id}.json`); const bytes = readFileSync(path, 'utf8');
+    const scrubbed = JSON.parse(bytes);
+    expect(scrubbed.request_key_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(scrubbed).not.toHaveProperty('request_digest');
+    expect(scrubbed).not.toHaveProperty('request_digest_version');
+    expect(bytes).not.toContain(input.body); expect(bytes).not.toContain(evidence.proposal);
+    const before = tree(root);
+    for (const attempt of [input, { ...input, body: 'different' }]) {
+      expect(await code(store.proposeCreate(attempt, 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+    writeFileSync(path, JSON.stringify({ ...scrubbed, request_digest: 'a'.repeat(64), request_digest_version: 1 }));
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);

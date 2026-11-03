@@ -294,9 +294,9 @@ the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
 0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
-specific error patterns. The remaining vector checks purge, scrubbing and retained
-key identity; it awaits corpus#41 and fails specifically because `purge` is
-unavailable. The post-purge retry outcome also awaits an owner decision.
+specific error patterns. The remaining vector checks purge, scrubbing, retained
+key identity and uniform retry refusal; it awaits corpus#41 and fails specifically
+because `purge` is unavailable.
 
 ### Host vectors
 
@@ -472,12 +472,12 @@ tests and vectors to fail.
 The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds an
 optional `requestKey` to `proposeCreate`; keys must be well-formed Unicode strings,
 not empty or whitespace-only, and at most 1024 UTF-8 bytes. A retry with matching candidate,
-proposer and evidence returns the original proposal ID, including after
-settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
-The key digest and input digest are retained with the proposal in the same
-transaction, including after rejection; retention after record purge is not yet
-verified. The keyed-after-purge vector checks erasure and key identity as an
-expected failure pending corpus#41; retry behavior awaits an owner decision.
+proposer and evidence returns the original proposal ID after settlement unless
+the proposal was erased; a conflicting reuse returns `REQUEST_KEY_CONFLICT`
+without writing. The owner decided that erasure retains the key identity, removes
+the input digest, and refuses all retries with that key without a content comparison.
+The shared proposal-write seam enforces digest removal; the actual purge operation
+and post-purge vector remain an expected failure pending corpus#41.
 Five other `create-request-key-*` vectors exercise retries, conflicts,
 rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the

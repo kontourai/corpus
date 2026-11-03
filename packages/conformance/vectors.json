@@ -8617,7 +8617,7 @@
           "clause": "Owner decision: create request keys (2026-11-03)"
         }
       ],
-      "regression": "Purging a record leaves its content in the record or proposal, or discards the retained request-key identity.",
+      "regression": "Purging a record retains a content digest, fails to scrub content, or allows reuse of its request key.",
       "production_seam": false,
       "operations": [
         {
@@ -8687,12 +8687,68 @@
           "save": "scrubbed"
         },
         {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "purge-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "changed",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "purge-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
           "call": "listProposals",
           "args": [],
           "save": "all"
         }
       ],
       "expected": [
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest_version",
+          "absent": true
+        },
         {
           "ref": "scrubbed.request_key_hash",
           "equals": "$before.request_key_hash"
