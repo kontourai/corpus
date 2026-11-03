@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -244,7 +244,8 @@ describe.each([
       ['blank evidence proposal', () => store.proposeCreate(candidate(), 'agent-a', { agent: 'a', proposal: '  ' })],
       ['blank evidence agent', () => store.proposeCreate(candidate(), 'agent-a', { agent: ' ', proposal: 'x' })],
       ['non-string evidence', () => store.proposeCreate(candidate(), 'agent-a', { agent: 1 as never, proposal: 'x' })],
-      ['inherited required field', () => store.proposeCreate(Object.assign(Object.create({ title: 'inherited' }), { ...candidate(), title: undefined }), 'agent-a', evidence)],
+      ['nonfinite ttl', () => store.proposeCreate(candidate({ ttl_seconds: Number.NaN }), 'agent-a', evidence)],
+      ['infinite ttl', () => store.proposeCreate(candidate({ ttl_seconds: Number.POSITIVE_INFINITY }), 'agent-a', evidence)],
     ];
     for (const [label, run] of cases) expect([label, await code(run())]).toEqual([label, 'MISSING_EVIDENCE']);
     await store.create(candidate({ id: 'existing' }));
@@ -273,17 +274,47 @@ describe.each([
     expect(await store.get('direct')).not.toHaveProperty('ttl_seconds');
   });
 
-  test('a category named proposals coexists with proposals, and record writes do not walk them', async () => {
+  test('a category named proposals coexists with proposals', async () => {
     await store.create(candidate({ id: 'in-category', category: 'proposals' }));
     const proposalId = await store.proposeCreate(candidate({ id: 'next', category: 'proposals' }), 'agent-a', evidence);
     expect(await store.apply(proposalId, 'reviewer')).toBe('next');
     expect((await store.listByCategory('proposals')).map((r) => r.id).sort()).toEqual(['in-category', 'next']);
-    // The vault's record scans must not walk the proposals directory, whose size is
-    // unbounded. A walk refuses a symlink, so one planted there proves it is skipped.
-    symlinkSync(join(base, 'elsewhere'), join(root, '.corpus-proposals', 'walk-trap'));
-    expect(await store.create(candidate({ id: 'after-trap', category: 'proposals' }))).toBe('after-trap');
     const another = await store.proposeCreate(candidate({ id: 'another', category: 'proposals' }), 'agent-a', evidence);
     expect(await store.apply(another, 'reviewer')).toBe('another');
+  });
+
+  test('evidence and candidate fields are read once, so an accessor cannot store what was not validated', async () => {
+    let reads = 0;
+    const flipping = { get agent() { return ++reads === 1 ? 'agent-a' : ' '; }, proposal: 'p' };
+    const proposalId = await store.proposeCreate(candidate(), 'agent-a', flipping);
+    expect(await store.getProposal(proposalId)).toMatchObject({ evidence: { agent: 'agent-a', proposal: 'p' } });
+    let titleReads = 0;
+    const accessor = { ...candidate({ id: 'accessor' }), get title() { return ++titleReads === 1 ? 'Title' : ' '; } };
+    const second = await store.proposeCreate(accessor, 'agent-a', evidence);
+    expect((await store.getProposal(second))?.candidate.title).toBe('Title');
+    expect(await store.apply(second, 'reviewer')).toBe('accessor');
+  });
+
+  test('a candidate class instance with prototype fields is read as create reads it', async () => {
+    class Candidate { get title() { return 'From prototype'; } get ttl_seconds() { return 30; } }
+    const make = (id: string) => {
+      const { title: _title, ...fields } = candidate({ id });
+      return Object.assign(new Candidate(), fields) as unknown as CreateInput;
+    };
+    const instance = make('instance');
+    await store.create(make('direct'));
+    const proposalId = await store.proposeCreate(instance, 'agent-a', evidence);
+    await store.apply(proposalId, 'reviewer');
+    expect(await store.get('instance')).toMatchObject({ title: (await store.get('direct'))!.title });
+    expect(await store.get('instance')).not.toHaveProperty('ttl_seconds');
+  });
+
+  test('settlement text is bounded, so every accepted proposal can be settled', async () => {
+    const proposalId = await store.proposeCreate(candidate({ body: 'a'.repeat(16 * 1024 * 1024 - 80 * 1024) }), 'agent-a', evidence);
+    expect(await code(store.apply(proposalId, 'r'.repeat(2000)))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.reject(proposalId, 'reviewer', 'x'.repeat(20 * 1024)))).toBe('MISSING_EVIDENCE');
+    await store.reject(proposalId, 'r'.repeat(1000), 'x'.repeat(16 * 1024 - 2));
+    expect((await store.getProposal(proposalId))?.state).toBe('rejected');
   });
 
   test('apply and reject refuse an unknown proposal, a blank reviewer and a blank rationale', async () => {
@@ -383,4 +414,39 @@ describe('create proposals on a read-only vault', () => {
       rmSync(base, { recursive: true, force: true });
     }
   });
+});
+
+describe('create proposals and the vault record scans', () => {
+  let base: string;
+  let root: string;
+  let vault: KitObsidianStoreAdapter;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), 'corpus-create-proposals-scan-'));
+    root = join(base, 'store');
+    vault = new KitObsidianStoreAdapter({
+      storeRoot: root,
+      coordinationDirectory: join(base, 'coordination'),
+      coordinationIdentity: () => () => {},
+      lock: standaloneFileMutationLock,
+    });
+  });
+  afterEach(() => rmSync(base, { recursive: true, force: true }), 300_000);
+
+  test('a note under the proposals directory is still a record the identity scans see', async () => {
+    // Only the directory's .json proposals are skipped: externally placed notes keep counting.
+    mkdirSync(join(root, '.corpus-proposals'), { recursive: true });
+    writeFileSync(join(root, '.corpus-proposals', 'planted.md'), '---\nid: planted\ntype: raw\ntitle: Planted\ncategory: engineering\nprovenance:\n  agent: someone\ncreated_at: 2026-01-01T00:00:00.000Z\nupdated_at: 2026-01-01T00:00:00.000Z\n---\nbody\n');
+    await expect(vault.create(candidate({ id: 'other' }))).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+  });
+
+  test('retained proposal files do not count toward the identity-scan entry bound', async () => {
+    const directory = join(root, '.corpus-proposals');
+    mkdirSync(directory, { recursive: true });
+    // More entries than the vault's 10,000-entry record-identity scan allows. Hard links are
+    // the cheap way to make that many files.
+    writeFileSync(join(base, 'proposal.json'), '{}');
+    for (let i = 0; i < 10_001; i++) linkSync(join(base, 'proposal.json'), join(directory, `retained-${i}.json`));
+    expect(await vault.create(candidate({ id: 'first' }))).toBe('first');
+    expect(await vault.create(candidate({ id: 'second' }))).toBe('second');
+  }, 300_000);
 });

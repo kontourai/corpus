@@ -474,6 +474,19 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   }
 
   /**
+   * A proposal file: `<root>/.corpus-proposals/*.json`. Their number is unbounded and they
+   * are not records, so the record-identity scans neither count nor read them. Anything
+   * else under that directory, such as a note, is still scanned.
+   */
+  private isProposalFile(directory: string, entry: { name: string; kind: string }): boolean {
+    return (
+      entry.kind === 'file' &&
+      entry.name.endsWith('.json') &&
+      directory === join(this.root, PROPOSALS_DIRECTORY)
+    );
+  }
+
+  /**
    * True when the root already holds store data: a derived index, or a markdown
    * note whose frontmatter has an `id` or a `type`. Plain notes do not count.
    * Unreadable frontmatter or an exceeded bound counts as occupied (fail closed).
@@ -488,11 +501,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     while (directories.length > 0) {
       const directory = directories.pop()!;
       for (const entry of this.files.listDirectoryEntries(directory)) {
+        if (this.isProposalFile(directory, entry)) continue;
         if (++entries > CREATE_IDENTITY_MAX_ENTRIES) return true;
         const path = join(directory, entry.name);
         if (entry.kind === 'directory') {
-          // Proposals are not records, and their number is unbounded.
-          if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);
+          directories.push(path);
           continue;
         }
         if (!entry.name.toLowerCase().endsWith('.md')) continue;
@@ -1166,14 +1179,14 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     while (directories.length > 0) {
       const directory = directories.pop()!;
       for (const entry of this.files.listDirectoryEntries(directory)) {
+        if (this.isProposalFile(directory, entry)) continue;
         if (++entries > CREATE_IDENTITY_MAX_ENTRIES)
           throw new KnowledgeStoreCorruptionError(
             'Obsidian identity inspection exceeds its entry bound',
           );
         const path = join(directory, entry.name);
         if (entry.kind === 'directory') {
-          // Proposals are not records, and their number is unbounded.
-          if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);
+          directories.push(path);
           continue;
         }
         if (!entry.name.toLowerCase().endsWith('.md')) continue;

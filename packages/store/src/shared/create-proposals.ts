@@ -39,6 +39,10 @@ export const APPLY_CREATE_OP = 'apply-create';
 const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
 /** Room left for the fields `apply` and `reject` add, so a proposal that fits can always be settled. */
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
+/** Caps on what settlement adds, so the headroom above always holds (reviewer id, then rationale). */
+const MAX_REVIEWER_BYTES = 1024;
+const MAX_RATIONALE_BYTES = 16 * 1024;
+const serializedBytes = (value: string) => Buffer.byteLength(JSON.stringify(value));
 const CANDIDATE_KEYS = [
   'id', 'type', 'title', 'body', 'category', 'tags', 'aliases', 'links',
   'provenance', 'expires_at', 'ttl_seconds',
@@ -96,17 +100,24 @@ export class CreateProposals {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
     }
-    if (!isNonemptyString(evidence?.agent)) {
+    // Read each field once: what is validated is what is stored, even for an accessor.
+    const agent: unknown = evidence?.agent;
+    const proposal: unknown = evidence?.proposal;
+    if (!isNonemptyString(agent)) {
       throw new MissingEvidenceError('proposeCreate: missing required evidence field: agent');
     }
-    if (!isNonemptyString(evidence?.proposal)) {
+    if (!isNonemptyString(proposal)) {
       throw new MissingEvidenceError('proposeCreate: missing required evidence field: proposal');
     }
     if (!isRecord(candidate)) {
       throw new MissingEvidenceError('proposeCreate: candidate must be an object');
     }
-    // Validate what is stored, so apply sees exactly the candidate that was checked.
-    const stored = cloneCandidate(candidate as unknown as CreateInput);
+    // Validate the candidate as read, then again as stored: JSON turns NaN into null, and
+    // apply must see exactly the candidate that was checked.
+    const projected = projectCandidate(candidate as unknown as CreateInput);
+    assertCreateFields(projected, 'proposeCreate');
+    freshnessPatch(projected);
+    const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
     freshnessPatch(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a
@@ -132,7 +143,7 @@ export class CreateProposals {
         state: 'pending',
         candidate: stored,
         proposer_id: proposerId,
-        evidence: { agent: evidence.agent, proposal: evidence.proposal },
+        evidence: { agent, proposal },
         proposed_at: new Date(this.services.clock()).toISOString(),
       },
       MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
@@ -147,6 +158,9 @@ export class CreateProposals {
   pendingFor(op: 'apply' | 'reject', proposalId: string, reviewerId: string): KitCreateProposal {
     if (!isNonemptyString(reviewerId)) {
       throw new MissingEvidenceError(`${op}: missing required field: reviewerId`);
+    }
+    if (serializedBytes(reviewerId) > MAX_REVIEWER_BYTES) {
+      throw new MissingEvidenceError(`${op}: reviewerId exceeds ${MAX_REVIEWER_BYTES} bytes`);
     }
     const proposal = this.get(proposalId);
     if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);
@@ -195,6 +209,9 @@ export class CreateProposals {
     if (!isNonemptyString(value)) {
       throw new MissingEvidenceError('reject: missing required field: rationale');
     }
+    if (serializedBytes(value) > MAX_RATIONALE_BYTES) {
+      throw new MissingEvidenceError(`reject: rationale exceeds ${MAX_RATIONALE_BYTES} bytes`);
+    }
     return value;
   }
 
@@ -202,20 +219,31 @@ export class CreateProposals {
   private write(proposal: KitCreateProposal, maxBytes = MAX_PROPOSAL_BYTES): void {
     const text = `${JSON.stringify(proposal, null, 2)}\n`;
     if (Buffer.byteLength(text) > maxBytes) {
-      throw new MissingEvidenceError(`proposeCreate: proposal exceeds ${maxBytes} bytes`);
+      throw new MissingEvidenceError(`create proposal exceeds ${maxBytes} bytes`);
     }
     this.files.writeText(this.pathOf(proposal.id), text);
   }
 }
 
-function cloneCandidate(candidate: CreateInput): CreateInput {
+/**
+ * The candidate's `CreateInput` fields, each read once. `create` reads fields normally but
+ * reads the freshness fields as own properties only (`freshnessPatch`), so this does too.
+ */
+function projectCandidate(candidate: CreateInput): CreateInput {
   const source = candidate as unknown as Record<string, unknown>;
-  // Own properties only, as `create` reads them: an inherited field is not part of the candidate.
-  const projected = Object.fromEntries(
-    CANDIDATE_KEYS.filter((key) => Object.hasOwn(source, key) && source[key] !== undefined).map((key) => [key, source[key]]),
-  );
+  const ownOnly = new Set(['expires_at', 'ttl_seconds']);
+  const projected: Record<string, unknown> = {};
+  for (const key of CANDIDATE_KEYS) {
+    if (ownOnly.has(key) && !Object.hasOwn(source, key)) continue;
+    const value = source[key];
+    if (value !== undefined) projected[key] = value;
+  }
+  return projected as unknown as CreateInput;
+}
+
+function jsonClone(candidate: CreateInput): CreateInput {
   try {
-    return JSON.parse(JSON.stringify(projected)) as CreateInput;
+    return JSON.parse(JSON.stringify(candidate)) as CreateInput;
   } catch (error) {
     throw new MissingEvidenceError(
       `proposeCreate: candidate must be JSON-serializable (${(error as Error).message})`,

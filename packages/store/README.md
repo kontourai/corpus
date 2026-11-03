@@ -79,10 +79,13 @@ The [conformance vectors](../conformance/README.md) encode the owner's
     path, index and list, so pending and rejected proposals are never in the
     working set, `get`, `getLinks` or `reindex`, with or without `includeHistory`.
     The directory's dot name cannot be a category, so a vault may still keep
-    notes in a `proposals` category, and the vault's record scans skip it, so
-    retained proposals never count toward their entry bounds. A proposal larger
-    than 16 MiB, or with blank evidence, is refused when proposed, so no accepted
-    proposal can break `listProposals`.
+    notes in a `proposals` category. The vault's record-identity scans do not
+    count or read the `.json` files there, so retained proposals never reach
+    their entry bounds; anything else placed in that directory is still scanned.
+    A proposal over 16 MiB (less headroom for settlement), with blank evidence, or
+    with a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
+    accepted proposal can break `listProposals` or be left unsettleable. The size
+    of the record a proposal creates is `create`'s concern, not bounded here.
     Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
     is `pending`, `applied`, `rejected` or a list of them (omitted means all).
   - `apply` and `reject` keep their concept-proposal meaning, which takes

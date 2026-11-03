@@ -80,18 +80,18 @@ const injections = [
     ],
   },
   {
-    // The vault's identity scans must skip the proposals directory (unbounded, not records).
+    // The vault's identity scans must not count retained proposal files (unbounded, not records).
     name: 'vault-scan',
     files: [{
       file: 'src/obsidian-store.ts',
       mutate: (s) => {
-        const from = "if (directory !== this.root || entry.name !== PROPOSALS_DIRECTORY) directories.push(path);";
+        const from = 'if (this.isProposalFile(directory, entry)) continue;';
         assert.equal(s.split(from).length, 3, 'both scans carry the skip');
-        return s.split(from).join('directories.push(path);');
+        return s.split(from).join('');
       },
     }],
     checks: [
-      { label: 'unit', args: unit('record writes do not walk them'), failure: /Knowledge directory contains a symlink/ },
+      { label: 'unit', args: unit('retained proposal files do not count'), failure: /exceeds its entry bound|vault holds records but has no path-index/ },
     ],
   },
 ];
