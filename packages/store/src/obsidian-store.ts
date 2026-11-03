@@ -1084,6 +1084,9 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       if (slugs.length) registerAliases(rebuiltAliases, record.id, slugs);
     }
     this.saveAliasIndex(rebuiltAliases);
+    // Derived indexes with no path index read as an occupied vault with a lost index.
+    // A vault with no records has none yet, so write the empty one beside them.
+    if (this.files.readText(this.pathIndexPath) === null) this.savePathIndex(pathIndex);
 
     return {
       records: records.length,

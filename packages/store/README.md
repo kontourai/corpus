@@ -189,7 +189,10 @@ the index on every operation:
   vault. A root that already holds store data (a `graph-index.json` or
   `alias-index.json`, or a markdown note whose frontmatter has an `id` or a
   `type`) is refused rather than read as empty. Unreadable frontmatter or an
-  exceeded scan bound also refuses.
+  exceeded scan bound also refuses. `reindex` on a root with no records writes
+  the empty `path-index.json` beside the derived indexes it rebuilds, so the
+  vault stays openable (it holds no records, only pending proposals at most);
+  an existing path index is never rewritten by `reindex`.
 
 The package's `corpus-store` bin converts a `kit-v1` vault offline:
 
