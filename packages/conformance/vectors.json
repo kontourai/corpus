@@ -8459,6 +8459,127 @@
           "length": 2
         }
       ]
+    },
+    {
+      "id": "create-request-key-after-purge",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "Purging a record permits its retained proposal key to be reused.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "purge-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$r"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "purge-key"
+            }
+          ],
+          "save": "retry"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "key-purged",
+              "type": "raw",
+              "title": "t",
+              "body": "changed",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "purge-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "retry",
+          "equals": "$p"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        }
+      ]
     }
   ]
 }

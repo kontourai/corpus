@@ -293,7 +293,9 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-The expected-fail list is empty.
+0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
+specific error patterns. The remaining vector is keyed retry after purge; it awaits
+corpus#41 and fails specifically because `purge` is unavailable.
 
 ### Host vectors
 
@@ -458,7 +460,7 @@ records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
 required-field checks used by `create` in both profiles and by `proposeCreate`.
 
 Six `create-proposal-*` vectors joined the store vectors (129 per profile at that decision). All
-implemented, so the expected-fail list stays empty. Tests: `test/create-proposals.test.ts`
+implemented; the later purge integration is tracked separately as an expected failure. Tests: `test/create-proposals.test.ts`
 runs on both profiles and covers self-approval, working-set exclusion (including
 history, expiry and `reindex`), rollback of the record when the settled proposal
 cannot be written, refusal of corrupt proposal files, a read-only vault, and that
@@ -473,7 +475,8 @@ proposer and evidence returns the original proposal ID, including after
 settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
 The key digest and input digest are retained with the proposal in the same
 transaction, including after rejection; retention after record purge is not yet
-verified. Five `create-request-key-*` vectors exercise retries, conflicts,
+verified. The keyed-after-purge vector is an expected failure until corpus#41.
+Five other `create-request-key-*` vectors exercise retries, conflicts,
 rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the
 original receipt.
