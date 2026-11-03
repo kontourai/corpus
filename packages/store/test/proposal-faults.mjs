@@ -53,14 +53,19 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'request-key-tamper',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (actual !== value.request_digest) throw corrupt('request digest does not match proposal content');", "if (false) throw corrupt('request digest does not match proposal content');") }],
+    checks: [{ label: 'unit', args: unit('live keyed proposal with tampered content'), failure: /promise resolved/ }],
+  },
+  {
     name: 'partial-scrub-retains-digest',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const contentChanged = proposal.request_digest !== undefined &&\n      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }));", 'const contentChanged = false;') }],
     checks: [{ label: 'unit', args: unit('partial content scrub'), failure: /request_key_retired|to be true/ }],
   },
   {
     name: 'erased-key-retry',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError();", "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) return existing.id;") }],
-    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /REQUEST_KEY_CONFLICT/ }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);", "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) return existing.id;") }],
+    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /promise resolved/ }],
   },
   {
     name: 'erased-key-digest-retained',

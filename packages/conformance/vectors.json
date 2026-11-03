@@ -8971,6 +8971,269 @@
       ]
     },
     {
+      "id": "create-request-key-blocked-retry",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "production_seam": false,
+      "regression": "A purge guard prevents an identical retry of a blocked but unscrubbed proposal.",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "source-a",
+              "type": "raw",
+              "title": "source-a",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "source-b",
+              "type": "raw",
+              "title": "source-b",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            }
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "blocked-candidate",
+              "type": "raw",
+              "title": "blocked-candidate",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_ids": [
+                  "source-a",
+                  "source-b"
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "blocked-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "source-a"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ],
+          "save": "purged"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "proposal"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "blocked-candidate",
+              "type": "raw",
+              "title": "blocked-candidate",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_ids": [
+                  "source-a",
+                  "source-b"
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "blocked-key"
+            }
+          ],
+          "save": "retry"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "purged.proposalsBlocked",
+          "length": 1
+        },
+        {
+          "ref": "purged.proposalsBlocked.0",
+          "equals": "$p"
+        },
+        {
+          "ref": "proposal.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "retry",
+          "equals": "$p"
+        }
+      ]
+    },
+    {
+      "id": "create-request-key-erased-source-retry",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "production_seam": false,
+      "regression": "A purge guard changes the uniform refusal for a scrubbed proposal key.",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "source-a",
+              "type": "raw",
+              "title": "source-a",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            }
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "erased-candidate",
+              "type": "raw",
+              "title": "erased-candidate",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_ids": [
+                  "source-a"
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "erased-source-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "source-a"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ],
+          "save": "purged"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "proposal"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "erased-candidate",
+              "type": "raw",
+              "title": "erased-candidate",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_ids": [
+                  "source-a"
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "erased-source-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "purged.proposalsRejected",
+          "length": 1
+        },
+        {
+          "ref": "purged.proposalsRejected.0",
+          "equals": "$p"
+        },
+        {
+          "ref": "proposal.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "proposal.request_key_retired",
+          "equals": true
+        },
+        {
+          "ref": "proposal.request_digest",
+          "absent": true
+        }
+      ]
+    },
+    {
       "id": "source-refs-survive",
       "source": [
         {
