@@ -149,7 +149,7 @@ const controls = [
 ];
 
 function run(label, args, success) {
-  const result = spawnSync('npm', args, { cwd: repo, encoding: 'utf8', timeout: 300000 });
+  const result = spawnSync('npm', args, { cwd: repo, encoding: 'utf8', timeout: 300000, maxBuffer: 256 * 1024 * 1024 });
   const log = (result.stdout ?? '') + (result.stderr ?? '');
   writeFileSync(join(output, label + '.log'), log);
   assert.equal(result.error, undefined, `${label}: execution error`);

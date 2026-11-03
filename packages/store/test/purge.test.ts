@@ -522,7 +522,9 @@ describe('purge — vault layout', () => {
       await store.purge(['wide'], { agent: 'privacy-officer', rationale: 'erasure request 42' });
       const stone = (await store.get('wide'))!;
       expect(stone.status).toBe('purged');
-      expect(stone.provenance).toEqual({ agent: '[omitted]' });
+      // Booleans, so a failure does not print a 16 MiB agent.
+      expect(stone.provenance.agent === '[omitted]').toBe(true);
+      expect(Object.keys(stone.provenance)).toEqual(['agent']);
       expect(stone.mutation_log![0].evidence).toMatchObject({ cause: 'requested', compact: true, omitted_source_ids: 0, omitted_agent_bytes: expect.any(Number), omitted_session_id_bytes: 1000 });
       expect(noteBytes('wide')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
     });
