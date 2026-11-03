@@ -126,8 +126,13 @@ silent behavior.
     cannot be written, it removes the journal or throws. The next locked
     operation also removes a `.<id>.tmp` file that a crash inside the journal's
     own write left at the root, even a cut-short one, but only one that starts
-    the way this engine writes a journal. A failure to remove it fails the
-    operation.
+    the way this engine writes a journal (a stray file with exactly that start
+    would be removed too). A failure to remove it fails the operation, so a store
+    stays unavailable until the file can be deleted. Emptied folders are removed
+    best effort after the commit, and a path component that is a symlink stops
+    the removal; as with the engine's other path checks, this assumes nothing
+    else swaps a store folder for a symlink in the moment between the check and
+    the removal, which the store lock cannot prevent.
     *Deferred:* between
     the first journal write and the commit marker the journal still holds the
     pre-purge files, because rollback needs them. A crash in that window leaves

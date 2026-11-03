@@ -265,6 +265,21 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     expect(readFileSync(join(root, '.foreign.tmp'), 'utf8')).toBe(foreign);
   });
 
+  test.each([
+    ['escaped quotes', 'tx"quoted"id', 'op"erat\\ion'],
+    ['newlines and unicode', 'tx\nid-\u2028-é', 'purge\r\n'],
+    ['a very long id and operation', 'x'.repeat(5000), 'o'.repeat(3000)],
+  ])('every cut of a journal with %s is recognised as a journal temporary', async (_name, transactionId, operation) => {
+    await raw('recognised');
+    const full = JSON.stringify({ version: 1, transactionId, operation, phase: 'prepared', entries: [{ path: 'x.md', before: Buffer.from('ENTRY-NEEDLE').toString('base64'), after: null }] });
+    const header = full.indexOf('"entries":[') + '"entries":['.length;
+    for (const length of [header, header + 20, full.length - 1, full.length]) {
+      writeFileSync(join(root, '.cut.tmp'), full.slice(0, length));
+      await store.get('recognised');
+      expect(existsSync(join(root, '.cut.tmp'))).toBe(false);
+    }
+  });
+
   test('a journal temporary that cannot be removed fails the operation instead of being skipped', async () => {
     await raw('stuck');
     writeFileSync(join(root, '.stuck.tmp'), '{"version":1,"transactionId":"t","operation":"purge","phase":"prepared","entries":[]}');

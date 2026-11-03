@@ -36,8 +36,10 @@ import {
 
 const JOURNAL_VERSION = 1;
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
-// The start of every journal this engine writes (JSON.stringify of a Journal, in key order).
-const JOURNAL_TEMPORARY = /^\{"version":1,"transactionId":"[^"]*","operation":"[^"]*","phase":"(?:prepared|committed)","entries":\[/;
+// The start of every journal this engine writes: JSON.stringify of a Journal, in key order.
+// A string is any run of non-quote, non-backslash characters or escapes, so an id or an
+// operation name containing escaped quotes, newlines or unicode still matches, at any length.
+const JOURNAL_TEMPORARY = /^\{"version":1,"transactionId":"(?:[^"\\]|\\.)*","operation":"(?:[^"\\]|\\.)*","phase":"(?:prepared|committed)","entries":\[/s;
 const LEGACY_LOCK_FILE = '.station-knowledge-mutation';
 function knowledgeLockIdentity(
   rootRealpath: string,
@@ -679,13 +681,13 @@ export class KnowledgeFileTransactions {
     }
     for (const name of names) {
       const path = join(this.root, name);
-      let head: string;
+      let text: string;
       try {
-        head = readFileSync(path, 'utf8').slice(0, 1024);
+        text = readFileSync(path, 'utf8');
       } catch {
         continue; // unreadable or already gone: nothing we can classify
       }
-      if (JOURNAL_TEMPORARY.test(head)) {
+      if (JOURNAL_TEMPORARY.test(text)) {
         try {
           this.removePublished(path);
         } catch (error) {
