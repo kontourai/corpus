@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -86,6 +87,127 @@ describe.each([
     expect(await store.get('proposed-record')).toBeNull();
     expect(await store.get(proposalId)).toBeNull();
     expect(await store.listByType('raw')).toEqual([]);
+  });
+
+  test('request key limits reject whitespace and count UTF-8 bytes', async () => {
+    const before = tree(root);
+    for (const requestKey of ['', '   ', '\t\n', 'x'.repeat(1025), 'é'.repeat(513), '\ud800', '\udc00', null, 7]) {
+      expect(await code(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: requestKey as string }))).toBe('MISSING_EVIDENCE');
+      expect(tree(root)).toEqual(before);
+    }
+    for (const requestKey of ['x'.repeat(1024), 'é'.repeat(512), '😀'.repeat(256)]) {
+      const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey });
+      expect(await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey })).toBe(id);
+    }
+    expect(await store.listProposals()).toHaveLength(3);
+  });
+
+  test('erasure scrubs request digest and refuses every retry for the retained key', async () => {
+    const input = candidate({ id: 'erased-record' }); const options = { requestKey: 'erased-request' };
+    const id = await store.proposeCreate(input, 'agent-a', evidence, options);
+    await store.applyCreate(id, 'reviewer');
+    // Exercise the shared proposal-write seam used by the sibling purge implementation.
+    // This is a simulated scrub, not proof that the unmerged purge operation ran.
+    const internal = store as unknown as {
+      files: { mutate<T>(op: string, body: () => T): Promise<T> };
+      proposals: { get(id: string): Record<string, unknown>; write(value: Record<string, unknown>): void };
+    };
+    await internal.files.mutate('simulate-erasure', () => {
+      const proposal = internal.proposals.get(id);
+      internal.proposals.write({ ...proposal, candidate: { ...input, title: '[purged]', body: '', category: 'purged' }, evidence: { agent: evidence.agent, proposal: '[purged]' }, erasure: { at: '2026-11-03T00:00:00.000Z', agent: 'eraser', rationale: 'requested' } });
+    });
+    const path = join(root, '.corpus-proposals', `${id}.json`); const bytes = readFileSync(path, 'utf8');
+    const scrubbed = JSON.parse(bytes);
+    expect(scrubbed.request_key_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(scrubbed).not.toHaveProperty('request_digest');
+    expect(scrubbed).not.toHaveProperty('request_digest_version');
+    expect(bytes).not.toContain(input.body); expect(bytes).not.toContain(evidence.proposal);
+    const before = tree(root);
+    for (const attempt of [input, { ...input, body: 'different' }]) {
+      await expect(store.proposeCreate(attempt, 'agent-a', evidence, options)).rejects.toMatchObject({ code: 'REQUEST_KEY_CONFLICT', message: expect.stringContaining('retired after content scrub') });
+      expect(tree(root)).toEqual(before);
+    }
+    writeFileSync(path, JSON.stringify({ ...scrubbed, request_digest: 'a'.repeat(64), request_digest_version: 1 }));
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+  });
+
+  test('partial content scrub retires its request digest and refuses reuse', async () => {
+    const input = candidate({ id: 'partial', links: [{ target_id: 'erased-source', kind: 'related', label: 'erased-label' }] });
+    const options = { requestKey: 'partial-request' };
+    const id = await store.proposeCreate(input, 'agent-a', evidence, options);
+    const internal = store as unknown as {
+      files: { mutate<T>(op: string, body: () => T): Promise<T> };
+      proposals: { get(id: string): Record<string, unknown>; write(value: Record<string, unknown>): void };
+    };
+    // Simulates #41's partial scrub: a label is removed without full erasure.
+    await internal.files.mutate('simulate-label-scrub', () => {
+      const proposal = internal.proposals.get(id);
+      internal.proposals.write({ ...proposal, candidate: { ...input, links: [{ target_id: 'erased-source', kind: 'related' }] } });
+    });
+    const path = join(root, '.corpus-proposals', `${id}.json`); const bytes = readFileSync(path, 'utf8'); const scrubbed = JSON.parse(bytes);
+    expect(scrubbed.request_key_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(scrubbed.request_key_retired).toBe(true);
+    expect(await store.getProposal(id)).toMatchObject({ request_key_retired: true });
+    expect(scrubbed).not.toHaveProperty('request_digest'); expect(scrubbed).not.toHaveProperty('request_digest_version');
+    expect(bytes).not.toContain('erased-label');
+    const before = tree(root);
+    for (const attempt of [input, { ...input, body: 'different' }]) {
+      expect(await code(store.proposeCreate(attempt, 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
+  test('request key digest canonicalizes nested object keys', async () => {
+    const first = candidate({ links: [{ target_id: 'source-x', kind: 'related', label: 'label' }] });
+    const reordered = candidate({
+      provenance: { note: 'sitting sitting-7', source_ids: ['transcript:abc#sitting-7'], session_id: 'session-1', agent: 'distiller' },
+      links: [{ label: 'label', kind: 'related', target_id: 'source-x' }],
+    });
+    const options = { requestKey: 'nested-order' };
+    const id = await store.proposeCreate(first, 'agent-a', evidence, options);
+    expect(await open().proposeCreate(reordered, 'agent-a', evidence, options)).toBe(id);
+    expect((await store.getProposal(id))?.request_digest).toBe('58ebe4238514a655424b6bba85d879e3fb39ffed0c3e822adad098d3becacc67');
+  });
+
+  test('request key retries return the original receipt and conflicts write nothing', async () => {
+    const options = { requestKey: 'request-1' };
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
+    const before = tree(root);
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect(tree(root)).toEqual(before);
+    expect(await code(store.proposeCreate(candidate({ title: 'different' }), 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+    expect(await code(store.proposeCreate(candidate(), 'agent-b', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(await code(store.proposeCreate(candidate(), 'agent-a', { ...evidence, proposal: 'different' }, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+    expect(await store.listProposals()).toHaveLength(1);
+    await store.applyCreate(id, 'reviewer');
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect((await store.getProposal(id))?.state).toBe('applied');
+    const other = await store.proposeCreate(candidate({ id: 'other' }), 'agent-a', evidence);
+    await store.rejectCreate(other, 'reviewer', 'no');
+    const rejected = await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' });
+    await store.rejectCreate(rejected, 'reviewer', 'no');
+    expect(await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' })).toBe(rejected);
+  });
+
+  test.each(['before', 'after'] as const)('keyed proposal recovers after a crash %s publication', async (mode) => {
+    const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/keyed-proposal-crash.ts', import.meta.url)), base, _profile, mode], { encoding: 'utf8', timeout: 30_000 });
+    expect(child.status, child.stderr).toBe(mode === 'before' ? 98 : 99);
+    const journal = join(root, '.station-knowledge-transaction.json');
+    expect(JSON.parse(readFileSync(journal, 'utf8'))).toMatchObject({ phase: 'prepared', operation: 'proposeCreate' });
+    const proposalPath = join(root, '.corpus-proposals', 'crash-2.json');
+    expect(existsSync(proposalPath)).toBe(mode === 'after');
+    // Before publication the one-file proposal has no after-image to undo;
+    // this proves recovery clears the journal and retains neither key nor proposal.
+    const recovered = await store.listProposals();
+    expect(recovered.map((proposal) => proposal.id)).toEqual(mode === 'before' ? [] : ['crash-2']);
+    expect(existsSync(journal)).toBe(false);
+    const input = candidate({ id: 'crash-record', title: 'Crash', body: 'body', provenance: { agent: 'writer' } });
+    const receipt = await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' });
+    if (mode === 'after') expect(receipt).toBe('crash-2');
+    expect((await store.listProposals()).map((proposal) => proposal.id)).toEqual([receipt]);
+    expect(await store.proposeCreate(input, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'crash' })).toBe(receipt);
   });
 
   test('pending and rejected proposals are outside the working set and every ordinary read', async () => {
@@ -253,6 +375,26 @@ describe.each([
     expect(await store.listProposals()).toEqual([]);
   });
 
+  test('request key metadata counts toward the proposal file bound', async () => {
+    const sampleId = await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence);
+    const sample = await store.getProposal(sampleId);
+    expect(sample).not.toBeNull();
+    const bodyBytes = Buffer.byteLength(sample!.candidate.body);
+    const serialized = Buffer.byteLength(`${JSON.stringify(sample, null, 2)}\n`);
+    const proposalLimit = 16 * 1024 * 1024 - 64 * 1024;
+    // Leave enough slack for a possible extra ID digit but less than keyed metadata needs.
+    const body = 'x'.repeat(proposalLimit - (serialized - bodyBytes) - 16);
+    const before = tree(root);
+    let failure: unknown;
+    try { await store.proposeCreate(candidate({ id: 'bound', body }), 'agent-a', evidence, { requestKey: 'bound-key' }); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringContaining('create proposal exceeds') });
+    expect(tree(root)).toEqual(before);
+    const unkeyed = await store.proposeCreate(candidate({ id: 'bound', body }), 'agent-a', evidence);
+    expect((await store.getProposal(unkeyed))?.candidate.body.length).toBe(body.length);
+    const retry = await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' });
+    expect(await store.proposeCreate(candidate({ id: 'bound' }), 'agent-a', evidence, { requestKey: 'bound-key' })).toBe(retry);
+  }, 120_000);
+
   test('a proposal too large to read back is refused up front, so the queries keep working', async () => {
     const kept = await store.proposeCreate(candidate({ id: 'kept' }), 'agent-a', evidence);
     const huge = candidate({ id: 'huge', body: 'a'.repeat(16 * 1024 * 1024) });
@@ -377,6 +519,49 @@ describe.each([
       await expect(store.getProposal(proposalId)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
       await expect(store.listProposals()).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
     }
+  });
+
+  test('a live keyed proposal with tampered content is refused as corrupt', async () => {
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'tamper-key' });
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const proposal = JSON.parse(readFileSync(path, 'utf8')); proposal.candidate.body = 'tampered';
+    writeFileSync(path, JSON.stringify(proposal)); const before = tree(root);
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.listProposals()).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.applyCreate(id, 'reviewer')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    expect(tree(root)).toEqual(before);
+  });
+
+  test('keyed proposal with extra stored evidence is refused as corrupt', async () => {
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'extra-evidence-key' });
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const proposal = JSON.parse(readFileSync(path, 'utf8')); proposal.evidence.extra = 'unvalidated';
+    writeFileSync(path, JSON.stringify(proposal)); const before = tree(root);
+    await expect(store.getProposal(id)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    await expect(store.applyCreate(id, 'reviewer')).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    expect(tree(root)).toEqual(before);
+  });
+
+  test('keyed requests fail closed on corrupt neighbours and invalid metadata', async () => {
+    const options = { requestKey: 'metadata-key' };
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const stored = JSON.parse(readFileSync(path, 'utf8'));
+    expect(stored.request_digest_version).toBe(1);
+    for (const broken of [
+      '{bad json', JSON.stringify({ ...stored, request_digest: 'invalid' }),
+      JSON.stringify({ ...stored, request_digest_version: 2 }),
+      JSON.stringify({ ...stored, request_digest_version: undefined }),
+      JSON.stringify({ ...stored, request_key_hash: undefined, request_digest: undefined }),
+    ]) {
+      writeFileSync(path, broken);
+      const before = tree(root);
+      await expect(store.proposeCreate(candidate(), 'agent-a', evidence, options)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      await expect(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: 'new-key' })).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      expect(tree(root)).toEqual(before);
+    }
+    writeFileSync(path, '{bad json');
+    expect(await store.proposeCreate(candidate(), 'agent-a', evidence)).not.toBe(id);
   });
 
   test('the store writes only under the root it was given and the host coordination directory', async () => {

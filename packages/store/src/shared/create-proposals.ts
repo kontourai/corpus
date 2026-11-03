@@ -7,6 +7,7 @@
  * Both profiles share this module; each supplies its own `createLocked`.
  */
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type {
   CreateInput,
@@ -22,6 +23,7 @@ import {
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
   SelfApprovalError,
+  RequestKeyConflictError,
 } from '../errors.js';
 import { isRecord } from '../is-record.js';
 import { isSafePathSegment } from '../path-safety.js';
@@ -113,6 +115,7 @@ export class CreateProposals {
     proposerId: string,
     evidence: ProposeEvidence,
     recordExists: (id: string) => boolean,
+    options?: { requestKey?: string },
     /**
      * A profile's own limit on the record the candidate would become; throws to refuse. It gets
      * the `apply-create` entry the record would start with, with stand-ins for the reviewer and
@@ -155,6 +158,20 @@ export class CreateProposals {
     if ((stored.links ?? []).some((link) => link.target_id === '' || link.kind === '')) {
       throw new MissingEvidenceError('proposeCreate: candidate links need a non-empty target_id and kind');
     }
+    const key = options?.requestKey;
+    if (key !== undefined && (typeof key !== 'string' || !key.trim() || Buffer.byteLength(key) > 1024 || Buffer.from(key, 'utf8').toString('utf8') !== key)) {
+      throw new MissingEvidenceError('proposeCreate: requestKey must be a well-formed string, not empty or whitespace-only, and at most 1024 UTF-8 bytes');
+    }
+    const requestKeyHash = key === undefined ? undefined : hash(key);
+    const existing = requestKeyHash ? this.list().find((proposal) => proposal.request_key_hash === requestKeyHash) : undefined;
+    // Erased proposals retain only the key identity; do not compute or compare a
+    // digest of the caller's content for a key whose proposal was erased.
+    if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);
+    const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
+    if (existing) {
+      if (existing.request_digest !== requestDigest) throw new RequestKeyConflictError();
+      return existing.id;
+    }
     // A candidate may not cite an erased record as a source (purge, 2026-11-03).
     guard?.(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a
@@ -193,6 +210,7 @@ export class CreateProposals {
         proposer_id: proposerId,
         evidence: { agent, proposal },
         proposed_at: new Date(this.services.clock()).toISOString(),
+        ...(requestKeyHash ? { request_key_hash: requestKeyHash, request_digest: requestDigest, request_digest_version: 1 as const } : {}),
       },
       MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
     );
@@ -336,7 +354,16 @@ export class CreateProposals {
 
   /** Refuses a proposal the reader would not load, so one accepted proposal cannot break the queries. */
   private write(proposal: KitCreateProposal, maxBytes = MAX_PROPOSAL_BYTES): void {
-    const text = `${JSON.stringify(proposal, null, 2)}\n`;
+    // Purge (#41) writes an erasure marker through this shared seam. Never
+    // persist a content-derived request digest alongside an erased proposal.
+    const erased = Object.hasOwn(proposal, 'erasure');
+    // A partial purge can remove a link label without setting full erasure. If
+    // the hashed content changed, retire the key and drop the old digest too.
+    const contentChanged = proposal.request_digest !== undefined &&
+      proposal.request_digest !== hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: { agent: proposal.evidence.agent, proposal: proposal.evidence.proposal } }));
+    const retireKey = erased || proposal.request_key_retired === true || contentChanged;
+    const serialized = retireKey ? { ...proposal, request_digest: undefined, request_digest_version: undefined, ...(proposal.request_key_hash ? { request_key_retired: true as const } : {}) } : proposal;
+    const text = `${JSON.stringify(serialized, null, 2)}\n`;
     if (Buffer.byteLength(text) > maxBytes) {
       throw new MissingEvidenceError(`create proposal exceeds ${maxBytes} bytes`);
     }
@@ -472,11 +499,37 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   }
   if (!isRecord(value)) throw corrupt('not an object');
   if (value.id !== id) throw corrupt('id does not match its filename');
+  const erased = Object.hasOwn(value, 'erasure');
+  if (value.request_key_retired !== undefined && value.request_key_retired !== true) throw corrupt('invalid retired request key');
+  if (value.request_key_retired === true && value.request_key_hash === undefined) throw corrupt('retired request key has no identity');
+  if (erased) {
+    const erasure = value.erasure;
+    if (!isRecord(erasure) || !isNonemptyString(erasure.agent) || !isNonemptyString(erasure.rationale) ||
+        !isNonemptyString(erasure.at) || !Number.isFinite(Date.parse(erasure.at)) ||
+        (erasure.note !== undefined && typeof erasure.note !== 'string')) throw corrupt('erasure is invalid');
+  }
+  if (erased || value.request_key_retired === true) {
+    if (value.request_digest !== undefined || value.request_digest_version !== undefined) throw corrupt('erased proposal retains request digest');
+    if (value.request_key_hash !== undefined && (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash))) throw corrupt('invalid request key metadata');
+  } else {
+    if ((value.request_key_hash !== undefined || value.request_digest !== undefined) &&
+        (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash) ||
+         typeof value.request_digest !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_digest))) throw corrupt('invalid request key metadata');
+    if (value.request_key_hash !== undefined && value.request_digest_version !== 1) throw corrupt('missing or unsupported request digest version');
+    if (value.request_digest_version !== undefined && value.request_digest_version !== 1) throw corrupt('unsupported request digest version');
+    if (value.request_digest_version !== undefined && value.request_key_hash === undefined) throw corrupt('request digest version without key');
+  }
   if (!PROPOSAL_STATES.includes(value.state as CreateProposalState)) throw corrupt('invalid state');
   if (!isRecord(value.candidate)) throw corrupt('candidate is not an object');
   if (!isNonemptyString(value.proposer_id)) throw corrupt('proposer_id is missing');
   if (!isRecord(value.evidence) || !isNonemptyString(value.evidence.agent) || !isNonemptyString(value.evidence.proposal)) {
     throw corrupt('evidence is invalid');
+  }
+  if (value.request_key_hash !== undefined && Object.keys(value.evidence).some((key) => key !== 'agent' && key !== 'proposal')) throw corrupt('keyed proposal evidence has unknown fields');
+  if (!erased && value.request_key_retired !== true && typeof value.request_digest === 'string') {
+    const evidence = value.evidence as Record<string, unknown>;
+    const actual = hash(canonical({ candidate: value.candidate, proposerId: value.proposer_id, evidence: { agent: evidence.agent, proposal: evidence.proposal } }));
+    if (actual !== value.request_digest) throw corrupt('request digest does not match proposal content');
   }
   if (!isNonemptyString(value.proposed_at) || !Number.isFinite(Date.parse(value.proposed_at))) {
     throw corrupt('proposed_at is invalid');
@@ -488,15 +541,17 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
       throw corrupt('decided_at is invalid');
     }
   }
-  if (value.erasure !== undefined) {
-    const erasure = value.erasure;
-    if (!isRecord(erasure) || !isNonemptyString(erasure.agent) || !isNonemptyString(erasure.rationale)
-      || !isNonemptyString(erasure.at) || !Number.isFinite(Date.parse(erasure.at))
-      || (erasure.note !== undefined && typeof erasure.note !== 'string')) {
-      throw corrupt('erasure is invalid');
-    }
-  }
   if (value.state === 'applied' && !isNonemptyString(value.record_id)) throw corrupt('record_id is missing');
   if (value.state === 'rejected' && !isNonemptyString(value.rationale)) throw corrupt('rationale is missing');
   return value as unknown as KitCreateProposal;
+}
+
+function hash(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }

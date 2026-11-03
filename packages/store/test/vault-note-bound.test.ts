@@ -110,6 +110,19 @@ describe('vault note size bound', () => {
     expect(existsSync(join(root, '.corpus-proposals'))).toBe(false);
   }, 120_000);
 
+  test('keyed proposals enforce the same note bound before reserving the key', async () => {
+    const vault = open();
+    const before = tree(root);
+    const options = { requestKey: 'note-bound-key' };
+    const error = await failure(vault.proposeCreate(candidate({ body: OVERSIZED }), 'proposer', { agent: 'distiller', proposal: 'add it' }, options));
+    expect(error).toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringMatching(/^proposeCreate: .*limited to 16777216 bytes/) });
+    expect(tree(root)).toEqual(before);
+    const receipt = await vault.proposeCreate(candidate(), 'proposer', { agent: 'distiller', proposal: 'add it' }, options);
+    expect(await vault.proposeCreate(candidate(), 'proposer', { agent: 'distiller', proposal: 'add it' }, options)).toBe(receipt);
+    expect(await vault.applyCreate(receipt, 'reviewer')).toBe('big');
+    expect(await vault.proposeCreate(candidate(), 'proposer', { agent: 'distiller', proposal: 'add it' }, options)).toBe(receipt);
+  }, 120_000);
+
   test('applyCreate refuses an oversized candidate, leaves the proposal pending, and later creates still work', async () => {
     const vault = open();
     const proposal = await vault.proposeCreate(candidate(), 'proposer', { agent: 'distiller', proposal: 'add it' });

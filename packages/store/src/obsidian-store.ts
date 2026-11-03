@@ -1581,6 +1581,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string> {
     return this.mutate('proposeCreate', () =>
       this.proposals.stage(
@@ -1588,6 +1589,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         proposerId,
         evidence,
         (id) => this.readRecord(id, this.loadPathIndex()) !== null,
+        options,
         (validated, origin) => this.assertCandidateFits(validated, origin),
         (stored) =>
           assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>

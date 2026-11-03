@@ -461,11 +461,48 @@ queries: lists, `get`, `getLinks`, `reindex` and the vault's identity scan see
 records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
 required-field checks used by `create` in both profiles and by `proposeCreate`.
 
-Six `create-proposal-*` vectors join the store vectors (129 per profile). All
-implemented, so the expected-fail list stays empty. Tests: `test/create-proposals.test.ts`
+Six `create-proposal-*` vectors joined the store vectors (129 per profile at that decision). All
+implemented; purge integration is covered below. Tests: `test/create-proposals.test.ts`
 runs on both profiles and covers self-approval, working-set exclusion (including
 history, expiry and `reindex`), rollback of the record when the settled proposal
 cannot be written, refusal of corrupt proposal files, a read-only vault, and that
 no path outside the supplied root is touched. `npm run proof:proposals` injects
 faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
+
+The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds an
+optional `requestKey` to `proposeCreate`; keys must be well-formed Unicode strings,
+not empty or whitespace-only, and at most 1024 UTF-8 bytes. A retry with matching candidate,
+proposer and evidence returns the original proposal ID after settlement unless
+the proposal was erased or its key retired after a partial scrub; a conflicting reuse returns `REQUEST_KEY_CONFLICT`
+without writing. In the delivery lane on 2026-11-03, the owner chose “Refuse all retries after
+purge”: erasure retains the key identity, removes the input digest, and refuses
+all retries with that key without a content comparison. This supersedes the
+issue decision’s matching-retry rule after purge.
+The shared proposal-write seam also retires the key and removes the old digest if
+a partial scrub changes hashed candidate or evidence content, marking the key
+as `request_key_retired`. A partially scrubbed proposal can remain pending and
+applicable. To recover a lost receipt without minting another proposal, compute
+the SHA-256 hex digest of the original UTF-8 key and find its `request_key_hash`
+in `listProposals()`, then inspect its state. Live keyed proposals with a mismatching stored digest
+are refused as corrupt. Four purge-integration vectors pass on the real purge
+implementation in both profiles. Completed full-purge and partial-label-scrub
+tests also check that store and coordination bytes do not retain the old digest.
+The separate in-flight journal expected failure remains: an unfinished purge can
+still hold pre-purge images for recovery. Key lookup precedes the purge source guard so
+an unchanged blocked proposal returns its receipt and an erased key returns
+uniform refusal.
+Five other `create-request-key-*` vectors exercise retries, conflicts,
+rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
+conflicts do not change store bytes and that a retry after apply returns the
+original receipt.
+
+The keyed recovery tests crash before and after publication, verify the prepared
+journal is resolved, and pin the original receipt after the complete after-image.
+Keyed corruption checks fail closed; `proof:proposals` includes replayable key
+conflict, duplicate retry, corrupt-neighbour and recovery injections.
+
+Key metadata is retained in the proposal file and counts toward its serialized
+size limit; it is not copied into the created note.
+The vault note-size check still runs before a new keyed proposal is staged; a
+refusal leaves the key available, and a matching settled retry returns its receipt.

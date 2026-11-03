@@ -244,7 +244,7 @@ silent behavior.
   Decided by the delivery orchestrator under the owner's standing direction to
   deliver flow-agents#669–#673 ([corpus#40](https://github.com/kontourai/corpus/issues/40));
   the owner may override it.
-  - `proposeCreate(candidate, proposerId, evidence)` stores a `pending`
+  - `proposeCreate(candidate, proposerId, evidence, { requestKey }?)` stores a `pending`
     proposal that carries the whole candidate (a `CreateInput`, provenance
     included) and `evidence` (`agent` and `proposal`, as for `propose`). It
     returns the proposal id. The candidate must have the fields `create` requires.
@@ -502,3 +502,9 @@ The same identity is required on the construction-free observation port. Hosts
 with a runtime-home resolver must additionally check that resolver against the
 captured home. Record data remains identical on re-read; whitespace/style may
 normalize except for the approved top-level lossy plain tokens.
+
+### Owner decision: create request keys (2026-11-03)
+
+The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in pending, applied or rejected state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key identity and input digest share the proposal transaction. In this delivery lane on 2026-11-03, the owner chose “Refuse all retries after purge” so erasure removes the content digest and every later use of that key is refused with `REQUEST_KEY_CONFLICT`, regardless of input; the retained key identity prevents reuse. This supersedes the issue decision’s matching-retry rule after purge. To apply the same privacy rule to content-changing partial scrubs, the implementation also sets `request_key_retired: true` and removes the digest when a partial scrub changes the candidate or evidence. A partial scrub can leave a pending proposal applicable, so a caller recovering a lost receipt should not blindly retry with a new key: compute the SHA-256 hex digest of the original UTF-8 key, find its `request_key_hash` in `listProposals()`, and inspect that proposal’s state. Real purge integration and retry ordering are covered by conformance vectors; key lookup precedes the purge source guard. Completed full and partial scrubs remove the prior content digest; the separate in-flight purge journal limitation above still applies. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be well-formed Unicode strings, not empty or whitespace-only, and at most 1024 UTF-8 bytes.
+
+Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys and use opaque keys that do not encode content. The stored key hash is unsalted and can reveal a guessable key. The input digest detects mismatched stored content but is not authentication: a writer able to alter the file can recompute it. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.

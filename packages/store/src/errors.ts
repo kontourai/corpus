@@ -43,6 +43,11 @@ export class SelfApprovalError extends Error {
   }
 }
 
+export class RequestKeyConflictError extends Error {
+  readonly code: KnowledgeStoreErrorCode = 'REQUEST_KEY_CONFLICT';
+  constructor(retired = false) { super(retired ? 'proposeCreate: request key is retired after content scrub' : 'proposeCreate: request key already used with different input'); this.name = 'RequestKeyConflictError'; }
+}
+
 export class AmbiguousIdError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'AMBIGUOUS_ID';
   readonly matches: string[];
@@ -118,6 +123,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof SlugConflictError ||
     error instanceof RecordPurgedError ||
     error instanceof SelfApprovalError ||
+    error instanceof RequestKeyConflictError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||
     error instanceof KnowledgeStoreCorruptionError ||

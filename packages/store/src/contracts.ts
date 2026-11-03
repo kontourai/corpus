@@ -213,6 +213,13 @@ export interface KitCreateProposal {
   proposer_id: string;
   evidence: ProposeEvidence;
   proposed_at: string; // ISO-8601
+  /** SHA-256 key and input digests for keyed proposals; not the caller's key. */
+  request_key_hash?: string;
+  request_digest?: string;
+  /** Digest algorithm and canonicalization version. */
+  request_digest_version?: 1;
+  /** Content was scrubbed; the retained key cannot be reused. */
+  request_key_retired?: true;
   /** Set once the proposal is settled. */
   reviewer_id?: string;
   decided_at?: string; // ISO-8601
@@ -243,6 +250,7 @@ export type KnowledgeStoreErrorCode =
   | 'SLUG_CONFLICT'
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
+  | 'REQUEST_KEY_CONFLICT'
   /**
    * The operation names a purged record (owner decision, 2026-11-02): a tombstone
    * can be read but never updated, linked to or from, proposed against, superseded
@@ -375,12 +383,18 @@ export interface KnowledgeStoreCreateProposals {
    * required fields as `create`, and `evidence` needs `agent` and `proposal`.
    * `proposerId` is an identity, not a record id. Put session, transcript and
    * source references in `candidate.provenance`: they become the created record's
-   * provenance on `applyCreate`.
+   * provenance on `applyCreate`. An optional requestKey is store-wide, nonempty
+   * and not whitespace-only, must be well-formed Unicode, with a 1024 UTF-8 byte limit. Matching retries return
+   * the original ID unless the proposal is erased or its key retired after a scrub; differing input refuses
+   * REQUEST_KEY_CONFLICT. After erasure or retirement, all uses of that key are refused with
+   * REQUEST_KEY_CONFLICT and the content digest is removed. Use opaque keys.
+   * A corrupt retained proposal makes keyed lookup fail with KnowledgeStoreCorruptionError.
    */
   proposeCreate(
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string>;
   /**
    * Create the record in one transaction and settle the proposal as `applied`.

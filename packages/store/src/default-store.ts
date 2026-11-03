@@ -807,6 +807,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string> {
     return this.files.mutate('proposeCreate', () =>
       this.proposals.stage(
@@ -814,11 +815,11 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
         proposerId,
         evidence,
         (id) => isSafePathSegment(id) && this.readRecord(id) !== null,
-        undefined, // the default layout has no note size to check
-        (stored) =>
-          assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
-            isSafePathSegment(id) ? this.readRecord(id) : null,
-          ),
+        options,
+        undefined,
+        (stored) => assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          isSafePathSegment(id) ? this.readRecord(id) : null,
+        ),
       ),
     );
   }
