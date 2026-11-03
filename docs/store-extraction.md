@@ -492,7 +492,9 @@ references carry bounded, validated attribution through proposal storage and
 record creation. They neither authorize transcript access nor constitute review
 evidence; `note` remains free text. Both store profiles run the source-reference
 survival and validation conformance vectors. Validation copies reference objects
-before persistence, including arrays with inherited serialization hooks, rejects sparse arrays, and prevents shared caller objects from
+before persistence, including arrays with inherited serialization hooks; it refuses
+serialization that adds, removes or changes references. It rejects sparse arrays
+and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
 
 The vault's proposal-size estimate serializes validated `source_refs` with the

@@ -165,6 +165,12 @@ describe.each([
     const before = tree(root);
     expect(await code(store.proposeCreate(candidate({ id: 'deceptive', provenance: deceptive }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
     expect(tree(root)).toEqual(before);
+    const injected = { agent: 'writer', toJSON() { return { agent: 'writer', source_refs: [ref] }; } };
+    expect(await code(store.proposeCreate(candidate({ id: 'injected', provenance: injected }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    let reads = 0;
+    const changing = { agent: 'writer', get source_refs() { return reads++ === 0 ? undefined : [ref]; } };
+    expect(await code(store.proposeCreate(candidate({ id: 'changing', provenance: changing }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
   });
 
   test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
