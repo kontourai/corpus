@@ -54,6 +54,49 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   count. Only creation is checked: existing compiled records without a source
   stay readable, listable and updatable.
 
+- **A new record can be proposed, then applied or rejected (2026-11-03).**
+  Decided by the delivery orchestrator under the owner's standing direction to
+  deliver flow-agents#669–#673 ([corpus#40](https://github.com/kontourai/corpus/issues/40));
+  the owner may override it.
+  - `proposeCreate(candidate, proposerId, evidence)` stores a `pending`
+    proposal that carries the whole candidate (a `CreateInput`, provenance
+    included) and `evidence` (`agent` and `proposal`, as for `propose`). It
+    returns the proposal id. The candidate must have the fields `create` requires.
+    **No record exists until apply**: `get` and every list return nothing for it.
+  - `applyCreate(proposalId, reviewerId)` creates the record in one transaction with
+    every `create` requirement, so a refusal (a source-less `compiled`
+    candidate, a taken id or slug) leaves the proposal `pending` and writes
+    nothing. It returns the new record id. The record's first mutation-log entry,
+    `apply-create`, names the proposal, its proposer and its evidence, and the
+    proposal records `record_id`. A reviewer who is the proposer is refused with
+    `SELF_APPROVAL`; the identity is the `proposerId` string, so a host that
+    needs more than self-comparison must authorize reviewers itself.
+  - `rejectCreate(proposalId, reviewerId, rationale)` keeps the proposal as
+    `rejected` with its rationale and creates nothing. A proposer may reject
+    (withdraw) its own proposal. Only a `pending` proposal can be applied or
+    rejected; a settled one is refused with `MISSING_EVIDENCE`.
+  - Proposals are stored under `<storeRoot>/.corpus-proposals/`, outside every record
+    path, index and list, so pending and rejected proposals are never in the
+    working set, `get`, `getLinks` or `reindex`, with or without `includeHistory`.
+    The directory's dot name cannot be a category, so a vault may still keep
+    notes in a `proposals` category. The vault's record-identity scans do not
+    count or read the `.json` files there, so retained proposals never reach
+    their entry bounds; anything else placed in that directory is still scanned.
+    A proposal over 16 MiB (less headroom for settlement), with blank evidence, or
+    with an explicit id or a reviewer id over 1 KiB or a rationale over 16 KiB, is refused, so no
+    accepted proposal can break `listProposals` or be left unsettleable. The size
+    of the record a proposal creates is `create`'s concern, not bounded here.
+    Read them with `getProposal(id)` and `listProposals({ state })`, where `state`
+    is `pending`, `applied`, `rejected` or a list of them (omitted means all).
+  - The create-proposal verbs are separate from the concept-proposal `apply` and
+    `reject`, which take `(targetId, proposerId, evidence)` and are unchanged.
+  - **The store discovers no root.** The host constructs the adapter over the
+    root it authorized. A CLI default remains a CLI concern. A vault opened
+    read-only (`kit-v1`) refuses `proposeCreate`, `applyCreate` and `rejectCreate`
+    with `READ_ONLY`.
+  - Not covered: `purge` does not erase proposals, so a host that purges a
+    record must also decide what to do with proposals that carry its content.
+
 Every decision is implemented, and the expected-fail list is empty.
 
 ## Host composition

@@ -142,6 +142,40 @@ export interface RetireEvidence {
   note?: string;
 }
 
+// ── Create proposals (owner decision, 2026-11-03) ──────────────────────────
+
+/** A create proposal is `pending` until a reviewer settles it as `applied` or `rejected`. */
+export type CreateProposalState = 'pending' | 'applied' | 'rejected';
+
+/**
+ * A staged request to create a record. It is not a record: the candidate is held
+ * here whole, and no record exists under its id until the proposal is `applied`.
+ * Proposals are never in `get`, lists or the working set; read them through
+ * `getProposal` and `listProposals`.
+ */
+export interface KitCreateProposal {
+  /** The proposal's own identity, distinct from the record it may create. */
+  id: string;
+  state: CreateProposalState;
+  /** The complete `CreateInput`, including its provenance, as `create` will receive it. */
+  candidate: CreateInput;
+  proposer_id: string;
+  evidence: ProposeEvidence;
+  proposed_at: string; // ISO-8601
+  /** Set once the proposal is settled. */
+  reviewer_id?: string;
+  decided_at?: string; // ISO-8601
+  /** `rejected` only: why the reviewer refused it. */
+  rationale?: string;
+  /** `applied` only: the record this proposal created. */
+  record_id?: string;
+}
+
+export interface CreateProposalListOptions {
+  /** One state or several. Omitted means every state. */
+  state?: CreateProposalState | CreateProposalState[];
+}
+
 // ── Error contract (store-contract.md §8.1) ────────────────────────────────
 
 export type KnowledgeStoreErrorCode =
@@ -149,6 +183,8 @@ export type KnowledgeStoreErrorCode =
   | 'NOT_FOUND'
   | 'AMBIGUOUS_ID'
   | 'SLUG_CONFLICT'
+  /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
+  | 'SELF_APPROVAL'
   /**
    * station#1879: a Station extension BEYOND store-contract §8.1 — the published
    * Kit contract has no notion of a non-writing adapter, so this code is not part
@@ -233,6 +269,44 @@ export interface KnowledgeStoreAdapter {
     type: KitRecordType,
     options?: ListOptions,
   ): Promise<KitRecord[]>;
+}
+
+/**
+ * Transactional create proposals (owner decision, 2026-11-03). Kept off
+ * `KnowledgeStoreAdapter` so existing implementers of that interface need no
+ * change. Both bundled adapters implement it. `applyCreate` and `rejectCreate` are
+ * distinct from the concept-proposal verbs `apply` and `reject`, which take
+ * `(targetId, proposerId, evidence)` and are unchanged.
+ */
+export interface KnowledgeStoreCreateProposals {
+  /**
+   * Stage a request to create `candidate`. Returns the proposal id; the proposal is
+   * `pending` and no record exists. The candidate is checked against the same
+   * required fields as `create`, and `evidence` needs `agent` and `proposal`.
+   * `proposerId` is an identity, not a record id. Put session, transcript and
+   * source references in `candidate.provenance`: they become the created record's
+   * provenance on `applyCreate`.
+   */
+  proposeCreate(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+  ): Promise<string>;
+  /**
+   * Create the record in one transaction and settle the proposal as `applied`.
+   * Returns the new record's id. The record's mutation log carries an
+   * `apply-create` entry naming the proposal, its proposer and its evidence.
+   * Refuses `SELF_APPROVAL` when `reviewerId` is the proposer, and `NOT_FOUND` for an
+   * unknown proposal. A proposal that is not `pending` is refused with
+   * `MISSING_EVIDENCE`. Every `create` requirement applies at this point; a failure
+   * leaves the proposal `pending` and writes nothing.
+   */
+  applyCreate(proposalId: string, reviewerId: string): Promise<string>;
+  /** Settle a pending proposal as `rejected`, keeping it with `rationale`. Creates no record. */
+  rejectCreate(proposalId: string, reviewerId: string, rationale: string): Promise<void>;
+  getProposal(proposalId: string): Promise<KitCreateProposal | null>;
+  /** The explicit proposals query. Ordered by `proposed_at`, then id. */
+  listProposals(options?: CreateProposalListOptions): Promise<KitCreateProposal[]>;
 }
 
 /**
