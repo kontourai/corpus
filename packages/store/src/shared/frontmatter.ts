@@ -183,7 +183,7 @@ export function parseMarkdown(text: string, options?: Pick<LoadOptions, 'maxDept
   return { meta: record, body };
 }
 export function serializeMarkdown(meta: Record<string, unknown>, body: string): string {
-  let frontmatter = dump(meta, { lineWidth: -1, noRefs: true }).trimEnd();
+  let frontmatter = dump(meta, { lineWidth: -1 }).trimEnd();
   const saved = (meta as Record<symbol, SourceState>)[SOURCE];
   if (saved?.scalars.length) {
     const emitted = sourceTree(frontmatter).pairs ?? [];

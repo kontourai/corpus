@@ -465,7 +465,7 @@ record creation. They neither authorize transcript access nor constitute review
 evidence; `note` remains free text. Both store profiles run the source-reference
 survival and validation conformance vectors. Validation copies reference objects
 before persistence, rejects sparse arrays, and prevents shared caller objects from
-generating excessive YAML aliases.
+generating excessive YAML aliases, while preserving aliases in unrelated fields.
 
 The [root-binding decision](https://github.com/kontourai/corpus/issues/47)
 adds a host-verifiable adapter binding based on a canonical root and a scaffolded
