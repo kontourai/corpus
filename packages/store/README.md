@@ -125,7 +125,9 @@ silent behavior.
     report success while its journal may still hold them: if the commit marker
     cannot be written, it removes the journal or throws. The next locked
     operation also removes a `.<id>.tmp` file that a crash inside the journal's
-    own write left at the root, but only one that parses as a journal.
+    own write left at the root, even a cut-short one, but only one that starts
+    the way this engine writes a journal. A failure to remove it fails the
+    operation.
     *Deferred:* between
     the first journal write and the commit marker the journal still holds the
     pre-purge files, because rollback needs them. A crash in that window leaves

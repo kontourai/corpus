@@ -254,6 +254,26 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     expect(existsSync(join(root, '.someone-elses.tmp'))).toBe(true);
   });
 
+  test('a journal temporary cut short by a crash is removed too, and a foreign JSON file with similar keys is not', async () => {
+    await raw('cut');
+    const cut = `{"version":1,"transactionId":"t","operation":"purge","phase":"prepared","entries":[{"path":"x.md","before":"${Buffer.from('CUT-NEEDLE').toString('base64')}`;
+    writeFileSync(join(root, '.cut.tmp'), cut);
+    const foreign = '{"version":1,"transactionId":"foreign-work","entries":[],"application":"not a store journal"}';
+    writeFileSync(join(root, '.foreign.tmp'), foreign);
+    await store.get('cut');
+    expect(existsSync(join(root, '.cut.tmp'))).toBe(false);
+    expect(readFileSync(join(root, '.foreign.tmp'), 'utf8')).toBe(foreign);
+  });
+
+  test('a journal temporary that cannot be removed fails the operation instead of being skipped', async () => {
+    await raw('stuck');
+    writeFileSync(join(root, '.stuck.tmp'), '{"version":1,"transactionId":"t","operation":"purge","phase":"prepared","entries":[]}');
+    const hooked = open(profile, root) as unknown as { files: { hooks: { beforeFileReplace?: (path: string) => void } } } & Store;
+    hooked.files.hooks.beforeFileReplace = (path) => { if (path.endsWith('.stuck.tmp')) throw new Error('permission denied'); };
+    await expect(hooked.purge(['stuck'], evidence)).rejects.toThrow();
+    expect((await open(profile, root).get('stuck'))?.status).toBe('active');
+  });
+
   test('a purge whose commit marker cannot be written does not report success over a journal that holds erased content', async () => {
     await raw('doomed', { body: 'MARKER-NEEDLE' });
     const journalPath = join(root, '.station-knowledge-transaction.json');
@@ -359,6 +379,29 @@ describe('purge — vault layout', () => {
     expect(existsSync(join(root, 'private', 'person-739'))).toBe(false);
     expect(existsSync(join(root, 'private', 'other'))).toBe(true);
     expect(existsSync(join(root, 'unrelated-empty'))).toBe(true);
+  });
+
+  test('does not follow a folder swapped for a symlink after publication when removing emptied folders', async () => {
+    const { renameSync, symlinkSync } = await import('node:fs');
+    await store.create({ id: 'only', type: 'raw', title: 'Only', body: 'x', category: 'private.person-739', provenance: { agent: 'creator' } });
+    const outside = join(base, 'outside');
+    mkdirSync(join(outside, 'person-739', 'sources'), { recursive: true });
+    const hooked = open('vault', root) as unknown as { files: { hooks: { afterCommitMarker?: () => void } } } & Store;
+    hooked.files.hooks.afterCommitMarker = () => {
+      renameSync(join(root, 'private'), join(base, 'moved-private'));
+      symlinkSync(outside, join(root, 'private'));
+    };
+    await hooked.purge(['only'], evidence);
+    expect(existsSync(join(outside, 'person-739', 'sources'))).toBe(true);
+  });
+
+  test('removes emptied folders when the commit marker had to be skipped', async () => {
+    await store.create({ id: 'only', type: 'raw', title: 'Only', body: 'x', category: 'private.person-739', provenance: { agent: 'creator' } });
+    const hooked = open('vault', root) as unknown as { files: { hooks: { beforeFileReplace?: (path: string) => void } } } & Store;
+    let writes = 0;
+    hooked.files.hooks.beforeFileReplace = (path) => { if (path.endsWith('.station-knowledge-transaction.json') && ++writes === 2) throw new Error('disk full'); };
+    await hooked.purge(['only'], evidence);
+    expect(existsSync(join(root, 'private'))).toBe(false);
   });
 
   test('refuses to purge a vault that still holds migration artifacts, which keep erased paths and hashes', async () => {

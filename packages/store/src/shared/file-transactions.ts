@@ -36,6 +36,8 @@ import {
 
 const JOURNAL_VERSION = 1;
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
+// The start of every journal this engine writes (JSON.stringify of a Journal, in key order).
+const JOURNAL_TEMPORARY = /^\{"version":1,"transactionId":"[^"]*","operation":"[^"]*","phase":"(?:prepared|committed)","entries":\[/;
 const LEGACY_LOCK_FILE = '.station-knowledge-mutation';
 function knowledgeLockIdentity(
   rootRealpath: string,
@@ -316,13 +318,16 @@ export class KnowledgeFileTransactions {
           // fact into a caller-visible failure that invites a duplicate retry.
           // An erasure is the exception: until the journal is gone it may still
           // hold the erased content, so it must not report success over that.
-          if (options.erasure && !markerPersisted) {
-            try {
-              this.removeJournal();
-            } catch (cleanup) {
-              this.observe(operation, 'unavailable');
-              throw unavailable(cleanup);
+          if (options.erasure) {
+            if (!markerPersisted) {
+              try {
+                this.removeJournal();
+              } catch (cleanup) {
+                this.observe(operation, 'unavailable');
+                throw unavailable(cleanup);
+              }
             }
+            this.pruneEmptyDirectories(context.journal);
           }
           this.observe(operation, 'applied-readback');
           return result;
@@ -655,9 +660,12 @@ export class KnowledgeFileTransactions {
   }
 
   /**
-   * A crash inside the journal's own atomic write leaves `.<id>.tmp` at the root
-   * holding the same before-images the journal would. Only a file that parses as
-   * this engine's journal is removed; any other `.tmp` file is not ours.
+   * A crash inside the journal's own atomic write leaves `.<id>.tmp` at the root,
+   * possibly cut short, holding the before-images the journal would. This engine
+   * writes a journal as `{"version":1,"transactionId":...,"operation":...,"phase":
+   * ...,"entries":[`, so a root `.tmp` file that starts that way is ours. A file
+   * that does not is not touched. We hold the store lock, so no live writer owns
+   * it. A failure to remove one is an error, not a skip: it may hold erased content.
    */
   private removeOrphanJournalTemporaries(): void {
     let names: string[];
@@ -671,13 +679,18 @@ export class KnowledgeFileTransactions {
     }
     for (const name of names) {
       const path = join(this.root, name);
+      let head: string;
       try {
-        const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<Journal>;
-        if (value?.version === JOURNAL_VERSION && typeof value.transactionId === 'string' && Array.isArray(value.entries)) {
-          this.removePublished(path);
-        }
+        head = readFileSync(path, 'utf8').slice(0, 1024);
       } catch {
-        // Not JSON, or unreadable: not a journal temporary.
+        continue; // unreadable or already gone: nothing we can classify
+      }
+      if (JOURNAL_TEMPORARY.test(head)) {
+        try {
+          this.removePublished(path);
+        } catch (error) {
+          throw unavailable(error);
+        }
       }
     }
   }
@@ -689,6 +702,8 @@ export class KnowledgeFileTransactions {
       let directory = dirname(join(this.root, entry.path));
       while (directory !== this.root && directory.startsWith(this.root + sep)) {
         try {
+          // An ancestor swapped for a symlink since publication must not redirect this.
+          this.assertNoSymlink(directory);
           if (!lstatSync(directory).isDirectory()) break;
           rmdirSync(directory);
         } catch {
