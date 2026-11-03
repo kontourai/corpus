@@ -295,7 +295,8 @@ that starts passing. The list is empty when every decision has shipped.
 
 0 of the 1 expected failures are bound to ref/kind/expected/actual, and 1 to
 specific error patterns. The remaining vector is keyed retry after purge; it awaits
-corpus#41 and fails specifically because `purge` is unavailable.
+corpus#41 and an owner decision on digest erasure; it fails specifically because
+`purge` is unavailable.
 
 ### Host vectors
 
@@ -469,13 +470,14 @@ faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
 
 The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds an
-optional `requestKey` to `proposeCreate`; keys must not be empty or whitespace-only
-and are limited to 1024 UTF-8 bytes. A retry with matching candidate,
+optional `requestKey` to `proposeCreate`; keys must be well-formed Unicode strings,
+not empty or whitespace-only, and at most 1024 UTF-8 bytes. A retry with matching candidate,
 proposer and evidence returns the original proposal ID, including after
 settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
 The key digest and input digest are retained with the proposal in the same
 transaction, including after rejection; retention after record purge is not yet
-verified. The keyed-after-purge vector is an expected failure until corpus#41.
+verified. The keyed-after-purge vector is an expected failure pending corpus#41 and an
+owner decision on digest erasure.
 Five other `create-request-key-*` vectors exercise retries, conflicts,
 rejection, unkeyed calls and UTF-8 key limits in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the

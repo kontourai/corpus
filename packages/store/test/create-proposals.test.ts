@@ -91,15 +91,15 @@ describe.each([
 
   test('request key limits reject whitespace and count UTF-8 bytes', async () => {
     const before = tree(root);
-    for (const requestKey of ['', '   ', '\t\n', 'x'.repeat(1025), 'é'.repeat(513)]) {
-      expect(await code(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey }))).toBe('MISSING_EVIDENCE');
+    for (const requestKey of ['', '   ', '\t\n', 'x'.repeat(1025), 'é'.repeat(513), '\ud800', '\udc00', null, 7]) {
+      expect(await code(store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey: requestKey as string }))).toBe('MISSING_EVIDENCE');
       expect(tree(root)).toEqual(before);
     }
-    for (const requestKey of ['x'.repeat(1024), 'é'.repeat(512)]) {
+    for (const requestKey of ['x'.repeat(1024), 'é'.repeat(512), '😀'.repeat(256)]) {
       const id = await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey });
       expect(await store.proposeCreate(candidate(), 'agent-a', evidence, { requestKey })).toBe(id);
     }
-    expect(await store.listProposals()).toHaveLength(2);
+    expect(await store.listProposals()).toHaveLength(3);
   });
 
   test('request key retries return the original receipt and conflicts write nothing', async () => {
