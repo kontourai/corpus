@@ -52,7 +52,7 @@ const controls = [
   { id: 'tombstone-mutable', file: store + 'src/default-store.ts', mutate: (s) => swap(s, "    assertNotPurged('update', record);\n", ''),
     args: conformance('purge-refuses-tombstone-mutation'), reason: /update must reject|PURGED/ },
   { id: 'tombstone-citable', file: purge, mutate: (s) => swap(s, 'if (target) assertNotPurged(op, target);', ''),
-    args: conformance('purge-refuses-tombstone-mutation'), reason: /create must reject|PURGED/ },
+    args: conformance('purge-refuses-tombstone-mutation'), reason: /(update|create) must reject/ },
   { id: 'alias-survives-purge', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '      unregisterAliases(aliasIndex, id);\n', ''),
     args: conformance('purge-read-paths'), reason: /by_alias/ },
   { id: 'vault-title-path-survives', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'const target = this.tombstonePath(id, pathIndex);', 'const target = entry.path;'),
