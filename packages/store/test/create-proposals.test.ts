@@ -118,6 +118,8 @@ describe.each([
     expect(JSON.parse(readFileSync(journal, 'utf8'))).toMatchObject({ phase: 'prepared', operation: 'proposeCreate' });
     const proposalPath = join(root, '.corpus-proposals', 'crash-2.json');
     expect(existsSync(proposalPath)).toBe(mode === 'after');
+    // Before publication the one-file proposal has no after-image to undo;
+    // this proves recovery clears the journal and retains neither key nor proposal.
     const recovered = await store.listProposals();
     expect(recovered.map((proposal) => proposal.id)).toEqual(mode === 'before' ? [] : ['crash-2']);
     expect(existsSync(journal)).toBe(false);
@@ -446,6 +448,7 @@ describe.each([
     for (const broken of [
       '{bad json', JSON.stringify({ ...stored, request_digest: 'invalid' }),
       JSON.stringify({ ...stored, request_digest_version: 2 }),
+      JSON.stringify({ ...stored, request_digest_version: undefined }),
       JSON.stringify({ ...stored, request_key_hash: undefined, request_digest: undefined }),
     ]) {
       writeFileSync(path, broken);

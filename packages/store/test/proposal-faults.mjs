@@ -53,7 +53,7 @@ ${source.slice(end)}`;
 const injections = [
   {
     name: 'request-key-conflict-write',
-    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';").replace('if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (metadata.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';"), 'if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (metadata.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],
     checks: [{ label: 'unit', args: unit('request key retries'), failure: /to deeply equal/ }],
   },
   {

@@ -336,6 +336,7 @@ function parseProposal(text: string, path: string, id: string): KitCreateProposa
   if ((value.request_key_hash !== undefined || value.request_digest !== undefined) &&
       (typeof value.request_key_hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_key_hash) ||
        typeof value.request_digest !== 'string' || !/^[a-f0-9]{64}$/.test(value.request_digest))) throw corrupt('invalid request key metadata');
+  if (value.request_key_hash !== undefined && value.request_digest_version !== 1) throw corrupt('missing or unsupported request digest version');
   if (value.request_digest_version !== undefined && value.request_digest_version !== 1) throw corrupt('unsupported request digest version');
   if (value.request_digest_version !== undefined && value.request_key_hash === undefined) throw corrupt('request digest version without key');
   if (!PROPOSAL_STATES.includes(value.state as CreateProposalState)) throw corrupt('invalid state');
