@@ -71,7 +71,7 @@ const injections = [
   },
   {
     name: 'request-key-skip-recovery',
-    files: [{ file: 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '    if (!journal) return;\n    if (journal.phase', '    if (!journal) return;\n    if (journal.operation === 'proposeCreate') return; // injected: no recovery\n    if (journal.phase') }],
+    files: [{ file: 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '    if (!journal) return;\n    if (journal.phase', '    if (!journal) return;\n    if (journal.operation === "proposeCreate") return; // injected: no recovery\n    if (journal.phase') }],
     checks: [{ label: 'unit', args: unit('keyed proposal recovers'), failure: /expected.*(false|crash-2)|to be false|deeply equal/ }],
   },
   {
