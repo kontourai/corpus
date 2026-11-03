@@ -130,8 +130,15 @@ silent behavior.
     with `PURGED` because its candidate still cites an erased record, and a reviewer
     should reject it. `proposeCreate` refuses such a candidate up front, and the
     log entry a created record starts with keeps `proposal_id` but never the
-    proposal's text once the record is erased. A corrupt proposal stops the purge
-    before anything is written.
+    proposal's text once the record is erased. A candidate's own `id` is not removed
+    from its support (it is not a record yet, so it counts as real support until a
+    record has it). A proposal whose stored shape purge cannot judge (unreadable,
+    a candidate without valid provenance or links, an `erasure` marker over intact
+    content) stops the purge before anything is written. Because a pending
+    proposal's rejection copies the purge's `agent` (twice), `rationale` (twice) and
+    `note` into it, those are bounded as JSON: `agent` 1 KiB, `rationale` and `note`
+    8 KiB each (a control character is six bytes in JSON), which fits the 64 KiB a
+    stored proposal reserves for settlement.
   - **Read paths and projections.** The slug aliases leave the alias index, the
     graph index rebuilds from tombstone links, and `reindex` reproduces the same
     result. In the vault the file moves to `archive/purged/<id>.md`, the path

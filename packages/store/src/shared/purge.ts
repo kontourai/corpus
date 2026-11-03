@@ -283,7 +283,10 @@ function unlabelErased(entry: KitMutationLogEntry, erased: ReadonlySet<string>):
 /** Input checks shared by both adapters; they run before any read or write. */
 export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
   const text = (value: unknown) => typeof value === 'string' && value.trim() !== '';
-  const bounded = (value: string, limit: number) => Buffer.byteLength(value) <= limit;
+  // Measured as JSON, which is how a proposal stores them: a control character is six bytes there.
+  // Together with the copies a pending proposal's rejection makes, these stay inside the headroom
+  // a stored proposal reserves for settlement.
+  const bounded = (value: string, limit: number) => Buffer.byteLength(JSON.stringify(value)) <= limit;
   if (!text(evidence?.agent)) {
     throw new MissingEvidenceError('purge: missing required evidence field: agent');
   }
@@ -294,8 +297,8 @@ export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): strin
     throw new MissingEvidenceError('purge: evidence note must be a string');
   }
   // These are copied into tombstones and proposals, which must stay loadable.
-  if (!bounded(evidence.agent, 1024) || !bounded(evidence.rationale, 16 * 1024) || !bounded(evidence.note ?? '', 16 * 1024)) {
-    throw new MissingEvidenceError('purge: agent must be at most 1 KiB, rationale and note at most 16 KiB');
+  if (!bounded(evidence.agent, 1024) || !bounded(evidence.rationale, 8 * 1024) || !bounded(evidence.note ?? '', 8 * 1024)) {
+    throw new MissingEvidenceError('purge: agent must be at most 1 KiB, rationale and note at most 8 KiB (as JSON)');
   }
   if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
     throw new MissingEvidenceError('purge: ids must be a non-empty array of record ids');

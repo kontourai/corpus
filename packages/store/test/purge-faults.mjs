@@ -124,6 +124,12 @@ const controls = [
     args: conformance('purge-proposal-other-support-blocked'), reason: /(proposalsBlocked|after\.|PURGED)/ },
   { id: 'proposal-cites-tombstone', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'guard?.(stored);', ''),
     args: conformance('purge-proposal-cites-tombstone'), reason: /proposeCreate must reject/ },
+  { id: 'proposal-support-drops-candidate-id', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'supportIds({ provenance: proposal.candidate.provenance, links: proposal.candidate.links })', 'supportIds({ id: proposal.candidate.id, provenance: proposal.candidate.provenance, links: proposal.candidate.links })'),
+    args: focused('test/purge-proposals.test.ts'), reason: /candidate id counts as support|real support/ },
+  { id: 'proposal-shape-unchecked', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '      assertErasable(proposal);\n', ''),
+    args: focused('test/purge-proposals.test.ts'), reason: /stored shape purge cannot judge/ },
+  { id: 'purge-bounds-raw-bytes', file: purge, mutate: (s) => swap(s, 'Buffer.byteLength(JSON.stringify(value)) <= limit', 'Buffer.byteLength(value) <= limit'),
+    args: focused('test/purge-proposals.test.ts'), reason: /bounded as JSON/ },
 ];
 
 function run(label, args, success) {

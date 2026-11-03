@@ -238,8 +238,10 @@ export class CreateProposals {
     const scrubbed: string[] = [];
     const blocked: string[] = [];
     for (const proposal of this.list()) {
+      assertErasable(proposal);
       if (proposal.erasure) continue; // already erased by an earlier purge
-      const support = supportIds(proposal.candidate);
+      // A candidate's id is not a record yet, so it is not removed from its own support.
+      const support = supportIds({ provenance: proposal.candidate.provenance, links: proposal.candidate.links });
       const createdErased = proposal.state === 'applied' && proposal.record_id !== undefined && newlyErased.has(proposal.record_id);
       const restsOnErased =
         support.some((id) => newlyErased.has(id)) && support.every((id) => allErased.has(id));
@@ -314,6 +316,31 @@ function projectCandidate(candidate: CreateInput): CreateInput {
     if (value !== undefined) projected[key] = value;
   }
   return projected as unknown as CreateInput;
+}
+
+/**
+ * Purge decides from the candidate's provenance and links and trusts a stored `erasure`
+ * marker, so a proposal that does not have the shape those decisions need stops the purge
+ * instead of being skipped: a skipped proposal would keep erased content readable.
+ */
+function assertErasable(proposal: KitCreateProposal): void {
+  const corrupt = (reason: string) =>
+    new KnowledgeStoreCorruptionError(`create proposal ${proposal.id} is corrupt: ${reason}`);
+  const { candidate } = proposal;
+  const provenance = candidate.provenance as unknown;
+  if (!isRecord(provenance) || !isNonemptyString(provenance.agent)) throw corrupt('candidate provenance is invalid');
+  const sourceIds = provenance.source_ids;
+  if (sourceIds !== undefined && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
+    throw corrupt('candidate source_ids are invalid');
+  }
+  const links = candidate.links as unknown;
+  if (links !== undefined && (!Array.isArray(links) || links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string'))) {
+    throw corrupt('candidate links are invalid');
+  }
+  if (typeof candidate.type !== 'string') throw corrupt('candidate type is invalid');
+  if (proposal.erasure && (candidate.title !== PURGED_TITLE || candidate.body !== '' || proposal.evidence.proposal !== PURGED_TITLE)) {
+    throw corrupt('an erased proposal still carries content');
+  }
 }
 
 /** What is left of a candidate once it is erased: identity, provenance and link targets, no content. */

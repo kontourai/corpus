@@ -3,7 +3,7 @@
  * its whole candidate in every state, outside every record path, so a purge has to reach it
  * on its own. Both profiles run every test.
  */
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -208,7 +208,6 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
 
   test('a corrupt proposal stops the purge before anything is written', async () => {
     await raw('src');
-    const { mkdirSync, writeFileSync } = await import('node:fs');
     mkdirSync(join(root, '.corpus-proposals'), { recursive: true });
     writeFileSync(join(root, '.corpus-proposals', 'broken.json'), '{not json');
     const before = everything(root);
@@ -217,15 +216,58 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     expect((await store.get('src'))?.status).toBe('active');
   });
 
-  test('an oversized agent, rationale or note is refused so a copied tombstone or proposal stays loadable', async () => {
+  test('a proposal whose stored shape purge cannot judge stops the purge instead of being skipped', async () => {
     await raw('src');
+    const id = await store.proposeCreate(candidate(['src']), 'proposer-1', proposal('Secret proposal text NEEDLE-EVID'));
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const original = readFileSync(path, 'utf8');
+    const variants: Record<string, (value: Record<string, unknown>) => void> = {
+      'a candidate without provenance': (value) => { value.candidate = { body: 'SECRET-BODY' }; },
+      'source_ids that are not strings': (value) => { (value.candidate as { provenance: { source_ids: unknown } }).provenance.source_ids = [1]; },
+      'links that are not links': (value) => { (value.candidate as { links: unknown }).links = ['src']; },
+      'an erasure marker over intact content': (value) => { value.erasure = { at: new Date().toISOString(), agent: 'x', rationale: 'y' }; },
+    };
+    for (const [name, change] of Object.entries(variants)) {
+      const value = JSON.parse(original) as Record<string, unknown>;
+      change(value);
+      writeFileSync(path, JSON.stringify(value));
+      const before = everything(root);
+      await expect(store.purge(['src'], evidence), name).rejects.toThrow(/corrupt/);
+      expect(everything(root), name).toBe(before);
+      expect((await store.get('src'))?.status, name).toBe('active');
+    }
+  });
+
+  test('a candidate id counts as support like any other id once a record has it', async () => {
+    const id = await store.proposeCreate(candidate(['future'], { id: 'future' }), 'proposer-1', proposal());
+    await store.create({ id: 'future', type: 'raw', title: 'f', body: 'f', category: 'engineering', provenance: { agent: 'creator' } });
+    expect(await store.purge(['future'], evidence)).toMatchObject({ proposalsRejected: [id] });
+    expect(everything(root)).not.toContain('NEEDLE-CAND');
+  });
+
+  test('an id that is not a record yet is real support, so the proposal is blocked rather than erased', async () => {
+    await raw('src');
+    const id = await store.proposeCreate(candidate(['src', 'future'], { id: 'future' }), 'proposer-1', proposal());
+    expect(await store.purge(['src'], evidence)).toMatchObject({ proposalsRejected: [], proposalsBlocked: [id] });
+    expect((await store.getProposal(id))?.state).toBe('pending');
+  });
+
+  test('purge evidence is bounded as JSON, since a control character is six bytes in a stored proposal', async () => {
+    await raw('src');
+    const within = { agent: 'a', rationale: '\u0001'.repeat(1300), note: '\u0001'.repeat(1300) };
     for (const bad of [
       { agent: 'a'.repeat(1025), rationale: 'r' },
-      { agent: 'a', rationale: 'r'.repeat(16 * 1024 + 1) },
-      { agent: 'a', rationale: 'r', note: 'n'.repeat(16 * 1024 + 1) },
+      { agent: 'a', rationale: 'r'.repeat(8 * 1024) },
+      { agent: 'a', rationale: '\u0001'.repeat(1400) },
+      { agent: 'a', rationale: 'r', note: '\u0001'.repeat(1400) },
     ]) {
-      await expect(store.purge(['src'], bad)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      await expect(store.purge(['src'], bad), JSON.stringify(bad).slice(0, 40)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
     }
     expect((await store.get('src'))?.status).toBe('active');
+    // At the limit, against a pending proposal as large as staging allows, the erased copy still fits.
+    const body = 'x'.repeat(16 * 1024 * 1024 - 64 * 1024 - 4000);
+    const id = await store.proposeCreate(candidate(['src'], { body }), 'p'.repeat(1000), { agent: 'd'.repeat(500), proposal: 'z'.repeat(500) });
+    await expect(store.purge(['src'], { agent: 'a'.repeat(1000), rationale: within.rationale, note: within.note })).resolves.toMatchObject({ proposalsRejected: [id] });
+    expect((await store.getProposal(id))?.candidate.body).toBe('');
   });
 });
