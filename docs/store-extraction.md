@@ -474,12 +474,17 @@ The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds a
 optional `requestKey` to `proposeCreate`; keys must be well-formed Unicode strings,
 not empty or whitespace-only, and at most 1024 UTF-8 bytes. A retry with matching candidate,
 proposer and evidence returns the original proposal ID after settlement unless
-the proposal was erased; a conflicting reuse returns `REQUEST_KEY_CONFLICT`
-without writing. The owner decided that erasure retains the key identity, removes
-the input digest, and refuses all retries with that key without a content comparison.
+the proposal was erased or its key retired after a partial scrub; a conflicting reuse returns `REQUEST_KEY_CONFLICT`
+without writing. In the delivery lane on 2026-11-03, the owner chose “Refuse all retries after
+purge”: erasure retains the key identity, removes the input digest, and refuses
+all retries with that key without a content comparison. This supersedes the
+issue decision’s matching-retry rule after purge.
 The shared proposal-write seam also retires the key and removes the old digest if
 a partial scrub changes hashed candidate or evidence content, marking the key
-as `request_key_retired`. Live keyed proposals with a mismatching stored digest
+as `request_key_retired`. A partially scrubbed proposal can remain pending and
+applicable. To recover a lost receipt without minting another proposal, compute
+the SHA-256 hex digest of the original UTF-8 key and find its `request_key_hash`
+in `listProposals()`, then inspect its state. Live keyed proposals with a mismatching stored digest
 are refused as corrupt. Four purge-integration vectors pass on the real purge
 implementation in both profiles. Completed full-purge and partial-label-scrub
 tests also check that store and coordination bytes do not retain the old digest.

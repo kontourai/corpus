@@ -406,8 +406,8 @@ export interface KnowledgeStoreCreateProposals {
    * source references in `candidate.provenance`: they become the created record's
    * provenance on `applyCreate`. An optional requestKey is store-wide, nonempty
    * and not whitespace-only, must be well-formed Unicode, with a 1024 UTF-8 byte limit. Matching retries return
-   * the original ID unless the proposal is erased; differing input refuses
-   * REQUEST_KEY_CONFLICT. After erasure, all uses of that key are refused with
+   * the original ID unless the proposal is erased or its key retired after a scrub; differing input refuses
+   * REQUEST_KEY_CONFLICT. After erasure or retirement, all uses of that key are refused with
    * REQUEST_KEY_CONFLICT and the content digest is removed. Use opaque keys.
    * A corrupt retained proposal makes keyed lookup fail with KnowledgeStoreCorruptionError.
    */
