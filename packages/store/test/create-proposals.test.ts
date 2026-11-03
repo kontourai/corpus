@@ -254,6 +254,15 @@ describe.each([
     }
   });
 
+  test('keyed retry with omitted source references conflicts without writes', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 'ref-1' };
+    const options = { requestKey: 'omit-source-ref' };
+    await store.proposeCreate(candidate({ id: 'omit-ref', provenance: { agent: 'writer', source_refs: [ref] } }), 'writer', evidence, options);
+    const before = tree(root);
+    expect(await code(store.proposeCreate(candidate({ id: 'omit-ref', provenance: { agent: 'writer' } }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+  });
+
   test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
     const ref = { kind: 'session-transcript' as const, harness: 'é'.repeat(2048), session_id: 'x'.repeat(4096), transcript_ref: 't', sitting_id: undefined, range: undefined };
     const withBoundary = { ...ref, range: { start: 1, end: 1 } };

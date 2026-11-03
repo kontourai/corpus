@@ -293,9 +293,9 @@ Each later change that implements an owner decision removes its vectors from
 the expected-fail list in the same commit; the runner fails a listed vector
 that starts passing. The list is empty when every decision has shipped.
 
-0 of the 4 expected failures are bound to ref/kind/expected/actual, and 4 to
-specific error patterns. The remaining vectors check full erasure, partial scrub, and retry ordering for
-blocked and erased proposals; they await corpus#41 and
+0 of the 5 expected failures are bound to ref/kind/expected/actual, and 5 to
+specific error patterns. The remaining vectors check full erasure, partial scrub, retry ordering, and
+source-reference removal; they await corpus#41 and
 fail specifically because `purge` is unavailable.
 
 ### Host vectors
@@ -509,6 +509,8 @@ serialization that adds, removes or changes references. It rejects sparse arrays
 and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
 Keyed retries bind the references: changed or omitted attribution conflicts.
+The source-reference purge-scrub vector is expected-fail until corpus#41 supplies
+real purge; its current tombstone and proposal scrub paths omit `source_refs`.
 
 The vault's proposal-size estimate serializes validated `source_refs` with the
 candidate, so attribution bytes count toward the note bound before a keyed or
