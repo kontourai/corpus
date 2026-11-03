@@ -36,10 +36,42 @@ import {
 
 const JOURNAL_VERSION = 1;
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
-// The start of every journal this engine writes: JSON.stringify of a Journal, in key order.
-// A string is any run of non-quote, non-backslash characters or escapes, so an id or an
-// operation name containing escaped quotes, newlines or unicode still matches, at any length.
-const JOURNAL_TEMPORARY = /^\{"version":1,"transactionId":"(?:[^"\\]|\\.)*","operation":"(?:[^"\\]|\\.)*","phase":"(?:prepared|committed)","entries":\[/s;
+/**
+ * True when `text` starts the way every journal this engine writes does:
+ * JSON.stringify of a Journal, in key order, up to the `entries` array. A string is
+ * scanned to its closing quote, skipping escapes, so an id or operation name with
+ * escaped quotes, newlines or unicode matches at any length. This is a loop, not a
+ * regular expression: a pattern with a repeated group overflows the stack on a
+ * multi-megabyte id, and an unreadable classifier would block the whole store.
+ */
+function startsLikeJournal(text: string): boolean {
+  let at = 0;
+  const literal = (value: string): boolean => {
+    if (!text.startsWith(value, at)) return false;
+    at += value.length;
+    return true;
+  };
+  const string = (): boolean => {
+    while (at < text.length) {
+      const code = text.charCodeAt(at);
+      if (code === 0x22) {
+        at += 1;
+        return true;
+      }
+      at += code === 0x5c ? 2 : 1;
+    }
+    return false;
+  };
+  return (
+    literal('{"version":1,"transactionId":"') &&
+    string() &&
+    literal(',"operation":"') &&
+    string() &&
+    literal(',"phase":"') &&
+    (literal('prepared') || literal('committed')) &&
+    literal('","entries":[')
+  );
+}
 const LEGACY_LOCK_FILE = '.station-knowledge-mutation';
 function knowledgeLockIdentity(
   rootRealpath: string,
@@ -687,7 +719,7 @@ export class KnowledgeFileTransactions {
       } catch {
         continue; // unreadable or already gone: nothing we can classify
       }
-      if (JOURNAL_TEMPORARY.test(text)) {
+      if (startsLikeJournal(text)) {
         try {
           this.removePublished(path);
         } catch (error) {

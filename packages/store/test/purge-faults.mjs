@@ -84,18 +84,22 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /allowPurge must be exactly true/ },
   { id: 'prune-follows-symlinks', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '          this.assertNoSymlink(directory);\n', ''),
     args: focused('test/purge.test.ts'), reason: /swapped for a symlink/ },
-  { id: 'partial-journal-temp-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (JOURNAL_TEMPORARY.test(text)) {', "if (JOURNAL_TEMPORARY.test(text) && text.trimEnd().endsWith('}')) {"),
+  { id: 'partial-journal-temp-kept', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (startsLikeJournal(text)) {', "if (startsLikeJournal(text) && text.trimEnd().endsWith('}')) {"),
     args: focused('test/purge.test.ts'), reason: /cut short by a crash/ },
-  { id: 'foreign-json-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (JOURNAL_TEMPORARY.test(text)) {', 'if (/^\\{"version":1,"transactionId"/.test(text)) {'),
+  { id: 'foreign-json-deleted', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (startsLikeJournal(text)) {', 'if (/^\\{"version":1,"transactionId"/.test(text)) {'),
     args: focused('test/purge.test.ts'), reason: /cut short by a crash/ },
   { id: 'orphan-unlink-failure-swallowed', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '        } catch (error) {\n          throw unavailable(error);\n        }\n      }\n    }\n  }\n\n  /** Best effort', '        } catch {\n          // swallowed\n        }\n      }\n    }\n  }\n\n  /** Best effort'),
     args: focused('test/purge.test.ts'), reason: /cannot be removed fails the operation/ },
   { id: 'readback-skips-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "            this.pruneEmptyDirectories(context.journal);\n          }\n          this.observe(operation, 'applied-readback');", "          }\n          this.observe(operation, 'applied-readback');"),
     args: focused('test/purge.test.ts'), reason: /commit marker had to be skipped/ },
-  { id: 'journal-temp-prefix-too-strict', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '"transactionId":"(?:[^"\\\\]|\\\\.)*","operation"', '"transactionId":"[^"]*","operation"'),
+  // A backslash is read as an ordinary character, so an escaped quote ends the string early.
+  { id: 'journal-temp-prefix-too-strict', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'at += code === 0x5c ? 2 : 1;', 'at += 1;'),
     args: focused('test/purge.test.ts'), reason: /every cut of a journal with escaped quotes/ },
-  { id: 'journal-temp-head-truncated', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'JOURNAL_TEMPORARY.test(text)', 'JOURNAL_TEMPORARY.test(text.slice(0, 1024))'),
+  { id: 'journal-temp-head-truncated', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'startsLikeJournal(text)', 'startsLikeJournal(text.slice(0, 1024))'),
     args: focused('test/purge.test.ts'), reason: /very long id and operation/ },
+  // The regular-expression form of the same check overflows the stack on a multi-megabyte header.
+  { id: 'journal-temp-regexp-recursion', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'startsLikeJournal(text)) {', '/^\\{"version":1,"transactionId":"(?:[^"\\\\]|\\\\.)*","operation"/s.test(text)) {'),
+    args: focused('test/purge.test.ts'), reason: /multi-megabyte journal header/ },
 ];
 
 function run(label, args, success) {

@@ -280,6 +280,19 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     }
   });
 
+  test('a multi-megabyte journal header is recognised, and a foreign file with an unterminated string never blocks the store', async () => {
+    await raw('big');
+    const long = 'x'.repeat(16 * 1024 * 1024);
+    const journal = JSON.stringify({ version: 1, transactionId: long, operation: 'purge', phase: 'prepared', entries: [{ path: 'x.md', before: Buffer.from('BIG-NEEDLE').toString('base64'), after: null }] });
+    writeFileSync(join(root, '.big.tmp'), journal);
+    const foreign = `{"version":1,"transactionId":"${long}`;
+    writeFileSync(join(root, '.unterminated.tmp'), foreign);
+    await store.get('big');
+    expect(existsSync(join(root, '.big.tmp'))).toBe(false);
+    expect(readFileSync(join(root, '.unterminated.tmp'), 'utf8')).toBe(foreign);
+    await expect(store.get('big')).resolves.toMatchObject({ id: 'big' });
+  });
+
   test('a journal temporary that cannot be removed fails the operation instead of being skipped', async () => {
     await raw('stuck');
     writeFileSync(join(root, '.stuck.tmp'), '{"version":1,"transactionId":"t","operation":"purge","phase":"prepared","entries":[]}');
