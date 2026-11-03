@@ -16,6 +16,10 @@ const run = (label, pattern, good, testFile = 'test/create-proposals.test.ts') =
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['digest-refs', 'src/shared/create-proposals.ts',
+    ['hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: proposal.evidence }))'],
+    ['hash(canonical({ candidate: { ...stored, provenance: { ...stored.provenance, source_refs: undefined } }, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: { ...proposal.candidate, provenance: { ...proposal.candidate.provenance, source_refs: undefined } }, proposerId: proposal.proposer_id, evidence: proposal.evidence }))'],
+    'keyed retries bind structured source references'],
   ['proposal-postcheck', 'src/shared/create-proposals.ts', 'if (JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs))', 'if (sourceRefs !== undefined && JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs))', 'proposal stores the validated copy'],
   ['vault-copy', 'src/obsidian-store.ts', '...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),', '...(sourceRefs !== undefined ? { source_refs: input.provenance.source_refs } : {}),', 'direct create safely'],
   ['vault-estimate', 'src/obsidian-store.ts', "assertCreateFields(candidate, 'proposeCreate'),", 'undefined,', 'keyed proposal note sizing includes structured source references', 'test/vault-note-bound.test.ts'],
@@ -36,8 +40,10 @@ const cases = [
 ];
 for (const [name, file, before, after, pattern, testFile] of cases) {
   const path = join(root, 'packages/store', file); const original = readFileSync(path, 'utf8');
-  assert.ok(original.includes(before), `missing anchor: ${name}`); run(`${name}-baseline`, pattern, true, testFile);
-  try { writeFileSync(path, original.replace(before, after)); run(`${name}-injected`, pattern, false, testFile); }
+  const beforeList = Array.isArray(before) ? before : [before]; const afterList = Array.isArray(after) ? after : [after];
+  let changed = original; for (let i = 0; i < beforeList.length; i++) { assert.ok(changed.includes(beforeList[i]), `missing anchor: ${name}`); changed = changed.replace(beforeList[i], afterList[i]); }
+  run(`${name}-baseline`, pattern, true, testFile);
+  try { writeFileSync(path, changed); run(`${name}-injected`, pattern, false, testFile); }
   finally { writeFileSync(path, original); }
   run(`${name}-restored`, pattern, true, testFile);
 }

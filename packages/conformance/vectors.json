@@ -12060,6 +12060,155 @@
       ]
     },
     {
+      "id": "source-refs-keyed-retry",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: structured source references (2026-11-03)"
+        }
+      ],
+      "regression": "A keyed retry silently drops changed source attribution.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-1"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-1"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "save": "retry"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer",
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s",
+                    "transcript_ref": "ref-2"
+                  }
+                ]
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "keyed-source",
+              "type": "raw",
+              "title": "t",
+              "body": "b",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "source-ref-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "retry",
+          "equals": "$p"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        }
+      ]
+    },
+    {
       "id": "root-binding-match",
       "source": [
         {

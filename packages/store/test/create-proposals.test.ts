@@ -241,6 +241,19 @@ describe.each([
     expect(tree(root)).toEqual(before);
   });
 
+  test('keyed retries bind structured source references', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 'ref-1' };
+    const input = candidate({ id: 'keyed-source', provenance: { agent: 'writer', source_refs: [ref] } });
+    const options = { requestKey: 'source-ref-key' };
+    const id = await store.proposeCreate(input, 'writer', evidence, options);
+    const before = tree(root);
+    expect(await store.proposeCreate(input, 'writer', evidence, options)).toBe(id);
+    for (const provenance of [{ agent: 'writer', source_refs: [{ ...ref, transcript_ref: 'ref-2' }] }, { agent: 'writer' }]) {
+      expect(await code(store.proposeCreate(candidate({ id: 'keyed-source', provenance }), 'writer', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+      expect(tree(root)).toEqual(before);
+    }
+  });
+
   test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
     const ref = { kind: 'session-transcript' as const, harness: 'é'.repeat(2048), session_id: 'x'.repeat(4096), transcript_ref: 't', sitting_id: undefined, range: undefined };
     const withBoundary = { ...ref, range: { start: 1, end: 1 } };
