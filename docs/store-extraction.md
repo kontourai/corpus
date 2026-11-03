@@ -522,6 +522,9 @@ The source-reference purge-scrub vector passes against real purge in both profil
 Pending proposals, cascaded records and all tombstone shapes also drop the field;
 the separate in-flight purge-journal expected failure remains.
 
+Validation snapshots the reference-array length before copying so a changing
+proxy cannot bypass the 256-entry bound.
+
 Hand-edited vault frontmatter reads plain scalars in source-reference string
 fields as strings, like other store string fields.
 

@@ -13,9 +13,12 @@ const run = (label, pattern, good, testFile = 'test/create-proposals.test.ts') =
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', testFile, '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log);
   assert.equal(r.error, undefined); if (good) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.ok(log.includes(`FAIL  ${testFile}`), 'fault must reach the selected test'); assert.match(log, /AssertionError:|MissingEvidenceError:|KnowledgeStoreCorruptionError:/); }
+  if (label === 'digest-refs-injected') assert.match(log, /expected undefined to be 'REQUEST_KEY_CONFLICT'/);
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['changing-length', 'src/shared/source-refs.ts', ['Number(key) >= length', 'i < length'], ['Number(key) >= value.length', 'i < value.length'], 'structured source refs reject a changing array length'],
+  ['plain-prototype', 'src/shared/source-refs.ts', 'isRecord(v) && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)', 'isRecord(v)', 'structured source refs reject class instances'],
   ['vault-plain-strings', 'src/shared/frontmatter.ts', "    if (index === 'source_refs' && path.length === 4 && typeof key === 'number' && SOURCE_REF_STRINGS.has(String(evidenceKey))) return 'string';\n", '', 'hand-edited source reference strings', 'test/obsidian-store.contract.test.ts'],
   ['empty-refs-digest', 'src/shared/create-proposals.ts', 'Object.keys(object).sort()', "Object.keys(object).filter((key) => key !== 'source_refs' || !Array.isArray(object[key]) || (object[key] as unknown[]).length !== 0).sort()", 'empty and omitted source references'],
   ['tombstone-refs', 'src/shared/purge.ts', '      agent: provenance.agent,', '      agent: provenance.agent, ...(provenance.source_refs ? { source_refs: provenance.source_refs } : {}),', 'all tombstone shapes', 'test/source-ref-purge-integration.test.ts'],
@@ -25,8 +28,8 @@ const cases = [
     'hash(canonical({ candidate: existing && stored.provenance.source_refs === undefined ? { ...stored, provenance: { ...stored.provenance, source_refs: existing.candidate.provenance.source_refs } } : stored, proposerId, evidence: { agent, proposal } }))',
     'keyed retry with omitted source references'],
   ['digest-refs', 'src/shared/create-proposals.ts',
-    ['hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: proposal.candidate, proposerId: proposal.proposer_id, evidence: { agent: proposal.evidence.agent, proposal: proposal.evidence.proposal } }))'],
-    ['hash(canonical({ candidate: { ...stored, provenance: { ...stored.provenance, source_refs: undefined } }, proposerId, evidence: { agent, proposal } }))', 'hash(canonical({ candidate: { ...proposal.candidate, provenance: { ...proposal.candidate.provenance, source_refs: undefined } }, proposerId: proposal.proposer_id, evidence: { agent: proposal.evidence.agent, proposal: proposal.evidence.proposal } }))'],
+    'Object.keys(object).sort().map',
+    "Object.keys(object).filter((key) => key !== 'source_refs').sort().map",
     'keyed retries bind structured source references'],
   ['proposal-postcheck', 'src/shared/create-proposals.ts', 'if (JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs))', 'if (sourceRefs !== undefined && JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs))', 'proposal stores the validated copy'],
   ['vault-copy', 'src/obsidian-store.ts', '...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),', '...(sourceRefs !== undefined ? { source_refs: input.provenance.source_refs } : {}),', 'direct create safely'],
@@ -35,11 +38,11 @@ const cases = [
   ['default-copy', 'src/default-store.ts', '...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),', '...(sourceRefs !== undefined ? { source_refs: input.provenance.source_refs } : {}),', 'direct create safely'],
   ['copy-alias', 'src/shared/source-refs.ts', '  return result;', '  return value as KitSourceRef[];', 'direct create safely'],
   ['byte-count', 'src/shared/source-refs.ts', "Buffer.byteLength(v, 'utf8')", 'v.length', 'accepted source reference boundaries'],
-  ['max-count', 'src/shared/source-refs.ts', 'value.length > 256', 'value.length >= 256', 'accepted source reference boundaries'],
+  ['max-count', 'src/shared/source-refs.ts', 'length > 256', 'length >= 256', 'accepted source reference boundaries'],
   ['max-bytes', 'src/shared/source-refs.ts', "Buffer.byteLength(v, 'utf8') <= 4096", "Buffer.byteLength(v, 'utf8') < 4096", 'accepted source reference boundaries'],
   ['range-equal', 'src/shared/source-refs.ts', '(end as number) < (start as number)', '(end as number) <= (start as number)', 'accepted source reference boundaries'],
   ['sparse', 'src/shared/source-refs.ts', "if (!Object.hasOwn(value, i)) return null;", "if (!Object.hasOwn(value, i)) continue;", 'direct create safely'],
-  ['count', 'src/shared/source-refs.ts', 'value.length > 256', 'value.length > 999', 'structured source refs'],
+  ['count', 'src/shared/source-refs.ts', 'length > 256', 'length > 999', 'structured source refs'],
   ['blank', 'src/shared/source-refs.ts', 'v.trim().length > 0', 'true', 'structured source refs'],
   ['range-start', 'src/shared/source-refs.ts', '(start as number) < 1', '(start as number) < 0', 'structured source refs'],
   ['range-safe', 'src/shared/source-refs.ts', '!Number.isSafeInteger(end)', '!Number.isInteger(end)', 'structured source refs'],
