@@ -11,12 +11,14 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 function run(label, pattern, pass) {
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/root-binding.test.ts', '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log); assert.equal(r.error, undefined);
-  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved/); }
+  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved|RootBindingMismatchError/); }
   console.log(`${label}: exit ${r.status}`);
 }
 const cases = [
   ['mismatch', "adapter.rootBinding() !== expected", 'false', 'matches canonical aliases'],
-  ['overwrite', "if (files.readText(path, 64) === null) files.writeText(path, randomBytes(32).toString('hex'));\n      else { try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); } }", "files.writeText(path, randomBytes(32).toString('hex'));", 'initialization never'],
+  ['overwrite', 'scaffoldNewRootIdentity(options.storeRoot);', "files.writeText(join(options.storeRoot, '.corpus-root-id'), 'a'.repeat(64));", 'initialization does not replace|initialization never'],
+  ['fifo', ' | constants.O_NONBLOCK', '', 'FIFO marker'],
+  ['scaffold-recovery', 'settleScaffoldMarker(options.storeRoot);', 'void 0;', 'completed marker left'],
   ['marker-validation', "if (!stat.isFile() || stat.nlink !== 1 || stat.size !== 64)", "if (false)", 'malformed markers'],
 ];
 const path = join(root, 'packages/store/src/root-binding.ts');

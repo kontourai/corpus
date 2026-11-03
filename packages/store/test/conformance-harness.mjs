@@ -50,6 +50,7 @@ export async function makeHarness(profile) {
   }
   const specials = {
     async 'root-binding'({ operation }) {
+      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy'].includes(operation.mode), 'unknown root-binding mode');
       if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
       if (operation.mode === 'legacy') {
         const legacy = join(base, 'legacy'); await mkdir(legacy);

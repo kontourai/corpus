@@ -1,6 +1,6 @@
-import { constants, closeSync, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
-import { createHash, randomBytes } from 'node:crypto';
-import { KnowledgeFileTransactions } from './shared/file-transactions.js';
+import { constants, closeSync, fstatSync, openSync, readFileSync, realpathSync, lstatSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { KnowledgeFileTransactions, scaffoldNewRootIdentity, settleScaffoldMarker } from './shared/file-transactions.js';
 import type { StoreOptions } from './services.js';
 import { join } from 'node:path';
 import type { KnowledgeStoreAdapter, RootBoundAdapter } from './contracts.js';
@@ -9,7 +9,7 @@ import { KnowledgeStoreCorruptionError, RootBindingMismatchError } from './error
 const MARKER = '.corpus-root-id';
 
 function marker(root: string): string {
-  const fd = openSync(join(root, MARKER), constants.O_RDONLY | constants.O_NOFOLLOW);
+  const fd = openSync(join(root, MARKER), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size !== 64) throw new Error('invalid root identity marker');
@@ -24,14 +24,23 @@ function binding(root: string): string {
 }
 /** Explicitly initialize an existing unbound root under the host's transaction lock. */
 export async function initializeRootBinding(options: StoreOptions): Promise<void> {
-  const files = new KnowledgeFileTransactions(options.storeRoot, {}, options);
+  let files: KnowledgeFileTransactions;
+  try {
+    const rootInfo = lstatSync(options.storeRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new RootBindingMismatchError();
+    files = new KnowledgeFileTransactions(options.storeRoot, {}, options);
+  } catch (error) {
+    if (error instanceof RootBindingMismatchError || error instanceof KnowledgeStoreCorruptionError || (error as NodeJS.ErrnoException).code === 'ENOENT') throw new RootBindingMismatchError();
+    throw error;
+  }
   try {
     await files.mutate('initializeRootBinding', () => {
-      const path = join(options.storeRoot, MARKER);
-      if (files.readText(path, 64) === null) files.writeText(path, randomBytes(32).toString('hex'));
-      else { try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); } }
+      // Both constructors and initialization publish with link-no-replace. A
+      // completed competing marker can never be silently replaced by a rename.
+      scaffoldNewRootIdentity(options.storeRoot);
+      settleScaffoldMarker(options.storeRoot);
+      try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); }
     });
-    try { binding(options.storeRoot); } catch { throw new RootBindingMismatchError(); }
   } catch (error) {
     if (error instanceof KnowledgeStoreCorruptionError) throw new RootBindingMismatchError();
     throw error;
@@ -44,5 +53,5 @@ export function assertAdapterBoundTo(adapter: { rootBinding(): string }, root: s
 export function assertAdapterBoundTo(adapter: KnowledgeStoreAdapter | { rootBinding(): string }, root: string): void {
   let expected: string;
   try { expected = binding(root); } catch { throw new RootBindingMismatchError(); }
-  if (!adapter || !('rootBinding' in adapter) || typeof adapter.rootBinding !== 'function' || adapter.rootBinding() !== expected) throw new RootBindingMismatchError();
+  if (!adapter || (typeof adapter !== 'object' && typeof adapter !== 'function') || !('rootBinding' in adapter) || typeof adapter.rootBinding !== 'function' || adapter.rootBinding() !== expected) throw new RootBindingMismatchError();
 }

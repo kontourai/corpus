@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { KnowledgeFileTransactions, scaffoldNewRootIdentity } from '../src/shared/file-transactions.js';
 import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '../src/index.js';
 
 describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAdapter]] as const)('root binding %s', (_profile, Constructor) => {
@@ -42,6 +43,40 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       }
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
+  test('initialization does not replace a marker published between checking and writing', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-race-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const prototype = KnowledgeFileTransactions.prototype as unknown as { atomicWrite(path: string, value: Buffer): void };
+      const original = prototype.atomicWrite; let prior: string | undefined;
+      const spy = vi.spyOn(prototype, 'atomicWrite').mockImplementation(function (this: unknown, path, value) {
+        if (path === join(root, '.corpus-root-id')) {
+          scaffoldNewRootIdentity(root); prior = new Constructor(options).rootBinding();
+        }
+        return original.call(this, path, value);
+      });
+      try {
+        await initializeRootBinding(options);
+        const current = new Constructor(options).rootBinding();
+        if (prior) expect(current).toBe(prior);
+        expect(spy.mock.calls.some(([path]) => path === join(root, '.corpus-root-id'))).toBe(false);
+      } finally { spy.mockRestore(); }
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  test('recovers a completed marker left linked to its scaffold temporary', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-scaffold-crash-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const temporary = join(root, `.corpus-root-id-${'a'.repeat(32)}.tmp`); const marker = join(root, '.corpus-root-id');
+      writeFileSync(temporary, 'a'.repeat(64), { mode: 0o600 }); linkSync(temporary, marker);
+      await initializeRootBinding(options);
+      expect(readFileSync(marker, 'utf8')).toBe('a'.repeat(64));
+      expect(existsSync(temporary)).toBe(false);
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
   test('initialization never replaces an existing identity', async () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-root-idempotent-'));
     try {
@@ -74,6 +109,28 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       expect(() => assertAdapterBoundTo(reopened, root)).not.toThrow();
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
+  test('initialization and concurrent scaffolding never replace a published binding', async () => {
+    for (let round = 0; round < 3; round++) {
+      const base = mkdtempSync(join(tmpdir(), 'corpus-root-init-race-'));
+      try {
+        const root = join(base, 'store'); const coordinationDirectory = join(base, 'coordination');
+        const fixture = fileURLToPath(new URL('./fixtures/root-binding-child.ts', import.meta.url));
+        const children = Array.from({ length: 6 }, () => new Promise<string>((resolve, reject) => {
+          const child = spawn(process.execPath, ['--import', 'tsx', fixture, root, coordinationDirectory, _profile]);
+          let stdout = ''; let stderr = ''; child.stdout.on('data', (chunk) => { stdout += chunk; }); child.stderr.on('data', (chunk) => { stderr += chunk; });
+          child.on('error', reject); child.on('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr)));
+        }));
+        const deadline = Date.now() + 10_000;
+        while (!existsSync(root) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 2));
+        expect(existsSync(root)).toBe(true);
+        const options = { storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+        await Promise.all(Array.from({ length: 4 }, () => initializeRootBinding(options)));
+        const values = await Promise.all(children); const final = new Constructor(options).rootBinding();
+        expect(values.every((value) => value === 'unbound' || value === final)).toBe(true);
+        expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+      } finally { rmSync(base, { recursive: true, force: true }); }
+    }
+  }, 60_000);
   test('matches canonical aliases and rejects other and rescaffolded roots', () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-root-binding-'));
     try {
@@ -107,5 +164,32 @@ test('initializing a kit-v1 vault is an explicit host write and does not enable 
     expect(() => assertAdapterBoundTo(after, root)).not.toThrow();
     await expect(after.create({ type: 'raw', title: 't', body: 'b', category: 'test', provenance: { agent: 'a' } })).rejects.toMatchObject({ code: 'READ_ONLY' });
     expect((await before.get('kit-concept-0001'))?.id).toBe('kit-concept-0001');
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test.skipIf(process.platform === 'win32')('FIFO marker refuses without blocking a constructor or helper', () => {
+  const base = mkdtempSync(join(tmpdir(), 'corpus-root-fifo-'));
+  try {
+    const root = join(base, 'store'); mkdirSync(root); execFileSync('mkfifo', [join(root, '.corpus-root-id')]);
+    const fixture = fileURLToPath(new URL('./fixtures/root-binding-fifo.ts', import.meta.url));
+    for (const profile of ['default', 'vault']) {
+      const child = spawnSync(process.execPath, ['--import', 'tsx', fixture, root, join(base, `coord-${profile}`), profile], { encoding: 'utf8', timeout: 5000 });
+      expect(child.error).toBeUndefined(); expect(child.status, child.stderr).toBe(0);
+    }
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test('invalid adapter values and missing or symlink roots refuse without creating a root', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'corpus-root-invalid-'));
+  try {
+    const root = join(base, 'root'); mkdirSync(root);
+    const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+    await initializeRootBinding(options);
+    expect(() => assertAdapterBoundTo(42 as never, root)).toThrow(expect.objectContaining({ code: 'ROOT_BINDING_MISMATCH' }));
+    const missing = join(base, 'missing');
+    await expect(initializeRootBinding({ ...options, storeRoot: missing })).rejects.toMatchObject({ code: 'ROOT_BINDING_MISMATCH' });
+    expect(existsSync(missing)).toBe(false);
+    const alias = join(base, 'alias'); symlinkSync(root, alias);
+    await expect(initializeRootBinding({ ...options, storeRoot: alias })).rejects.toMatchObject({ code: 'ROOT_BINDING_MISMATCH' });
   } finally { rmSync(base, { recursive: true, force: true }); }
 });

@@ -506,3 +506,5 @@ vectors. Existing unmarked roots require explicit initialization before a new
 adapter can attest them; this preserves legacy vault reads without writing to
 the vault. The host still authorizes the root. Initialization is an explicit host-authorized
 write, even for a kit-v1 vault; it does not enable record mutation there.
+Initialization publishes markers without replacing a concurrent scaffold and can
+recover a matching temporary link left after a completed marker was published.
