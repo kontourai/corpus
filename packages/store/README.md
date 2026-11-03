@@ -311,3 +311,7 @@ The same identity is required on the construction-free observation port. Hosts
 with a runtime-home resolver must additionally check that resolver against the
 captured home. Record data remains identical on re-read; whitespace/style may
 normalize except for the approved top-level lossy plain tokens.
+
+### Owner decision: create request keys (2026-11-03)
+
+The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in any state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key digest and proposal share one transaction and are retained with the proposal, including after rejection or record purge. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be nonempty and at most 1024 UTF-8 bytes.

@@ -88,6 +88,25 @@ describe.each([
     expect(await store.listByType('raw')).toEqual([]);
   });
 
+  test('request key retries return the original receipt and conflicts write nothing', async () => {
+    const options = { requestKey: 'request-1' };
+    const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
+    const before = tree(root);
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect(tree(root)).toEqual(before);
+    expect(await code(store.proposeCreate(candidate({ title: 'different' }), 'agent-a', evidence, options))).toBe('REQUEST_KEY_CONFLICT');
+    expect(tree(root)).toEqual(before);
+    expect(await store.listProposals()).toHaveLength(1);
+    await store.applyCreate(id, 'reviewer');
+    expect(await open().proposeCreate(candidate(), 'agent-a', evidence, options)).toBe(id);
+    expect((await store.getProposal(id))?.state).toBe('applied');
+    const other = await store.proposeCreate(candidate({ id: 'other' }), 'agent-a', evidence);
+    await store.rejectCreate(other, 'reviewer', 'no');
+    const rejected = await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' });
+    await store.rejectCreate(rejected, 'reviewer', 'no');
+    expect(await store.proposeCreate(candidate({ id: 'rejected' }), 'agent-a', evidence, { requestKey: 'request-2' })).toBe(rejected);
+  });
+
   test('pending and rejected proposals are outside the working set and every ordinary read', async () => {
     await store.create({ ...candidate({ id: 'ordinary' }), title: 'Ordinary' });
     const pending = await store.proposeCreate(candidate({ id: 'pending-record', aliases: ['pending-slug'], ttl_seconds: 1 }), 'agent-a', evidence);

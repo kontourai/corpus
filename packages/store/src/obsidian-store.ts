@@ -1443,11 +1443,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
+    options?: { requestKey?: string },
   ): Promise<string> {
     return this.mutate('proposeCreate', () =>
       this.proposals.stage(candidate, proposerId, evidence, (id) =>
         this.readRecord(id, this.loadPathIndex()) !== null,
-      ),
+      options),
     );
   }
 
