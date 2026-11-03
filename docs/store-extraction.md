@@ -504,6 +504,7 @@ before persistence, including arrays with inherited serialization hooks; it refu
 serialization that adds, removes or changes references. It rejects sparse arrays
 and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
+Keyed retries bind the references: changed or omitted attribution conflicts.
 
 The vault's proposal-size estimate serializes validated `source_refs` with the
 candidate, so attribution bytes count toward the note bound before a keyed or
