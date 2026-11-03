@@ -511,6 +511,22 @@ describe('purge — vault layout', () => {
       expect(noteBytes('near')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
     });
 
+    test('also drops an agent or session id too long to keep, so a note made of them can still be erased', async () => {
+      const scratch = open('vault', join(base, 'scratch-agent'));
+      const make = (adapter: Store, pad: number) =>
+        adapter.create({ id: 'wide', type: 'concept', title: 't', body: 'b', category: 'engineering', provenance: { agent: `\u0000${'a'.repeat(pad)}`, session_id: 's'.repeat(1000) } });
+      await make(scratch, 1);
+      const probe = Buffer.byteLength(readFileSync(join(base, 'scratch-agent', JSON.parse(readFileSync(join(base, 'scratch-agent', 'path-index.json'), 'utf8')).by_id.wide.path), 'utf8'));
+      await make(store, 1 + (VAULT_NOTE_MAX_BYTES - probe));
+      expect(noteBytes('wide')).toBe(VAULT_NOTE_MAX_BYTES);
+      await store.purge(['wide'], { agent: 'privacy-officer', rationale: 'erasure request 42' });
+      const stone = (await store.get('wide'))!;
+      expect(stone.status).toBe('purged');
+      expect(stone.provenance).toEqual({ agent: '[omitted]' });
+      expect(stone.mutation_log![0].evidence).toMatchObject({ cause: 'requested', compact: true, omitted_source_ids: 0, omitted_agent_bytes: expect.any(Number), omitted_session_id_bytes: 1000 });
+      expect(noteBytes('wide')).toBeLessThanOrEqual(VAULT_NOTE_MAX_BYTES);
+    });
+
     test('keeps identity and the purge entry, with counts of what it dropped, when even the compact entry would not fit', async () => {
       await noteNearBound('edge', 5);
       await store.purge(['edge'], { agent: 'privacy-officer', rationale: 'erasure request 42' });

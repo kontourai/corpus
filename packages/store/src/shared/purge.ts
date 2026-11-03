@@ -223,6 +223,12 @@ export function tombstoneOf(
 ): KitRecord {
   const cause = via ? 'sole-support-purged' : 'requested';
   if (shape === 'minimal') {
+    // The agent and session id are kept when they are short; a note at the size limit can be made
+    // mostly of either, and they are the only retained text without a bound of their own.
+    const short = (value: string | undefined): value is string =>
+      typeof value === 'string' && Buffer.byteLength(JSON.stringify(value)) <= 256;
+    const agent = record.provenance.agent;
+    const session = record.provenance.session_id;
     return {
       id: record.id,
       type: record.type,
@@ -232,7 +238,10 @@ export function tombstoneOf(
       status: 'purged',
       created_at: record.created_at,
       updated_at: at,
-      provenance: { agent: record.provenance.agent },
+      provenance: {
+        agent: short(agent) ? agent : '[omitted]',
+        ...(short(session) ? { session_id: session } : {}),
+      },
       links: [],
       mutation_log: [
         {
@@ -245,6 +254,8 @@ export function tombstoneOf(
             omitted_source_ids: record.provenance.source_ids?.length ?? 0,
             omitted_links: record.links?.length ?? 0,
             omitted_log_entries: record.mutation_log?.length ?? 0,
+            ...(short(agent) ? {} : { omitted_agent_bytes: Buffer.byteLength(agent) }),
+            ...(session === undefined || short(session) ? {} : { omitted_session_id_bytes: Buffer.byteLength(session) }),
           },
         },
       ],

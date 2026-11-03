@@ -144,6 +144,8 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /near the vault note bound/ },
   { id: 'survivor-prose-not-dropped', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'kept = survivor(true);', 'throw error;'),
     args: focused('test/purge.test.ts'), reason: /without its prose/ },
+  { id: 'tombstone-keeps-long-agent', file: purge, mutate: (s) => swap(s, "agent: short(agent) ? agent : '[omitted]',", 'agent,'),
+    args: focused('test/purge.test.ts'), reason: /agent or session id too long to keep/ },
 ];
 
 function run(label, args, success) {

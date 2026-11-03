@@ -11,7 +11,7 @@ const repo = resolve(packageRoot, '../..');
 const artifacts = process.argv[2] ? resolve(process.argv[2]) : null;
 const temporary = mkdtempSync(join(tmpdir(), 'corpus-pack-consumers-'));
 function sha256(file) { return createHash('sha256').update(readFileSync(file)).digest('hex'); }
-function run(command, args, cwd) { return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000 }); }
+function run(command, args, cwd, timeout = 180_000) { return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout }); }
 function pack(cwd) {
   const output = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temporary], cwd));
   return join(temporary, output[0].filename);
@@ -66,7 +66,8 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   const manifest = JSON.parse(readFileSync(join(js, 'kit-vault/.corpus-store-migration/manifest.json'), 'utf8'));
   assert.deepEqual(manifest.tool, { name: '@kontourai/corpus-store', version: JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version });
   for (const file of ['conformance.mjs', 'conformance-harness.mjs', 'store-child.mjs', 'expected-fails.json']) cpSync(join(packageRoot, 'test', file), join(js, file));
-  console.log(run(process.execPath, ['conformance.mjs'], js));
+  // Every vector runs on both profiles, several in child processes; a loaded CI runner needs more than the default.
+  console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';

@@ -119,8 +119,14 @@ silent behavior.
     would pass the limit (a note made mostly of provenance ids) falls back to a
     `purged` entry without prose or `via` (`compact: true`), and then to identity
     plus that entry with counts of what it dropped (`omitted_source_ids`,
-    `omitted_links`, `omitted_log_entries`). The default layout has no such limit
-    and always writes the full tombstone.
+    `omitted_links`, `omitted_log_entries`, and an agent or session id over 256
+    bytes: `[omitted]` and `omitted_agent_bytes` / `omitted_session_id_bytes`).
+    The default layout has no such limit and always writes the full tombstone.
+    **This is a narrow departure from "a tombstone keeps provenance, links and a
+    purge entry", made so that erasure is never blocked**: it applies only to a
+    vault note within a few hundred bytes of 16 MiB that is mostly metadata, and
+    what was lost is counted in the entry. The owner may prefer to refuse such a
+    purge instead; that is a one-line change in `fittingTombstone`.
   - **A tombstone is permanent and read-only.** `update`, `link`, `propose`,
     `apply`, `reject`, `supersede` and `retire` refuse it with `PURGED`, so do
     new `source` links, `source_ids` and compiled sources that name it, and its
