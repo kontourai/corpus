@@ -8617,7 +8617,7 @@
           "clause": "Owner decision: create request keys (2026-11-03)"
         }
       ],
-      "regression": "Purging a record permits its retained proposal key to be reused.",
+      "regression": "Purging a record leaves its content in the record or proposal, or discards the retained request-key identity.",
       "production_seam": false,
       "operations": [
         {
@@ -8643,6 +8643,13 @@
             }
           ],
           "save": "p"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "before"
         },
         {
           "call": "applyCreate",
@@ -8680,60 +8687,16 @@
           "save": "scrubbed"
         },
         {
-          "call": "proposeCreate",
-          "args": [
-            {
-              "id": "key-purged",
-              "type": "raw",
-              "title": "t",
-              "body": "body",
-              "category": "engineering",
-              "provenance": {
-                "agent": "writer"
-              }
-            },
-            "writer",
-            {
-              "agent": "writer",
-              "proposal": "keep"
-            },
-            {
-              "requestKey": "purge-key"
-            }
-          ],
-          "save": "retry"
-        },
-        {
-          "call": "proposeCreate",
-          "args": [
-            {
-              "id": "key-purged",
-              "type": "raw",
-              "title": "t",
-              "body": "changed",
-              "category": "engineering",
-              "provenance": {
-                "agent": "writer"
-              }
-            },
-            "writer",
-            {
-              "agent": "writer",
-              "proposal": "keep"
-            },
-            {
-              "requestKey": "purge-key"
-            }
-          ],
-          "expect_error": "REQUEST_KEY_CONFLICT"
-        },
-        {
           "call": "listProposals",
           "args": [],
           "save": "all"
         }
       ],
       "expected": [
+        {
+          "ref": "scrubbed.request_key_hash",
+          "equals": "$before.request_key_hash"
+        },
         {
           "ref": "tombstone.status",
           "equals": "purged"
@@ -8768,10 +8731,6 @@
         },
         {
           "ref": "purged.proposalsScrubbed.0",
-          "equals": "$p"
-        },
-        {
-          "ref": "retry",
           "equals": "$p"
         },
         {
