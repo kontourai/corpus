@@ -862,19 +862,27 @@ export function settleScaffoldMarker(root: string): void {
   for (const name of readdirSync(root)) {
     if (!/^\.corpus-root-id-[a-f0-9]{32}\.tmp$/.test(name)) continue;
     const temporary = join(root, name);
+    let fd: number;
     try {
-      const fd = openSync(temporary, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-      try {
-        const info = fstatSync(fd); const current = lstatSync(marker); const entry = lstatSync(temporary);
-        if (!info.isFile() || info.size !== 64 || (info.mode & 0o777) !== 0o600 ||
-            (process.getuid !== undefined && info.uid !== process.getuid()) ||
-            info.dev !== current.dev || info.ino !== current.ino || current.nlink !== 2 ||
-            entry.dev !== info.dev || entry.ino !== info.ino ||
-            !/^[a-f0-9]{64}$/.test(readFileSync(fd, 'utf8'))) continue;
-        unlinkSync(temporary);
-      } finally { closeSync(fd); }
-      const directory = openSync(root, constants.O_RDONLY); try { fsyncSync(directory); } finally { closeSync(directory); }
-      return;
-    } catch (error) { if (!isMissing(error)) throw error; }
+      const entry = lstatSync(temporary);
+      if (!entry.isFile() || entry.isSymbolicLink()) continue;
+      fd = openSync(temporary, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch {
+      // A lookalike may be a symlink, socket, inaccessible or concurrently removed.
+      // It is not authority to delete; keep looking for the marker's actual twin.
+      continue;
+    }
+    try {
+      const info = fstatSync(fd); const current = lstatSync(marker); const entry = lstatSync(temporary);
+      if (!info.isFile() || info.size !== 64 || (info.mode & 0o777) !== 0o600 ||
+          (process.getuid !== undefined && info.uid !== process.getuid()) ||
+          info.dev !== current.dev || info.ino !== current.ino || current.nlink !== 2 ||
+          entry.dev !== info.dev || entry.ino !== info.ino ||
+          !/^[a-f0-9]{64}$/.test(readFileSync(fd, 'utf8'))) continue;
+      unlinkSync(temporary);
+    } catch (error) { if (!isMissing(error)) throw error; else continue; }
+    finally { closeSync(fd); }
+    const directory = openSync(root, constants.O_RDONLY); try { fsyncSync(directory); } finally { closeSync(directory); }
+    return;
   }
 }

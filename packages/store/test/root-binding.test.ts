@@ -1,6 +1,7 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test, vi } from 'vitest';
@@ -76,6 +77,51 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       expect(existsSync(temporary)).toBe(false);
       expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
     } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  test('scaffold recovery leaves unrelated regular temporaries intact', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-inode-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const unrelated = join(root, `.corpus-root-id-${'0'.repeat(32)}.tmp`);
+      const linked = join(root, `.corpus-root-id-${'f'.repeat(32)}.tmp`); const marker = join(root, '.corpus-root-id');
+      writeFileSync(unrelated, 'b'.repeat(64), { mode: 0o600 }); writeFileSync(linked, 'a'.repeat(64), { mode: 0o600 }); linkSync(linked, marker);
+      await initializeRootBinding(options);
+      expect(readFileSync(unrelated, 'utf8')).toBe('b'.repeat(64)); expect(existsSync(linked)).toBe(false);
+      expect(readFileSync(marker, 'utf8')).toBe('a'.repeat(64));
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  test('scaffold recovery skips a symlinked lookalike temporary', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-root-lookalike-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const external = join(base, 'external'); writeFileSync(external, 'outside');
+      const lookalike = join(root, `.corpus-root-id-${'0'.repeat(32)}.tmp`); symlinkSync(external, lookalike);
+      const linked = join(root, `.corpus-root-id-${'f'.repeat(32)}.tmp`); const marker = join(root, '.corpus-root-id');
+      writeFileSync(linked, 'a'.repeat(64), { mode: 0o600 }); linkSync(linked, marker);
+      await initializeRootBinding(options);
+      expect(readFileSync(external, 'utf8')).toBe('outside'); expect(existsSync(lookalike)).toBe(true); expect(existsSync(linked)).toBe(false);
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+  test.skipIf(process.platform === 'win32')('scaffold recovery skips a socket lookalike temporary', async () => {
+    const base = mkdtempSync('/tmp/corpus-rb-'); const server = createServer();
+    try {
+      const root = join(base, 's'); mkdirSync(root);
+      const options = { storeRoot: root, coordinationDirectory: join(base, 'c'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      const lookalike = join(root, `.corpus-root-id-${'0'.repeat(32)}.tmp`);
+      await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(lookalike, resolve); });
+      const linked = join(root, `.corpus-root-id-${'f'.repeat(32)}.tmp`); const marker = join(root, '.corpus-root-id');
+      writeFileSync(linked, 'a'.repeat(64), { mode: 0o600 }); linkSync(linked, marker);
+      await initializeRootBinding(options);
+      expect(existsSync(lookalike)).toBe(true); expect(existsSync(linked)).toBe(false);
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(base, { recursive: true, force: true });
+    }
   });
   test('initialization never replaces an existing identity', async () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-root-idempotent-'));

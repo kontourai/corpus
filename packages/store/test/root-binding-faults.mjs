@@ -11,21 +11,24 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 function run(label, pattern, pass) {
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/root-binding.test.ts', '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log); assert.equal(r.error, undefined);
-  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved|RootBindingMismatchError/); }
+  if (pass) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /expected function to throw|to be|promise resolved|RootBindingMismatchError|ELOOP|EOPNOTSUPP/); }
   console.log(`${label}: exit ${r.status}`);
 }
 const cases = [
+  ['inode-guard', 'info.dev !== current.dev || info.ino !== current.ino || current.nlink !== 2 ||', 'false ||', 'scaffold recovery leaves unrelated', 'src/shared/file-transactions.ts'],
+  ['lookalike', ["if (!entry.isFile() || entry.isSymbolicLink()) continue;", "} catch {\n      // A lookalike may be a symlink, socket, inaccessible or concurrently removed.\n      // It is not authority to delete; keep looking for the marker's actual twin.\n      continue;\n    }"], ['if (false) continue;', '} catch (error) { throw error; }'], 'scaffold recovery skips a', 'src/shared/file-transactions.ts'],
   ['mismatch', "adapter.rootBinding() !== expected", 'false', 'matches canonical aliases'],
   ['overwrite', 'scaffoldNewRootIdentity(options.storeRoot);', "files.writeText(join(options.storeRoot, '.corpus-root-id'), 'a'.repeat(64));", 'initialization does not replace|initialization never'],
   ['fifo', ' | constants.O_NONBLOCK', '', 'FIFO marker'],
   ['scaffold-recovery', 'settleScaffoldMarker(options.storeRoot);', 'void 0;', 'completed marker left'],
   ['marker-validation', "if (!stat.isFile() || stat.nlink !== 1 || stat.size !== 64)", "if (false)", 'malformed markers'],
 ];
-const path = join(root, 'packages/store/src/root-binding.ts');
-for (const [name, before, after, pattern] of cases) {
-  const original = readFileSync(path, 'utf8'); assert.ok(original.includes(before), `missing ${name} anchor`);
+for (const [name, before, after, pattern, file = 'src/root-binding.ts'] of cases) {
+  const path = join(root, 'packages/store', file);
+  const original = readFileSync(path, 'utf8'); const beforeList = Array.isArray(before) ? before : [before]; const afterList = Array.isArray(after) ? after : [after];
+  let changed = original; for (let i = 0; i < beforeList.length; i++) { assert.ok(changed.includes(beforeList[i]), `missing ${name} anchor`); changed = changed.replace(beforeList[i], afterList[i]); }
   run(`${name}-baseline`, pattern, true);
-  try { writeFileSync(path, original.replace(before, after)); run(`${name}-injected`, pattern, false); }
+  try { writeFileSync(path, changed); run(`${name}-injected`, pattern, false); }
   finally { writeFileSync(path, original); }
   run(`${name}-restored`, pattern, true);
 }
