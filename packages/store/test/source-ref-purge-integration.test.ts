@@ -21,6 +21,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const candidate = { ...raw('proposed'), provenance: { agent: 'writer', source_ids: ['source'], source_refs: refs } };
       const proposal = await store.proposeCreate(candidate, 'writer', { agent: 'writer', proposal: 'keep' }, { requestKey: 'opaque-source-key' });
       expect((await store.getProposal(proposal))?.candidate.provenance.source_refs).toEqual(refs);
+      expect(bytes(root) + bytes(coordinationDirectory)).toContain('ERASED_TRANSCRIPT_REFERENCE');
       const result = await store.purge(['source'], { agent: 'eraser', rationale: 'requested' });
       expect(result.cascaded).toContain('dependent'); expect(result.proposalsRejected).toContain(proposal);
       const erased = await store.getProposal(proposal); expect(erased?.state).toBe('rejected');
