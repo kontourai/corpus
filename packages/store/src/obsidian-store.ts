@@ -1210,21 +1210,25 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   /**
    * Refuse a candidate that `create` would refuse for size, before a proposal stages it.
-   * The note is sized as it would render now with a stand-in id when none is given, so a
-   * candidate right at the bound can still be refused by `applyCreate`, which checks again.
+   * The note is sized as `applyCreate` would write it, with `origin` as its first log entry
+   * and a stand-in id when the candidate has none. That errs toward refusing: the reviewer
+   * and proposal ids are sized at their longest, and a link to the record itself renders as
+   * its id rather than its shorter file name. Measured on four candidates, the estimate was
+   * 191 to 2204 bytes above the applied note, so a candidate up to about 2.5 KiB under the
+   * limit can be refused here that `create` would accept. `applyCreate` checks again, and
+   * that check is the authoritative one.
    */
-  private assertCandidateFits(candidate: CreateInput): void {
+  private assertCandidateFits(candidate: CreateInput, origin: KitMutationLogEntry): void {
     const aliases = normalizeAliases(candidate.aliases);
     const links = mergeLinks(candidate.links ?? [], extractWikilinks(candidate.body));
     const record = this.newRecord(
       candidate,
       candidate.id || PLACEHOLDER_RECORD_ID,
-      // Every ISO timestamp is the same length; reading the clock here would shift `proposed_at`.
       PLACEHOLDER_TIMESTAMP,
       aliases,
       links,
       freshnessPatch(candidate),
-      // The applied record's origin entry is small and fixed; its size is not worth a dry run.
+      () => origin,
     );
     this.assertNoteFits(this.renderNote(record, this.loadPathIndex()), 'proposeCreate');
   }
@@ -1513,7 +1517,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         proposerId,
         evidence,
         (id) => this.readRecord(id, this.loadPathIndex()) !== null,
-        (validated) => this.assertCandidateFits(validated),
+        (validated, origin) => this.assertCandidateFits(validated, origin),
       ),
     );
   }

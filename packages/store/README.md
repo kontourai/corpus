@@ -61,9 +61,12 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   (frontmatter plus the rendered body; a `raw` body grows by the callout
   quoting) exceeds it, and `proposeCreate` refuses such a candidate up front.
   The refusal is `MISSING_EVIDENCE`, and nothing is written: a refused
-  `applyCreate` leaves the proposal `pending`. A candidate within a few bytes of
-  the limit can pass `proposeCreate`, which sizes it with a stand-in id when it has
-  none, and still be refused by `applyCreate`. Only creation is checked: `update`
+  `applyCreate` leaves the proposal `pending`. `proposeCreate` sizes the note as
+  `applyCreate` would write it, including the first mutation-log entry with the
+  proposal's evidence, and errs toward refusing: it assumes the longest reviewer
+  and proposal ids, and a link to the record itself renders at its id's length.
+  A candidate up to about 2.5 KiB under the limit can therefore be refused by
+  `proposeCreate` that `create` would accept. Only creation is checked: `update`
   and the other writes are unchanged.
 
 - **A new record can be proposed, then applied or rejected (2026-11-03).**

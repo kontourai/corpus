@@ -41,6 +41,10 @@ const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
 /** Caps on what settlement adds (reviewer id, rationale, record id), so the headroom above always holds. */
 const MAX_REVIEWER_BYTES = 1024;
+/** `stage` refuses a longer proposal id. */
+const MAX_PROPOSAL_ID_LENGTH = 200;
+/** Every ISO timestamp has this length; sizing must not read the clock. */
+const SIZING_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 /** An explicit candidate id lands in the settled proposal as `record_id`. */
 const MAX_CANDIDATE_ID_BYTES = 1024;
 const MAX_RATIONALE_BYTES = 16 * 1024;
@@ -98,8 +102,12 @@ export class CreateProposals {
     proposerId: string,
     evidence: ProposeEvidence,
     recordExists: (id: string) => boolean,
-    /** A profile's own limit on the record the candidate would become; throws to refuse. */
-    assertFits?: (candidate: CreateInput) => void,
+    /**
+     * A profile's own limit on the record the candidate would become; throws to refuse. It gets
+     * the `apply-create` entry the record would start with, sized for the longest reviewer and
+     * proposal ids, so a proposal that passes cannot outgrow the limit when it is applied.
+     */
+    assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
   ): string {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
@@ -137,10 +145,17 @@ export class CreateProposals {
         throw new MissingEvidenceError('proposeCreate: record id already exists');
       }
     }
-    assertFits?.(stored);
+    assertFits?.(
+      stored,
+      this.applyOrigin(
+        { id: 'p'.repeat(MAX_PROPOSAL_ID_LENGTH), proposer_id: proposerId, evidence: { agent, proposal } },
+        'r'.repeat(MAX_REVIEWER_BYTES),
+        SIZING_TIMESTAMP,
+      ),
+    );
 
     const id = this.services.ids();
-    if (!isSafePathSegment(id) || id.length > 200) {
+    if (!isSafePathSegment(id) || id.length > MAX_PROPOSAL_ID_LENGTH) {
       throw new MissingEvidenceError('proposeCreate: proposal id must be a safe single path segment');
     }
     if (this.get(id)) throw new MissingEvidenceError('proposeCreate: proposal id already exists');
@@ -182,7 +197,11 @@ export class CreateProposals {
   }
 
   /** The `apply-create` log entry the created record starts with: its link back to the proposal. */
-  applyOrigin(proposal: KitCreateProposal, reviewerId: string, at: string): KitMutationLogEntry {
+  applyOrigin(
+    proposal: Pick<KitCreateProposal, 'id' | 'proposer_id' | 'evidence'>,
+    reviewerId: string,
+    at: string,
+  ): KitMutationLogEntry {
     return {
       op: APPLY_CREATE_OP,
       at,

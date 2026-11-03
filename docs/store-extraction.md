@@ -428,7 +428,10 @@ identity scans and destination check, so a larger note made each later `create`
 fail ([corpus#44](https://github.com/kontourai/corpus/issues/44)). `create` and
 `applyCreate` now render the note and refuse one over the bound with
 `MISSING_EVIDENCE` before any write; `proposeCreate` refuses such a candidate
-before staging it. `update` and the other writes are not bounded
+before staging it, sizing the note with the `apply-create` log entry and the
+proposal's evidence and erring toward refusal by up to about 2.5 KiB (longest reviewer
+and proposal ids, a self-link at its id's length). `update` and the other writes
+are not bounded
 ([corpus#51](https://github.com/kontourai/corpus/issues/51)). Tests:
 `test/vault-note-bound.test.ts` pins the constant to `16777216`, covers a note of
 exactly the bound and one byte more, and compares the file tree before and after

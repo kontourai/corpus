@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -21,14 +22,16 @@ const LIMIT = 16 * 1024 * 1024;
 /** The issue's body: 10 MB of text that the raw-callout rendering expands to about 20 MB. */
 const OVERSIZED = 'a\n'.repeat(5 * 1024 * 1024);
 
-/** Every file under `root`, relative and sorted, with its size: a before/after snapshot. */
-function tree(root: string): Record<string, number> {
-  const result: Record<string, number> = {};
+/** Every file (by content hash) and directory under `root`, relative and sorted: a before/after snapshot. */
+function tree(root: string): Record<string, string> {
+  const result: Record<string, string> = {};
   const walk = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else result[relative(root, path)] = statSync(path).size;
+      if (entry.isDirectory()) {
+        result[`${relative(root, path)}/`] = 'directory';
+        walk(path);
+      } else result[relative(root, path)] = createHash('sha256').update(readFileSync(path)).digest('hex');
     }
   };
   if (existsSync(root)) walk(root);
@@ -123,4 +126,29 @@ describe('vault note size bound', () => {
     expect(await vault.get('big')).toBeNull();
     expect(await vault.create(candidate({ id: 'after' }))).toBe('after');
   }, 120_000);
+
+  test('proposeCreate sizes the note applyCreate writes, including the evidence in its first log entry', async () => {
+    const vault = open();
+    // The candidate alone fits; the proposal evidence it will carry into the record's log does not.
+    const body = 'x'.repeat(14 * 1024 * 1024);
+    const evidence = { agent: 'distiller', proposal: 'a\n'.repeat(200_000) };
+    const before = tree(root);
+    const error = await failure(vault.proposeCreate(candidate({ type: 'concept', body }), 'proposer', evidence));
+    expect(error).toMatchObject({ code: 'MISSING_EVIDENCE' });
+    expect(error?.message).toMatch(/^proposeCreate: .*limited to 16777216 bytes/);
+    expect(tree(root)).toEqual(before);
+    // The same candidate with small evidence fits, and applies.
+    const proposal = await vault.proposeCreate(candidate({ type: 'concept', body }), 'proposer', { agent: 'distiller', proposal: 'add it' });
+    expect(await vault.applyCreate(proposal, 'reviewer')).toBe('big');
+    expect((await vault.get('big'))?.body).toBe(body);
+  }, 120_000);
+
+  test('sizing a proposal does not take an id before staging does', async () => {
+    // The call's transaction takes generated-1 and staging takes generated-2; a sizing step that
+    // asked the generator for an id first would push the proposal to generated-3. The clock is
+    // covered by create-proposals.test.ts, which pins `proposed_at` to the first tick.
+    const vault = open();
+    const proposal = await vault.proposeCreate(candidate({ id: undefined }), 'proposer', { agent: 'distiller', proposal: 'add it' });
+    expect(proposal).toBe('generated-2');
+  });
 });
