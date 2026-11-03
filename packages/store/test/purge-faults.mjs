@@ -39,7 +39,7 @@ const controls = [
     args: conformance('purge-tombstone-shape', 'purge-store-bytes'), reason: /(record\.body|is still on disk)/ },
   { id: 'tombstone-keeps-title', file: purge, mutate: (s) => swap(s, 'title: PURGED_TITLE,', 'title: record.title,'),
     args: conformance('purge-tombstone-shape', 'purge-store-bytes'), reason: /(record\.title|is still on disk)/ },
-  { id: 'tombstone-keeps-content-hash', file: purge, mutate: (s) => swap(swap(s, "import { isRecord } from '../is-record.js';", "import { createHash } from 'node:crypto';\nimport { isRecord } from '../is-record.js';"), "    status: 'purged',\n", "    status: 'purged',\n    content_sha256: createHash('sha256').update(record.body).digest('hex'),\n"),
+  { id: 'tombstone-keeps-content-hash', file: purge, mutate: (s) => swap(swap(s, "import { isRecord } from '../is-record.js';", "import { createHash } from 'node:crypto';\nimport { isRecord } from '../is-record.js';"), "    status: 'purged',\n", "    status: 'purged',\n    ...({ content_sha256: createHash('sha256').update(record.body).digest('hex') } as object),\n"),
     args: conformance('purge-store-bytes'), reason: /sha256 of .* is on disk/ },
   { id: 'tombstone-keeps-link-labels', file: purge, mutate: (s) => swap(s, '.map(({ target_id, kind }) => ({ target_id, kind }))', '.map((link) => ({ ...link }))'),
     args: conformance('purge-tombstone-links', 'purge-store-bytes'), reason: /(label|is still on disk)/ },
