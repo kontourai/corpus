@@ -126,6 +126,10 @@ export class CreateProposals {
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
     freshnessPatch(stored);
+    // Purge reads a candidate's provenance and links to decide what rests on what, and
+    // `create` would quietly turn a number into text. A proposal states them as text.
+    const problem = candidateShapeProblem(stored);
+    if (problem) throw new MissingEvidenceError(`proposeCreate: ${problem}`);
     // A candidate may not cite an erased record as a source (purge, 2026-11-03).
     guard?.(stored);
     // Id rules belong to each profile's create, which runs at apply. Here only a
@@ -320,6 +324,35 @@ function projectCandidate(candidate: CreateInput): CreateInput {
 }
 
 /**
+ * What purge needs of a candidate, stated once for staging and for purge: an agent that is
+ * a non-empty string, optional text `session_id` and `note`, `source_ids` and `links` that are
+ * null, missing or well-formed. Returns what is wrong, or null.
+ */
+function candidateShapeProblem(candidate: CreateInput): string | null {
+  const provenance = candidate.provenance as unknown;
+  if (!isRecord(provenance) || typeof provenance.agent !== 'string' || provenance.agent === '') {
+    return 'candidate provenance.agent must be a non-empty string';
+  }
+  for (const key of ['session_id', 'note'] as const) {
+    if (provenance[key] != null && typeof provenance[key] !== 'string') return `candidate provenance.${key} must be a string`;
+  }
+  const sourceIds = provenance.source_ids;
+  if (sourceIds != null && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
+    return 'candidate provenance.source_ids must be an array of strings';
+  }
+  const links = candidate.links as unknown;
+  if (
+    links != null &&
+    (!Array.isArray(links) ||
+      links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string' || (link.label != null && typeof link.label !== 'string')))
+  ) {
+    return 'candidate links must be an array of links with text target_id and kind';
+  }
+  if (typeof candidate.type !== 'string') return 'candidate type must be a string';
+  return null;
+}
+
+/**
  * Purge decides from the candidate's provenance and links and trusts a stored `erasure`
  * marker, so a proposal that does not have the shape those decisions need stops the purge
  * instead of being skipped: a skipped proposal would keep erased content readable.
@@ -333,19 +366,8 @@ function assertErasable(proposal: KitCreateProposal): void {
   const corrupt = (reason: string) =>
     new KnowledgeStoreCorruptionError(`create proposal ${proposal.id} is corrupt: ${reason}`);
   const { candidate } = proposal;
-  const provenance = candidate.provenance as unknown;
-  if (!isRecord(provenance) || typeof provenance.agent !== 'string' || provenance.agent === '') {
-    throw corrupt('candidate provenance is invalid');
-  }
-  const sourceIds = provenance.source_ids;
-  if (sourceIds != null && (!Array.isArray(sourceIds) || sourceIds.some((id) => typeof id !== 'string'))) {
-    throw corrupt('candidate source_ids are invalid');
-  }
-  const links = candidate.links as unknown;
-  if (links != null && (!Array.isArray(links) || links.some((link) => !isRecord(link) || typeof link.target_id !== 'string' || typeof link.kind !== 'string'))) {
-    throw corrupt('candidate links are invalid');
-  }
-  if (typeof candidate.type !== 'string') throw corrupt('candidate type is invalid');
+  const problem = candidateShapeProblem(candidate);
+  if (problem) throw corrupt(problem);
   if (!proposal.erasure) return;
   const { erasure } = proposal;
   const settled =

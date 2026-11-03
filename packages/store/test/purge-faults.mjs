@@ -134,6 +134,8 @@ const controls = [
     args: focused('test/purge-proposals.test.ts'), reason: /trusted only over exactly what a purge writes/ },
   { id: 'proposal-agent-trimmed', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "typeof provenance.agent !== 'string' || provenance.agent === ''", "typeof provenance.agent !== 'string' || provenance.agent.trim() === ''"),
     args: focused('test/purge-proposals.test.ts'), reason: /healthy store stays purgeable/ },
+  { id: 'proposal-staging-shape-unchecked', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (problem) throw new MissingEvidenceError(`proposeCreate: ${problem}`);", ''),
+    args: focused('test/purge-proposals.test.ts'), reason: /no accepted proposal can stop a later purge/ },
 ];
 
 function run(label, args, success) {

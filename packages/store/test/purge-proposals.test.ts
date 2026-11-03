@@ -254,6 +254,24 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     expect((await store.getProposal(nulls))?.state).toBe('pending');
   });
 
+  test.each([
+    ['a numeric provenance agent', { provenance: { agent: 42 } }],
+    ['a numeric session id', { provenance: { agent: 'drafter', session_id: 5 } }],
+    ['a numeric provenance note', { provenance: { agent: 'drafter', note: 5 } }],
+    ['a non-string source id', { provenance: { agent: 'drafter', source_ids: [1] } }],
+    ['a source_ids that is not an array', { provenance: { agent: 'drafter', source_ids: 'src' } }],
+    ['a numeric link target', { links: [{ target_id: 5, kind: 'related' }] }],
+    ['a numeric link kind', { links: [{ target_id: 'x', kind: 7 }] }],
+    ['a numeric link label', { links: [{ target_id: 'x', kind: 'related', label: 3 }] }],
+    ['links that are not an array', { links: 'x' }],
+    ['a non-string type', { type: 5 }],
+  ])('proposeCreate refuses %s, so no accepted proposal can stop a later purge', async (_name, change) => {
+    await raw('unrelated');
+    await expect(store.proposeCreate({ ...candidate([]), ...change } as never, 'proposer-1', proposal())).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+    expect(await store.listProposals()).toEqual([]);
+    await expect(store.purge(['unrelated'], evidence)).resolves.toMatchObject({ purged: ['unrelated'] });
+  });
+
   test('an erasure marker is trusted only over exactly what a purge writes', async () => {
     await raw('src');
     await raw('other');

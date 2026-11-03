@@ -128,7 +128,10 @@ silent behavior.
     `erasure` (`at`, `agent`, `rationale`, `note`). A pending proposal with support
     left stays pending and is listed as `proposalsBlocked`: `applyCreate` refuses it
     with `PURGED` because its candidate still cites an erased record, and a reviewer
-    should reject it. `proposeCreate` refuses such a candidate up front, and the
+    should reject it. `proposeCreate` refuses such a candidate up front, and also a candidate whose
+    provenance (`agent`, `session_id`, `note`, `source_ids`) or links hold anything but text
+    (purge reads them to decide what rests on what, and `create` would quietly turn a
+    number into text), so no accepted proposal can stop a later purge. The
     log entry a created record starts with keeps `proposal_id` but never the
     proposal's text once the record is erased. A candidate's own `id` is not removed
     from its support (it is not a record yet, so it counts as real support until a
