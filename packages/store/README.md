@@ -70,8 +70,9 @@ The [conformance vectors](../conformance/README.md) encode the owner's
   applied note and ran about 4 KiB above it for a plain reviewer, so a
   candidate that close to the limit can be refused by `proposeCreate` that
   `create` would accept. It is a margin, not a proof: a custom id generator
-  with ids longer than a UUID, or another record taking the destination first,
-  can still move the applied note. `applyCreate` is the authoritative check: a
+  with ids longer than a UUID, a link that names the id `create` will generate,
+  or another record taking or renaming a destination or link target between
+  propose and apply, can still move the applied note. `applyCreate` is the authoritative check: a
   proposal that passed can still be refused there for size, and then stays
   `pending`. Only creation is checked: `update` and the other writes are
   unchanged.

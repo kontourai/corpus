@@ -1214,11 +1214,12 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
    * (so large proposal evidence counts), a stand-in id when the candidate has none, and the
    * candidate in the path index so a link to itself shows its file name. What is only known
    * at apply is stood in for by its largest form: the reviewer id with the largest YAML
-   * expansion and the longest proposal id. In the tested cases (see vault-note-bound.test.ts)
-   * the estimate was never below the applied note, and it ran about 4 KiB (4253 bytes) above it for a
-   * plain reviewer. That is a margin, not a proof: a custom id generator with ids longer than
-   * a UUID, or a destination another record takes first, can still move the applied note.
-   * `applyCreate` checks again and is authoritative.
+   * expansion and the longest proposal id, which YAML quotes. In the tested cases (see
+   * vault-note-bound.test.ts) the estimate was never below the applied note, and it ran about
+   * 4 KiB above it for a plain reviewer. That is a margin, not a proof: a custom id generator
+   * with ids longer than a UUID, a link that names the id `create` will generate, or another
+   * record taking or renaming a destination or link target between propose and apply can
+   * still move the applied note. `applyCreate` checks again and is authoritative.
    */
   private assertCandidateFits(candidate: CreateInput, origin: KitMutationLogEntry): void {
     const aliases = normalizeAliases(candidate.aliases);
@@ -1230,8 +1231,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const pathIndex = this.loadPathIndex();
     try {
       const path = this.computeRelPath(candidate.category, candidate.title, id, candidate.type, pathIndex);
-      pathIndex.by_id[id] = { path, archived: false };
-      pathIndex.by_path[path] = id;
+      // An id-less candidate is sized under a stand-in id; leave a record that holds it alone.
+      if (!pathIndex.by_id[id]) {
+        pathIndex.by_id[id] = { path, archived: false };
+        pathIndex.by_path[path] = id;
+      }
     } catch {
       /* sized without the entry */
     }

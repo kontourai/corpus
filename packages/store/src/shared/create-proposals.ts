@@ -49,6 +49,8 @@ const MAX_REVIEWER_BYTES = 1024;
 const WORST_CASE_REVIEWER = '\u007f'.repeat(MAX_REVIEWER_BYTES - 2);
 /** `stage` refuses a longer proposal id. */
 const MAX_PROPOSAL_ID_LENGTH = 200;
+/** All digits: YAML quotes a digit string, so this is the dearest 200-character id to write. */
+const PROPOSAL_ID_STAND_IN = '1'.repeat(MAX_PROPOSAL_ID_LENGTH);
 /** Every ISO timestamp has this length; sizing must not read the clock. */
 const SIZING_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 /** An explicit candidate id lands in the settled proposal as `record_id`. */
@@ -110,8 +112,9 @@ export class CreateProposals {
     recordExists: (id: string) => boolean,
     /**
      * A profile's own limit on the record the candidate would become; throws to refuse. It gets
-     * the `apply-create` entry the record would start with, sized for the longest reviewer and
-     * proposal ids, so a proposal that passes cannot outgrow the limit when it is applied.
+     * the `apply-create` entry the record would start with, with stand-ins for the reviewer and
+     * proposal ids that are only known at apply. It is a margin, not a guarantee: `applyCreate`
+     * checks again.
      */
     assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
   ): string {
@@ -154,7 +157,7 @@ export class CreateProposals {
     assertFits?.(
       stored,
       this.applyOrigin(
-        { id: 'p'.repeat(MAX_PROPOSAL_ID_LENGTH), proposer_id: proposerId, evidence: { agent, proposal } },
+        { id: PROPOSAL_ID_STAND_IN, proposer_id: proposerId, evidence: { agent, proposal } },
         WORST_CASE_REVIEWER,
         SIZING_TIMESTAMP,
       ),
