@@ -136,6 +136,8 @@ describe.each([
     const refs = Array.from({ length: 60 }, () => ref);
     await store.create(candidate({ id: 'shared-refs', provenance: { agent: 'writer', source_refs: refs } }));
     expect((await store.get('shared-refs'))?.provenance.source_refs).toEqual(refs);
+    const sharedNote = Object.entries(tree(root)).find(([name, body]) => name.endsWith('.md') && body.includes('id: shared-refs'))?.[1];
+    expect(sharedNote).toBeDefined(); expect(sharedNote).not.toMatch(/&ref_\d+|\*ref_\d+/);
     await store.create(candidate({ id: 'unrelated' }));
     const sparse = new Array(1);
     const inherited = Object.assign(Object.create({ kind: 'session-transcript' }), { harness: 'h', session_id: 's', transcript_ref: 't' });
@@ -148,6 +150,21 @@ describe.each([
       expect(await code(store.proposeCreate(bad, 'writer', evidence))).toBe('MISSING_EVIDENCE');
       expect(tree(root)).toEqual(before);
     }
+  });
+
+  test('proposal stores the validated copy even when the array inherits toJSON', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    class Refs extends Array<typeof ref> { toJSON() { return []; } }
+    const refs = new Refs(ref);
+    const input = candidate({ id: 'inherited-array', provenance: { agent: 'writer', source_refs: refs } });
+    const id = await store.proposeCreate(input, 'writer', evidence);
+    expect((await store.getProposal(id))?.candidate.provenance.source_refs).toEqual([ref]);
+    await store.applyCreate(id, 'reviewer');
+    expect((await store.get('inherited-array'))?.provenance.source_refs).toEqual([ref]);
+    const deceptive = { agent: 'writer', source_refs: [ref], toJSON() { return { agent: 'writer', source_refs: [] }; } };
+    const before = tree(root);
+    expect(await code(store.proposeCreate(candidate({ id: 'deceptive', provenance: deceptive }), 'writer', evidence))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
   });
 
   test('accepted source reference boundaries and undefined optional fields survive both paths', async () => {
