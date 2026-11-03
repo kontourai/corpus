@@ -1,1 +1,10 @@
-{}
+{
+  "create-request-key-after-purge": {
+    "profiles": [
+      "default",
+      "vault"
+    ],
+    "awaits": "purge integration from corpus#41",
+    "errorPattern": "^missing adapter method: purge(?:\\n|$)"
+  }
+}
