@@ -151,4 +151,40 @@ describe('vault note size bound', () => {
     const proposal = await vault.proposeCreate(candidate({ id: undefined }), 'proposer', { agent: 'distiller', proposal: 'add it' });
     expect(proposal).toBe('generated-2');
   });
+
+  // The invariant behind proposeCreate's early refusal: its estimate is not below what applyCreate writes,
+  // whatever the reviewer id, so a proposal that fits is not later refused for the reviewer's escaping.
+  // It reads the sizes through the vault's own size check; no public surface reports them.
+  const reviewers: Array<[string, string]> = [
+    ['plain', 'reviewer'],
+    ['DEL, 1 JSON byte and 4 YAML bytes', '\u007f'.repeat(1022)],
+    ['C0 controls', '\u0001\u0007\u001b'.repeat(56)],
+    ['quotes', '"'.repeat(510)],
+    ['backslashes', '\\'.repeat(510)],
+    ['accented', '\u00e9'.repeat(510)],
+    ['astral', '\u{1F600}'.repeat(255)],
+    ['NEL and C1', '\u0085\u0090'.repeat(255)],
+    ['line and paragraph separators', 'x\u2028\u2029'.repeat(100)],
+    ['multiline', 'ab\ncd '.repeat(140)],
+    ['YAML indicators', ': # - ? | > '.repeat(80)],
+  ];
+  const candidates: Array<[string, Record<string, unknown>]> = [
+    ['short id', { id: 'rec-1' }],
+    ['long id linking to itself', { id: 'x'.repeat(1000), body: `see [[${'x'.repeat(1000)}]]` }],
+    // The file name comes from the title, so here the link renders longer than the id.
+    ['short id linking to itself under a long title', { id: 'sl', title: 'Long title '.repeat(20), links: [{ target_id: 'sl', kind: 'related' }, { target_id: 'sl', kind: 'source' }] }],
+    ['no id', { id: undefined, tags: ['a', 'b'], aliases: ['alias-one'] }],
+  ];
+  describe.each(candidates)('estimate versus applied note: %s', (_label, extra) => {
+    test.each(reviewers)('reviewer: %s', async (_name, reviewer) => {
+      const vault = open();
+      const sizes: Record<string, number> = {};
+      const internals = vault as unknown as { assertNoteFits(text: string, operation: string): void };
+      const original = internals.assertNoteFits.bind(vault);
+      internals.assertNoteFits = (text, operation) => { sizes[operation] = Buffer.byteLength(text); original(text, operation); };
+      const proposal = await vault.proposeCreate(candidate({ type: 'concept', body: 'hello', ...extra }), 'proposer', { agent: 'distiller', proposal: 'add it' });
+      await vault.applyCreate(proposal, reviewer);
+      expect(sizes.proposeCreate).toBeGreaterThanOrEqual(sizes.create);
+    });
+  });
 });

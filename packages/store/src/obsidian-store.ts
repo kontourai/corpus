@@ -1211,26 +1211,40 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   /**
    * Refuse a candidate that `create` would refuse for size, before a proposal stages it.
    * The note is sized as `applyCreate` would write it, with `origin` as its first log entry
-   * and a stand-in id when the candidate has none. That errs toward refusing: the reviewer
-   * and proposal ids are sized at their longest, and a link to the record itself renders as
-   * its id rather than its shorter file name. Measured on four candidates, the estimate was
-   * 191 to 2204 bytes above the applied note, so a candidate up to about 2.5 KiB under the
-   * limit can be refused here that `create` would accept. `applyCreate` checks again, and
-   * that check is the authoritative one.
+   * (so large proposal evidence counts) and a stand-in id when the candidate has none. What
+   * is only known at apply is stood in for: the longest ASCII reviewer and proposal ids, and
+   * a link to the record itself renders at its id's length, not its file name's. The
+   * estimate is therefore not a bound. Measured, it was 1180 bytes above the applied note
+   * for a plain reviewer and 3066 below it for a reviewer YAML escapes heavily, and it
+   * drifts further with self-links or a custom id generator. A candidate within a few KiB of
+   * the limit can pass here and be refused by `applyCreate`, which checks again and is
+   * authoritative.
    */
   private assertCandidateFits(candidate: CreateInput, origin: KitMutationLogEntry): void {
     const aliases = normalizeAliases(candidate.aliases);
     const links = mergeLinks(candidate.links ?? [], extractWikilinks(candidate.body));
+    const id = candidate.id || PLACEHOLDER_RECORD_ID;
+    // `writeRecord` adds the new record to the index before it renders, so a link to the
+    // record itself shows its file name. Do the same here, or leave the index as it is when
+    // the destination cannot be chosen: `applyCreate` reports that.
+    const pathIndex = this.loadPathIndex();
+    try {
+      const path = this.computeRelPath(candidate.category, candidate.title, id, candidate.type, pathIndex);
+      pathIndex.by_id[id] = { path, archived: false };
+      pathIndex.by_path[path] = id;
+    } catch {
+      /* sized without the entry */
+    }
     const record = this.newRecord(
       candidate,
-      candidate.id || PLACEHOLDER_RECORD_ID,
+      id,
       PLACEHOLDER_TIMESTAMP,
       aliases,
       links,
       freshnessPatch(candidate),
       () => origin,
     );
-    this.assertNoteFits(this.renderNote(record, this.loadPathIndex()), 'proposeCreate');
+    this.assertNoteFits(this.renderNote(record, pathIndex), 'proposeCreate');
   }
 
   /** The path index accelerates lookup; only physical records can prove absence. */

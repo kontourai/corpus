@@ -41,6 +41,12 @@ const MAX_PROPOSAL_BYTES = 16 * 1024 * 1024;
 const SETTLEMENT_HEADROOM_BYTES = 64 * 1024;
 /** Caps on what settlement adds (reviewer id, rationale, record id), so the headroom above always holds. */
 const MAX_REVIEWER_BYTES = 1024;
+/**
+ * Stands in for the reviewer when a profile sizes the record before it is applied. DEL is one
+ * JSON byte but four YAML bytes (`\x7F`), the largest expansion a reviewer id can have, and
+ * 1022 of them are the most `MAX_REVIEWER_BYTES` of serialized JSON allows.
+ */
+const WORST_CASE_REVIEWER = '\u007f'.repeat(MAX_REVIEWER_BYTES - 2);
 /** `stage` refuses a longer proposal id. */
 const MAX_PROPOSAL_ID_LENGTH = 200;
 /** Every ISO timestamp has this length; sizing must not read the clock. */
@@ -149,7 +155,7 @@ export class CreateProposals {
       stored,
       this.applyOrigin(
         { id: 'p'.repeat(MAX_PROPOSAL_ID_LENGTH), proposer_id: proposerId, evidence: { agent, proposal } },
-        'r'.repeat(MAX_REVIEWER_BYTES),
+        WORST_CASE_REVIEWER,
         SIZING_TIMESTAMP,
       ),
     );

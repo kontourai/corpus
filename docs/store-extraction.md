@@ -429,8 +429,9 @@ fail ([corpus#44](https://github.com/kontourai/corpus/issues/44)). `create` and
 `applyCreate` now render the note and refuse one over the bound with
 `MISSING_EVIDENCE` before any write; `proposeCreate` refuses such a candidate
 before staging it, sizing the note with the `apply-create` log entry and the
-proposal's evidence and erring toward refusal by up to about 2.5 KiB (longest reviewer
-and proposal ids, a self-link at its id's length). `update` and the other writes
+proposal's evidence. That sizing is an estimate with stand-ins for what is known
+only at apply, so within a few KiB of the limit it can disagree with the applied
+note in either direction and `applyCreate` stays authoritative. `update` and the other writes
 are not bounded
 ([corpus#51](https://github.com/kontourai/corpus/issues/51)). Tests:
 `test/vault-note-bound.test.ts` pins the constant to `16777216`, covers a note of
