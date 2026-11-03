@@ -8617,7 +8617,7 @@
           "clause": "Owner decision: create request keys (2026-11-03)"
         }
       ],
-      "regression": "Purging a record permits its retained proposal key to be reused.",
+      "regression": "Purging a record retains a content digest, fails to scrub content, or allows reuse of its request key.",
       "production_seam": false,
       "operations": [
         {
@@ -8643,6 +8643,13 @@
             }
           ],
           "save": "p"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "before"
         },
         {
           "call": "applyCreate",
@@ -8701,7 +8708,7 @@
               "requestKey": "purge-key"
             }
           ],
-          "save": "retry"
+          "expect_error": "REQUEST_KEY_CONFLICT"
         },
         {
           "call": "proposeCreate",
@@ -8734,6 +8741,18 @@
         }
       ],
       "expected": [
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest_version",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_key_hash",
+          "equals": "$before.request_key_hash"
+        },
         {
           "ref": "tombstone.status",
           "equals": "purged"
@@ -8771,12 +8790,183 @@
           "equals": "$p"
         },
         {
-          "ref": "retry",
-          "equals": "$p"
-        },
-        {
           "ref": "all",
           "length": 1
+        }
+      ]
+    },
+    {
+      "id": "create-request-key-after-partial-scrub",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: create request keys (2026-11-03)"
+        }
+      ],
+      "regression": "A partial purge leaves a content digest or allows reuse of the affected request key.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "scrub-source",
+              "type": "raw",
+              "title": "source",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              }
+            }
+          ],
+          "save": "source"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$source"
+            ],
+            {
+              "agent": "eraser",
+              "rationale": "requested"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$source"
+          ],
+          "save": "tombstone"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "scrubbed"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "partial-record",
+              "type": "raw",
+              "title": "t",
+              "body": "changed",
+              "category": "engineering",
+              "provenance": {
+                "agent": "writer"
+              },
+              "links": [
+                {
+                  "target_id": "scrub-source",
+                  "kind": "related",
+                  "label": "erased-label"
+                }
+              ]
+            },
+            "writer",
+            {
+              "agent": "writer",
+              "proposal": "keep"
+            },
+            {
+              "requestKey": "partial-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "tombstone.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "scrubbed.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "scrubbed.candidate.links.0.label",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_key_retired",
+          "equals": true
+        },
+        {
+          "ref": "scrubbed.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "scrubbed.request_digest_version",
+          "absent": true
         }
       ]
     },
