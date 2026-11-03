@@ -420,3 +420,25 @@ The vault contract tests read actual on-disk frontmatter after create and catego
 changes, check obsolete-field removal and the returned record, and exercise
 reserved and invalid names. Existing files change only when an operation writes
 them; setting this option alone does not rewrite the vault.
+
+## Create proposals
+
+`proposeCreate`, `apply(proposalId, reviewerId)`, `reject(proposalId, reviewerId,
+rationale)`, `getProposal` and `listProposals` implement the 2026-11-03 decision
+recorded in the [store README](../packages/store/README.md#owner-decisions)
+([corpus#40](https://github.com/kontourai/corpus/issues/40)). A proposal is a JSON
+file under `<storeRoot>/proposals/` in both profiles, published through the same
+journaled transaction as records, so `apply` writes the record, its indexes and the
+settled proposal together. Nothing reads that directory except the proposals
+queries: lists, `get`, `getLinks`, `reindex` and the vault's identity scan see
+records only. `assertCreateFields` (`shared/create-input.ts`) is the one set of
+required-field checks used by `create` in both profiles and by `proposeCreate`.
+
+Six `create-proposal-*` vectors join the store vectors (129 per profile). All
+implemented, so the expected-fail list stays empty. Tests: `test/create-proposals.test.ts`
+runs on both profiles and covers self-approval, working-set exclusion (including
+history, expiry and `reindex`), rollback of the record when the settled proposal
+cannot be written, refusal of corrupt proposal files, a read-only vault, and that
+no path outside the supplied root is touched. `npm run proof:proposals` injects
+faults into the self-approval and working-set rules and requires the targeted
+tests and vectors to fail.

@@ -7085,6 +7085,734 @@
       ],
       "regression": "An adapter accepts invalid input, loses stored content, or returns the wrong record set.",
       "production_seam": false
+    },
+    {
+      "id": "create-proposal-apply",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-apply",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-apply"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "working_before"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "applied"
+            }
+          ],
+          "save": "applied"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "pending"
+            }
+          ],
+          "save": "pending"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "before",
+          "equals": null
+        },
+        {
+          "ref": "working_before",
+          "length": 0
+        },
+        {
+          "ref": "r",
+          "equals": "cp-apply"
+        },
+        {
+          "ref": "record.title",
+          "equals": "a"
+        },
+        {
+          "ref": "record.body",
+          "equals": "proposed body"
+        },
+        {
+          "ref": "record.provenance.agent",
+          "equals": "proposer"
+        },
+        {
+          "ref": "record.provenance.session_id",
+          "equals": "s-1"
+        },
+        {
+          "ref": "record.provenance.note",
+          "equals": "sitting 7"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply-create"
+        },
+        {
+          "ref": "record.mutation_log.0.agent",
+          "equals": "reviewer"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.proposal_id",
+          "equals": "$p"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.proposer_id",
+          "equals": "proposer"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.proposal_evidence",
+          "equals": {
+            "agent": "proposer",
+            "proposal": "Keep this finding"
+          }
+        },
+        {
+          "ref": "applied",
+          "length": 1
+        },
+        {
+          "ref": "applied.0.state",
+          "equals": "applied"
+        },
+        {
+          "ref": "applied.0.record_id",
+          "equals": "cp-apply"
+        },
+        {
+          "ref": "pending",
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "create-proposal-reject",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-reject",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$p",
+            "reviewer",
+            ""
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$p",
+            "reviewer",
+            "Duplicates an existing finding"
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-reject"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "rejected"
+            }
+          ],
+          "save": "rejected"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "pending"
+            }
+          ],
+          "save": "pending"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$p",
+            "other-reviewer"
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-reject"
+          ],
+          "save": "after_apply_attempt"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record",
+          "equals": null
+        },
+        {
+          "ref": "rejected",
+          "length": 1
+        },
+        {
+          "ref": "rejected.0.id",
+          "equals": "$p"
+        },
+        {
+          "ref": "rejected.0.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "rejected.0.rationale",
+          "equals": "Duplicates an existing finding"
+        },
+        {
+          "ref": "rejected.0.reviewer_id",
+          "equals": "reviewer"
+        },
+        {
+          "ref": "rejected.0.candidate.title",
+          "equals": "a"
+        },
+        {
+          "ref": "pending",
+          "length": 0
+        },
+        {
+          "ref": "after_apply_attempt",
+          "equals": null
+        }
+      ]
+    },
+    {
+      "id": "create-proposal-self-approval",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-self",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$p",
+            "proposer"
+          ],
+          "expect_error": "SELF_APPROVAL"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-self"
+          ],
+          "save": "after_refusal"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "pending"
+            }
+          ],
+          "save": "pending"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "save": "r"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "after_refusal",
+          "equals": null
+        },
+        {
+          "ref": "pending",
+          "length": 1
+        },
+        {
+          "ref": "pending.0.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "r",
+          "equals": "cp-self"
+        }
+      ]
+    },
+    {
+      "id": "create-proposal-working-set-exclusion",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "ordinary",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            }
+          ],
+          "save": "ordinary"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-pending",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              },
+              "aliases": [
+                "cp-pending-slug"
+              ]
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "pending_id"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-rejected",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "rejected_id"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$rejected_id",
+            "reviewer",
+            "not durable"
+          ]
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "by_type"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "by_type_history"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "engineering",
+            {
+              "prefix": true,
+              "includeHistory": true
+            }
+          ],
+          "save": "by_category"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-pending"
+          ],
+          "save": "get_pending"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-pending-slug"
+          ],
+          "save": "get_slug"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-rejected"
+          ],
+          "save": "get_rejected"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$pending_id"
+          ],
+          "save": "get_proposal_id"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "pending"
+            }
+          ],
+          "save": "pending"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "rejected"
+            }
+          ],
+          "save": "rejected"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "by_type",
+          "length": 1
+        },
+        {
+          "ref": "by_type.0.id",
+          "equals": "ordinary"
+        },
+        {
+          "ref": "by_type_history",
+          "length": 1
+        },
+        {
+          "ref": "by_category",
+          "length": 1
+        },
+        {
+          "ref": "get_pending",
+          "equals": null
+        },
+        {
+          "ref": "get_slug",
+          "equals": null
+        },
+        {
+          "ref": "get_rejected",
+          "equals": null
+        },
+        {
+          "ref": "get_proposal_id",
+          "equals": null
+        },
+        {
+          "ref": "pending",
+          "length": 1
+        },
+        {
+          "ref": "pending.0.id",
+          "equals": "$pending_id"
+        },
+        {
+          "ref": "rejected",
+          "length": 1
+        },
+        {
+          "ref": "rejected.0.id",
+          "equals": "$rejected_id"
+        }
+      ]
+    },
+    {
+      "id": "create-proposal-apply-keeps-create-requirements",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-compiled",
+              "type": "compiled",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$p",
+            "reviewer"
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cp-compiled"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {
+              "state": "pending"
+            }
+          ],
+          "save": "pending"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record",
+          "equals": null
+        },
+        {
+          "ref": "pending",
+          "length": 1
+        }
+      ]
+    },
+    {
+      "id": "create-proposal-missing-evidence",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: create proposals (2026-11-03)"
+        }
+      ],
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-no-evidence",
+              "type": "raw",
+              "title": "a",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-no-title",
+              "type": "raw",
+              "title": " ",
+              "body": "proposed body",
+              "category": "engineering",
+              "provenance": {
+                "agent": "proposer",
+                "session_id": "s-1",
+                "note": "sitting 7"
+              }
+            },
+            "proposer",
+            {
+              "agent": "proposer",
+              "proposal": "Keep this finding"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "no-such-proposal",
+            "reviewer"
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "listProposals",
+          "args": [
+            {}
+          ],
+          "save": "all"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "all",
+          "length": 0
+        }
+      ]
     }
   ]
 }
