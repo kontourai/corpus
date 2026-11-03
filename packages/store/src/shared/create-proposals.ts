@@ -139,10 +139,14 @@ export class CreateProposals {
     // Validate the candidate as read, then again as stored: JSON turns NaN into null, and
     // apply must see exactly the candidate that was checked.
     const projected = projectCandidate(candidate as unknown as CreateInput);
-    assertCreateFields(projected, 'proposeCreate');
+    const sourceRefs = assertCreateFields(projected, 'proposeCreate');
+    if (sourceRefs !== undefined) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };
     freshnessPatch(projected);
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
+    if (sourceRefs !== undefined && JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs)) {
+      throw new MissingEvidenceError('proposeCreate: provenance serialization changed source_refs');
+    }
     freshnessPatch(stored);
     const key = options?.requestKey;
     if (key !== undefined && (typeof key !== 'string' || !key.trim() || Buffer.byteLength(key) > 1024)) {

@@ -12,10 +12,12 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 const run = (label, pattern, good) => {
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/create-proposals.test.ts', '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log);
-  assert.equal(r.error, undefined); if (good) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /MISSING_EVIDENCE|MissingEvidenceError|promise resolved|KnowledgeStoreCorruptionError|aliases exceeded/); }
+  assert.equal(r.error, undefined); if (good) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /FAIL  test\/create-proposals\.test\.ts/); assert.match(log, /AssertionError:|MissingEvidenceError:|KnowledgeStoreCorruptionError:/); }
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
+  ['proposal-copy', 'src/shared/create-proposals.ts', 'if (sourceRefs !== undefined) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };', 'if (false) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };', 'proposal stores the validated copy'],
+  ['default-copy', 'src/default-store.ts', '...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),', '...(sourceRefs !== undefined ? { source_refs: input.provenance.source_refs } : {}),', 'direct create safely'],
   ['copy-alias', 'src/shared/source-refs.ts', '  return result;', '  return value as KitSourceRef[];', 'direct create safely'],
   ['byte-count', 'src/shared/source-refs.ts', "Buffer.byteLength(v, 'utf8')", 'v.length', 'accepted source reference boundaries'],
   ['max-count', 'src/shared/source-refs.ts', 'value.length > 256', 'value.length >= 256', 'accepted source reference boundaries'],
