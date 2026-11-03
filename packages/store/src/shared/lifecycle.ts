@@ -4,13 +4,14 @@
  * history. Both adapters use this one predicate, so the default and vault profiles
  * cannot drift apart again.
  *
- * A record is historical when it is retired, or superseded. Supersession is read
+ * A record is historical when it is retired, purged (a tombstone), or superseded. Supersession is read
  * from the record itself (the `superseded-by` mutation-log entry that every
  * `supersede` writes) and, in the vault profile, from its archived location, which
  * the vault only assigns on supersession. An `implemented` record stays in the
  * working set: it completed rather than went out of date.
  */
 import type { KitRecord, ListOptions } from '../contracts.js';
+import { isPurged } from './purge.js';
 
 export function isSuperseded(record: KitRecord): boolean {
   return (record.mutation_log ?? []).some((entry) => entry?.op === 'superseded-by');
@@ -23,6 +24,7 @@ export function isHistorical(
   return (
     location.archived === true ||
     (record.status ?? 'active') === 'retired' ||
+    isPurged(record) ||
     isSuperseded(record)
   );
 }

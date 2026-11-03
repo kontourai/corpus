@@ -26,6 +26,7 @@ export const VALID_STATUS_TRANSITIONS: Record<string, ReadonlySet<string>> = {
   active: new Set(['implemented', 'retired']),
   implemented: new Set(['retired']),
   retired: new Set(), // terminal — no further transitions
+  purged: new Set(), // terminal — only `purge` writes it, and it never reverses
 };
 
 function isNonemptyString(value: unknown): value is string {
@@ -105,7 +106,7 @@ export function assertKitRecord(
   }
   if (
     record.status !== undefined &&
-    !['active', 'implemented', 'retired'].includes(String(record.status))
+    !['active', 'implemented', 'retired', 'purged'].includes(String(record.status))
   ) {
     invalid('invalid lifecycle status');
   }

@@ -20,9 +20,12 @@ import type {
   KitReverseLink,
   KnowledgeStoreAdapter,
   KnowledgeStoreCreateProposals,
+  KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
+  PurgeEvidence,
+  PurgeResult,
   RejectEvidence,
   RetireEvidence,
   SupersedeEvidence,
@@ -35,6 +38,7 @@ import {
   KnowledgeRecordNotFoundError,
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
+  ReadOnlyStoreError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { assertCreateFields } from './shared/create-input.js';
@@ -60,7 +64,16 @@ import {
   normalizeAliases,
   registerAliases,
   resolveRecordId,
+  unregisterAliases,
 } from './shared/identity.js';
+import {
+  assertNoPurgedSupport,
+  assertNotPurged,
+  planPurge,
+  survivorOf,
+  tombstoneOf,
+  validatePurgeInput,
+} from './shared/purge.js';
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
@@ -78,7 +91,7 @@ export type { ReindexResult };
 
 export interface KitDefaultStoreOptions extends StoreOptions {}
 
-export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals {
+export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly recordsDir: string;
@@ -349,7 +362,9 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     const explicitLinks = input.links ?? [];
     const wikilinks = extractWikilinks(input.body);
     const links = mergeLinks(explicitLinks, wikilinks);
-    assertCompiledSource(input.type, links, (target) => (isSafePathSegment(target) ? this.readRecord(target) : null));
+    const lookup = (target: string) => (isSafePathSegment(target) ? this.readRecord(target) : null);
+    assertNoPurgedSupport('create', links, input.provenance.source_ids, lookup);
+    assertCompiledSource(input.type, links, lookup);
 
     const record: KitRecord = {
       id,
@@ -413,6 +428,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const record = this.readRecord(id);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
+    assertNotPurged('update', record);
 
     const mutableKeys = [
       'title',
@@ -466,6 +482,13 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
         fields.body !== undefined ? fields.body : record.body,
       );
       newLinks = mergeLinks(fields.links, wikilinks);
+      const kept = record.links ?? [];
+      assertNoPurgedSupport(
+        'update',
+        newLinks.filter((l) => !kept.some((k) => k.target_id === l.target_id && k.kind === l.kind)),
+        undefined,
+        (target) => (isSafePathSegment(target) ? this.readRecord(target) : null),
+      );
     } else if (fields.body !== undefined) {
       const wikilinks = extractWikilinks(fields.body);
       newLinks = mergeLinks(record.links ?? [], wikilinks);
@@ -531,10 +554,12 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const source = this.readRecord(sourceId);
     if (!source) throw new KnowledgeRecordNotFoundError(sourceId);
+    assertNotPurged('link', source);
 
     for (const l of links) {
-      if (!this.readRecord(l.target_id))
-        throw new KnowledgeRecordNotFoundError(l.target_id);
+      const target = this.readRecord(l.target_id);
+      if (!target) throw new KnowledgeRecordNotFoundError(l.target_id);
+      assertNotPurged('link', target);
     }
 
     const now = new Date(this.services.clock()).toISOString();
@@ -597,6 +622,8 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('propose', concept);
+    assertNotPurged('propose', proposer);
 
     const now = new Date(this.services.clock()).toISOString();
 
@@ -680,6 +707,8 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('apply', concept);
+    assertNotPurged('apply', proposer);
 
     const proposerLinks = proposer.links ?? [];
     const hasProposesLink = proposerLinks.some(
@@ -742,6 +771,8 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const proposer = this.readRecord(proposerId);
     if (!proposer) throw new KnowledgeRecordNotFoundError(proposerId);
+    assertNotPurged('reject', concept);
+    assertNotPurged('reject', proposer);
 
     const proposerLinks = proposer.links ?? [];
     const hasProposesLink = proposerLinks.some(
@@ -779,9 +810,17 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     options?: { requestKey?: string },
   ): Promise<string> {
     return this.files.mutate('proposeCreate', () =>
-      this.proposals.stage(candidate, proposerId, evidence, (id) =>
-        isSafePathSegment(id) && this.readRecord(id) !== null,
-      options),
+      this.proposals.stage(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => isSafePathSegment(id) && this.readRecord(id) !== null,
+        options,
+        undefined,
+        (stored) => assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          isSafePathSegment(id) ? this.readRecord(id) : null,
+        ),
+      ),
     );
   }
 
@@ -858,9 +897,12 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const newRecord = this.readRecord(newId);
     if (!newRecord) throw new KnowledgeRecordNotFoundError(newId);
+    assertNotPurged('supersede', newRecord);
 
     for (const sid of supersededIds) {
-      if (!this.readRecord(sid)) throw new KnowledgeRecordNotFoundError(sid);
+      const old = this.readRecord(sid);
+      if (!old) throw new KnowledgeRecordNotFoundError(sid);
+      assertNotPurged('supersede', old);
     }
 
     const now = new Date(this.services.clock()).toISOString();
@@ -960,6 +1002,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     const record = this.readRecord(id);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
+    assertNotPurged('retire', record);
 
     const currentStatus = record.status ?? 'active';
     const allowed = VALID_STATUS_TRANSITIONS[currentStatus];
@@ -995,6 +1038,57 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       ],
     };
     this.writeRecord(updated);
+  }
+
+  // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
+
+  async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const requested = validatePurgeInput(ids, evidence);
+    return this.files.mutate('purge', () => this.purgeLocked(requested, evidence), { erasure: true });
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    const records = new Map(this.allRecords().map((record) => [record.id, record]));
+    for (const id of requested) {
+      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
+    }
+    const plan = planPurge(requested, records);
+    const now = new Date(this.services.clock()).toISOString();
+    const graph = this.loadGraph();
+    const aliasIndex = this.loadAliasIndex();
+
+    for (const id of [...plan.purged, ...plan.cascaded]) {
+      const stone = tombstoneOf(records.get(id)!, now, evidence, plan.via.get(id));
+      removeLinksFromGraph(graph, id);
+      addLinksToGraph(graph, id, stone.links ?? []);
+      unregisterAliases(aliasIndex, id);
+      this.writeRecord(stone);
+    }
+    for (const [op, ids] of [['support-purged', plan.survivors], ['reference-purged', plan.referrers]] as const) {
+      for (const id of ids) {
+        const kept = survivorOf(op, records.get(id)!, now, evidence, plan.erased, plan.lost.get(id)!);
+        // The graph mirrors link labels, so it follows the stripped labels.
+        removeLinksFromGraph(graph, id);
+        addLinksToGraph(graph, id, kept.links ?? []);
+        this.writeRecord(kept);
+      }
+    }
+    this.saveGraph(graph);
+    this.saveAliasIndex(aliasIndex);
+    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

@@ -7815,6 +7815,2775 @@
       ]
     },
     {
+      "id": "purge-tombstone-shape",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-shape-a",
+              "type": "raw",
+              "title": "Ember Zebra Interview",
+              "body": "Confidential statement ALPHA-7",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "session_id": "session-1",
+                "note": "note ALPHA-7"
+              },
+              "tags": [
+                "secret-tag"
+              ],
+              "aliases": [
+                "conformance/ember-zebra"
+              ],
+              "ttl_seconds": 3600
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "record.type",
+          "equals": "raw"
+        },
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "record.body",
+          "equals": ""
+        },
+        {
+          "ref": "record.category",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.created_at",
+          "equals": "$before.created_at"
+        },
+        {
+          "ref": "record.tags",
+          "absent": true
+        },
+        {
+          "ref": "record.aliases",
+          "absent": true
+        },
+        {
+          "ref": "record.ttl_seconds",
+          "absent": true
+        },
+        {
+          "ref": "record.expires_at",
+          "absent": true
+        },
+        {
+          "ref": "record.provenance.agent",
+          "equals": "creator"
+        },
+        {
+          "ref": "record.provenance.session_id",
+          "equals": "session-1"
+        },
+        {
+          "ref": "record.provenance.note",
+          "absent": true
+        },
+        {
+          "ref": "record.mutation_log",
+          "length": 1
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.mutation_log.0.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "record.mutation_log.0.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.cause",
+          "equals": "requested"
+        },
+        {
+          "ref": "result.purged",
+          "equals": [
+            "$a"
+          ]
+        },
+        {
+          "ref": "result.cascaded",
+          "length": 0
+        },
+        {
+          "ref": "result.survivors",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-tombstone-links",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-links-s",
+              "type": "raw",
+              "title": "purge-links-s",
+              "body": "purge-links-s evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-links-c",
+              "type": "compiled",
+              "title": "purge-links-c",
+              "body": "compiled body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$s",
+                  "kind": "source"
+                },
+                {
+                  "target_id": "$s",
+                  "kind": "related",
+                  "label": "LABEL-ALPHA"
+                }
+              ]
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$c"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$c"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$s"
+          ],
+          "save": "source"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$c"
+          ],
+          "save": "graph"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.links",
+          "length": 2
+        },
+        {
+          "ref": "record.links.0.target_id",
+          "equals": "$s"
+        },
+        {
+          "ref": "record.links.0.kind",
+          "equals": "source"
+        },
+        {
+          "ref": "record.links.1.kind",
+          "equals": "related"
+        },
+        {
+          "ref": "record.links.1.label",
+          "absent": true
+        },
+        {
+          "ref": "graph.forward",
+          "length": 2
+        },
+        {
+          "ref": "graph.forward.1.label",
+          "absent": true
+        },
+        {
+          "ref": "source.status",
+          "equals": "active"
+        },
+        {
+          "ref": "source.body",
+          "equals": "purge-links-s evidence"
+        },
+        {
+          "ref": "source.mutation_log",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-cascade-sole-dependency",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-chain-s",
+              "type": "raw",
+              "title": "purge-chain-s",
+              "body": "purge-chain-s evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-chain-c",
+              "type": "compiled",
+              "title": "purge-chain-c",
+              "body": "compiled from s",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$s",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-chain-k",
+              "type": "concept",
+              "title": "purge-chain-k",
+              "body": "concept from c",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$c",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "k"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-chain-u",
+              "type": "concept",
+              "title": "purge-chain-u",
+              "body": "unrelated",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "u"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-chain-x",
+              "type": "concept",
+              "title": "purge-chain-x",
+              "body": "merely related",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$s",
+                  "kind": "related"
+                }
+              ]
+            }
+          ],
+          "save": "x"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$s"
+          ],
+          "save": "s_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$c"
+          ],
+          "save": "c_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$k"
+          ],
+          "save": "k_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$u"
+          ],
+          "save": "u_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$x"
+          ],
+          "save": "x_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.purged",
+          "equals": [
+            "$s"
+          ]
+        },
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$c",
+            "$k"
+          ]
+        },
+        {
+          "ref": "result.survivors",
+          "length": 0
+        },
+        {
+          "ref": "s_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "c_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "c_after.body",
+          "equals": ""
+        },
+        {
+          "ref": "c_after.mutation_log.0.op",
+          "equals": "purged"
+        },
+        {
+          "ref": "c_after.mutation_log.0.evidence.cause",
+          "equals": "sole-support-purged"
+        },
+        {
+          "ref": "c_after.mutation_log.0.evidence.via.0",
+          "equals": "$s"
+        },
+        {
+          "ref": "k_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "k_after.body",
+          "equals": ""
+        },
+        {
+          "ref": "k_after.mutation_log.0.evidence.via.0",
+          "equals": "$c"
+        },
+        {
+          "ref": "u_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "u_after.body",
+          "equals": "unrelated"
+        },
+        {
+          "ref": "x_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "x_after.body",
+          "equals": "merely related"
+        },
+        {
+          "ref": "result.referrers",
+          "equals": [
+            "$x"
+          ]
+        },
+        {
+          "ref": "x_after.mutation_log",
+          "length": 1
+        },
+        {
+          "ref": "x_after.mutation_log.0.op",
+          "equals": "reference-purged"
+        },
+        {
+          "ref": "x_after.mutation_log.0.evidence.purged_ids.0",
+          "equals": "$s"
+        },
+        {
+          "ref": "x_after.links",
+          "length": 1
+        },
+        {
+          "ref": "x_after.links.0.target_id",
+          "equals": "$s"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-survivor-keeps-support",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-survivor-s1",
+              "type": "raw",
+              "title": "purge-survivor-s1",
+              "body": "purge-survivor-s1 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s1"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-survivor-s2",
+              "type": "raw",
+              "title": "purge-survivor-s2",
+              "body": "purge-survivor-s2 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s2"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-survivor-c",
+              "type": "compiled",
+              "title": "purge-survivor-c",
+              "body": "compiled from both",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$s1",
+                  "kind": "source"
+                },
+                {
+                  "target_id": "$s2",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s1"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$c"
+          ],
+          "save": "survivor"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s2"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "second"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$c"
+          ],
+          "save": "cascaded"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "first.survivors",
+          "equals": [
+            "$c"
+          ]
+        },
+        {
+          "ref": "first.cascaded",
+          "length": 0
+        },
+        {
+          "ref": "survivor.status",
+          "equals": "active"
+        },
+        {
+          "ref": "survivor.body",
+          "equals": "compiled from both"
+        },
+        {
+          "ref": "survivor.links",
+          "length": 2
+        },
+        {
+          "ref": "survivor.mutation_log",
+          "length": 1
+        },
+        {
+          "ref": "survivor.mutation_log.0.op",
+          "equals": "support-purged"
+        },
+        {
+          "ref": "survivor.mutation_log.0.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "survivor.mutation_log.0.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "survivor.mutation_log.0.evidence.purged_ids.0",
+          "equals": "$s1"
+        },
+        {
+          "ref": "second.cascaded",
+          "equals": [
+            "$c"
+          ]
+        },
+        {
+          "ref": "second.survivors",
+          "length": 0
+        },
+        {
+          "ref": "cascaded.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "cascaded.body",
+          "equals": ""
+        },
+        {
+          "ref": "cascaded.mutation_log",
+          "length": 2
+        },
+        {
+          "ref": "cascaded.mutation_log.0.op",
+          "equals": "support-purged"
+        },
+        {
+          "ref": "cascaded.mutation_log.1.op",
+          "equals": "purged"
+        },
+        {
+          "ref": "cascaded.mutation_log.1.evidence.via.0",
+          "equals": "$s1"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-source-ids-support",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-ids-s1",
+              "type": "raw",
+              "title": "purge-ids-s1",
+              "body": "purge-ids-s1 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s1"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-ids-s2",
+              "type": "raw",
+              "title": "purge-ids-s2",
+              "body": "purge-ids-s2 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s2"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-ids-d",
+              "type": "concept",
+              "title": "purge-ids-d",
+              "body": "only s1",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$s1"
+                ]
+              }
+            }
+          ],
+          "save": "d"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-ids-e",
+              "type": "concept",
+              "title": "purge-ids-e",
+              "body": "s1 and s2",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$s1",
+                  "$s2"
+                ]
+              }
+            }
+          ],
+          "save": "e"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-ids-f",
+              "type": "concept",
+              "title": "purge-ids-f",
+              "body": "s1 and outside",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$s1",
+                  "external-conversation-1"
+                ]
+              }
+            }
+          ],
+          "save": "f"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s1"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$d"
+          ],
+          "save": "d_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$e"
+          ],
+          "save": "e_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$f"
+          ],
+          "save": "f_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$d"
+          ]
+        },
+        {
+          "ref": "result.survivors",
+          "equals": [
+            "$e",
+            "$f"
+          ]
+        },
+        {
+          "ref": "d_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "d_after.provenance.source_ids.0",
+          "equals": "$s1"
+        },
+        {
+          "ref": "e_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "e_after.mutation_log.0.op",
+          "equals": "support-purged"
+        },
+        {
+          "ref": "f_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "f_after.mutation_log.0.op",
+          "equals": "support-purged"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-read-paths",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-read-a",
+              "type": "raw",
+              "title": "Ember Zebra Interview",
+              "body": "Confidential statement ALPHA-7",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "conformance/ember-zebra"
+              ],
+              "ttl_seconds": 60
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-read-o",
+              "type": "concept",
+              "title": "purge-read-o",
+              "body": "other",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$a",
+                  "kind": "related"
+                }
+              ]
+            }
+          ],
+          "save": "o"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "conformance/ember-zebra"
+          ],
+          "save": "by_alias"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw"
+          ],
+          "save": "working"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "history"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "raw",
+            {
+              "includeHistory": true,
+              "stale": true,
+              "now": 99999999999999
+            }
+          ],
+          "save": "stale"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "conformance.purge",
+            {
+              "prefix": true,
+              "includeHistory": true
+            }
+          ],
+          "save": "old_category"
+        },
+        {
+          "call": "listByCategory",
+          "args": [
+            "purged",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "new_category"
+        },
+        {
+          "call": "getLinks",
+          "args": [
+            "$a"
+          ],
+          "save": "links"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "by_alias",
+          "equals": null
+        },
+        {
+          "ref": "working",
+          "length": 0
+        },
+        {
+          "ref": "history",
+          "length": 1
+        },
+        {
+          "ref": "history.0.id",
+          "equals": "$a"
+        },
+        {
+          "ref": "history.0.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "history.0.body",
+          "equals": ""
+        },
+        {
+          "ref": "stale",
+          "length": 0
+        },
+        {
+          "ref": "old_category",
+          "length": 1
+        },
+        {
+          "ref": "old_category.0.id",
+          "equals": "$o"
+        },
+        {
+          "ref": "new_category",
+          "length": 1
+        },
+        {
+          "ref": "new_category.0.body",
+          "equals": ""
+        },
+        {
+          "ref": "links.reverse",
+          "length": 1
+        },
+        {
+          "ref": "links.reverse.0.source_id",
+          "equals": "$o"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-store-bytes",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-s",
+              "type": "raw",
+              "title": "Folder only",
+              "body": "folder only body",
+              "category": "private.person-739",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-a",
+              "type": "raw",
+              "title": "Ember Zebra Interview",
+              "body": "Confidential statement ALPHA-7",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "note": "note ALPHA-7"
+              },
+              "tags": [
+                "secret-tag-alpha"
+              ],
+              "aliases": [
+                "conformance/ember-zebra"
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-b",
+              "type": "raw",
+              "title": "Second source",
+              "body": "second source evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-c",
+              "type": "compiled",
+              "title": "purge-bytes-c",
+              "body": "compiled from both",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$a",
+                  "kind": "source",
+                  "label": "label ALPHA-7"
+                },
+                {
+                  "target_id": "$b",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-r",
+              "type": "concept",
+              "title": "purge-bytes-r",
+              "body": "refers to a",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$a",
+                  "kind": "related",
+                  "label": "label ALPHA-7"
+                }
+              ]
+            }
+          ],
+          "save": "r"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Pending Candidate Heading",
+              "body": "pending candidate body ALPHA-9",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "source_ids": [
+                  "$a"
+                ]
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "pending evidence ALPHA-9"
+            }
+          ],
+          "save": "pp"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "present",
+          "markers": [
+            "Ember Zebra Interview",
+            "Confidential statement ALPHA-7",
+            "secret-tag-alpha",
+            "conformance/ember-zebra",
+            "note ALPHA-7",
+            "label ALPHA-7",
+            "ember-zebra-interview",
+            "person-739",
+            "Pending Candidate Heading",
+            "pending candidate body ALPHA-9",
+            "pending evidence ALPHA-9"
+          ]
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a",
+              "$s"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "absent",
+          "markers": [
+            "Ember Zebra Interview",
+            "Confidential statement ALPHA-7",
+            "secret-tag-alpha",
+            "conformance/ember-zebra",
+            "note ALPHA-7",
+            "label ALPHA-7",
+            "ember-zebra-interview",
+            "person-739",
+            "Pending Candidate Heading",
+            "pending candidate body ALPHA-9",
+            "pending evidence ALPHA-9"
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "rebuilt",
+          "markers": [
+            "Ember Zebra Interview",
+            "Confidential statement ALPHA-7",
+            "secret-tag-alpha",
+            "conformance/ember-zebra",
+            "note ALPHA-7",
+            "label ALPHA-7",
+            "ember-zebra-interview",
+            "person-739",
+            "Pending Candidate Heading",
+            "pending candidate body ALPHA-9",
+            "pending evidence ALPHA-9"
+          ]
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-refuses-tombstone-mutation",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-refuse-a",
+              "type": "raw",
+              "title": "purge-refuse-a",
+              "body": "purge-refuse-a evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-refuse-b",
+              "type": "raw",
+              "title": "purge-refuse-b",
+              "body": "purge-refuse-b evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-refuse-p",
+              "type": "concept",
+              "title": "purge-refuse-p",
+              "body": "proposer",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "revived"
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$a",
+            [
+              {
+                "target_id": "$b",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$b",
+            [
+              {
+                "target_id": "$a",
+                "kind": "related"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "propose",
+          "args": [
+            "$a",
+            "$p",
+            {
+              "agent": "editor",
+              "proposal": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "apply",
+          "args": [
+            "$a",
+            "$p",
+            {
+              "agent": "editor",
+              "new_body": "revived",
+              "rationale": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "reject",
+          "args": [
+            "$a",
+            "$p",
+            {
+              "agent": "editor",
+              "reason": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$b",
+            [
+              "$a"
+            ],
+            {
+              "agent": "editor",
+              "rationale": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "supersede",
+          "args": [
+            "$a",
+            [
+              "$b"
+            ],
+            {
+              "agent": "editor",
+              "rationale": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "retire",
+          "args": [
+            "$a",
+            "retired",
+            {
+              "agent": "editor",
+              "rationale": "revive"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$p",
+            {
+              "links": [
+                {
+                  "target_id": "$a",
+                  "kind": "source"
+                }
+              ]
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-refuse-a",
+              "type": "raw",
+              "title": "purge-refuse-a",
+              "body": "reused identity",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "again",
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "compiled",
+              "title": "dependent",
+              "body": "cites a tombstone",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "links": [
+                {
+                  "target_id": "$a",
+                  "kind": "source"
+                }
+              ]
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "type": "concept",
+              "title": "dependent",
+              "body": "cites a tombstone",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$a"
+                ]
+              }
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "record.body",
+          "equals": ""
+        },
+        {
+          "ref": "record.mutation_log",
+          "length": 1
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-input-validation",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-input-record",
+              "type": "raw",
+              "title": "purge-input-record",
+              "body": "kept",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              },
+              "aliases": [
+                "conformance/purge-input"
+              ]
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "no-such-record"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a",
+              "no-such-record"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "purge-input"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "conformance/purge-input"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "   "
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "active"
+        },
+        {
+          "ref": "record.body",
+          "equals": "kept"
+        },
+        {
+          "ref": "record.mutation_log",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-idempotent",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-idem-a",
+              "type": "raw",
+              "title": "purge-idem-a",
+              "body": "purge-idem-a evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a",
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "again"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "again.purged",
+          "length": 0
+        },
+        {
+          "ref": "again.alreadyPurged",
+          "equals": [
+            "$a"
+          ]
+        },
+        {
+          "ref": "record.mutation_log",
+          "length": 1
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-journal-erasure",
+      "operations": [
+        {
+          "special": "purge-journal-erasure"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "An adapter keeps purged content, skips the sole-dependency cascade, drops a survivor's record of the purge, or lets a tombstone be revived.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-journal-in-flight",
+      "operations": [
+        {
+          "special": "purge-journal-in-flight"
+        }
+      ],
+      "expected": [],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "A crash after the last file of a purge is published but before the commit marker leaves the erased content in the transaction journal.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-cascade-cycle",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cycle-r",
+              "type": "raw",
+              "title": "purge-cycle-r",
+              "body": "purge-cycle-r body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "r"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cycle-x",
+              "type": "concept",
+              "title": "purge-cycle-x",
+              "body": "purge-cycle-x body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$r"
+                ]
+              }
+            }
+          ],
+          "save": "x"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cycle-y",
+              "type": "concept",
+              "title": "purge-cycle-y",
+              "body": "purge-cycle-y body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$x"
+                ]
+              }
+            }
+          ],
+          "save": "y"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$x",
+            [
+              {
+                "target_id": "$y",
+                "kind": "source"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$r"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$y"
+          ],
+          "save": "y_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$x",
+            "$y"
+          ]
+        },
+        {
+          "ref": "result.survivors",
+          "length": 0
+        },
+        {
+          "ref": "y_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "y_after.body",
+          "equals": ""
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "Records that only support each other keep erased content alive after their common root is purged.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-cascade-cycle-member",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-p",
+              "type": "concept",
+              "title": "purge-cyc-p",
+              "body": "purge-cyc-p body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-q",
+              "type": "concept",
+              "title": "purge-cyc-q",
+              "body": "purge-cyc-q body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$p"
+                ]
+              }
+            }
+          ],
+          "save": "q"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$p",
+            [
+              {
+                "target_id": "$q",
+                "kind": "source"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-cyc-r",
+              "type": "concept",
+              "title": "purge-cyc-r",
+              "body": "purge-cyc-r body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$q"
+                ]
+              }
+            }
+          ],
+          "save": "r"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$p"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$q"
+          ],
+          "save": "q_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "r_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$q",
+            "$r"
+          ]
+        },
+        {
+          "ref": "result.survivors",
+          "length": 0
+        },
+        {
+          "ref": "q_after.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "q_after.body",
+          "equals": ""
+        },
+        {
+          "ref": "r_after.status",
+          "equals": "purged"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "A record whose only support is the purged record survives because the two support each other.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-survivor-with-live-cycle",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-root",
+              "type": "raw",
+              "title": "purge-live-root",
+              "body": "purge-live-root body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "root"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-x",
+              "type": "concept",
+              "title": "purge-live-x",
+              "body": "purge-live-x body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "x"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-y",
+              "type": "concept",
+              "title": "purge-live-y",
+              "body": "purge-live-y body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$x"
+                ]
+              }
+            }
+          ],
+          "save": "y"
+        },
+        {
+          "call": "link",
+          "args": [
+            "$x",
+            [
+              {
+                "target_id": "$y",
+                "kind": "source"
+              }
+            ],
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-live-b",
+              "type": "concept",
+              "title": "purge-live-b",
+              "body": "purge-live-b body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator",
+                "source_ids": [
+                  "$root",
+                  "$x"
+                ]
+              }
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$root"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$b"
+          ],
+          "save": "b_after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$x"
+          ],
+          "save": "x_after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.survivors",
+          "equals": [
+            "$b"
+          ]
+        },
+        {
+          "ref": "result.cascaded",
+          "length": 0
+        },
+        {
+          "ref": "b_after.status",
+          "equals": "active"
+        },
+        {
+          "ref": "x_after.status",
+          "equals": "active"
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge (2026-11-02)"
+        }
+      ],
+      "regression": "A record is erased although it has support the purge never reached.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-proposal-sole-support-rejected",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-prop-s",
+              "type": "raw",
+              "title": "purge-prop-s",
+              "body": "purge-prop-s evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Candidate Heading",
+              "body": "sensitive candidate body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "source_ids": [
+                  "$s"
+                ]
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "proposal text"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "concept",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "records"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.proposalsRejected",
+          "equals": [
+            "$p"
+          ]
+        },
+        {
+          "ref": "result.proposalsScrubbed",
+          "equals": [
+            "$p"
+          ]
+        },
+        {
+          "ref": "result.proposalsBlocked",
+          "length": 0
+        },
+        {
+          "ref": "after.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "after.reviewer_id",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.candidate.provenance.source_ids.0",
+          "equals": "$s"
+        },
+        {
+          "ref": "records",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge and create proposals (2026-11-02, 2026-11-03)"
+        }
+      ],
+      "regression": "A pending create proposal that rests only on a purged record stays pending, keeps its candidate, or can still be applied.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-proposal-other-support-blocked",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-prop-b1",
+              "type": "raw",
+              "title": "purge-prop-b1",
+              "body": "purge-prop-b1 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s1"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-prop-b2",
+              "type": "raw",
+              "title": "purge-prop-b2",
+              "body": "purge-prop-b2 evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s2"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Candidate Heading",
+              "body": "candidate with other support",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "source_ids": [
+                  "$s1",
+                  "$s2"
+                ]
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "proposal text"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s1"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "still"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "concept",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "records"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.proposalsBlocked",
+          "equals": [
+            "$p"
+          ]
+        },
+        {
+          "ref": "result.proposalsRejected",
+          "length": 0
+        },
+        {
+          "ref": "after.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": "candidate with other support"
+        },
+        {
+          "ref": "still.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "records",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge and create proposals (2026-11-02, 2026-11-03)"
+        }
+      ],
+      "regression": "A pending proposal citing an erased record as a source can be applied, creating a record that rests on erased content.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-proposal-record-erased",
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Candidate Heading",
+              "body": "created then erased",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "source_ids": []
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "proposal text"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "save": "recordId"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$recordId"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$recordId"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.proposalsScrubbed",
+          "equals": [
+            "$p"
+          ]
+        },
+        {
+          "ref": "result.proposalsRejected",
+          "length": 0
+        },
+        {
+          "ref": "after.state",
+          "equals": "applied"
+        },
+        {
+          "ref": "after.record_id",
+          "equals": "$recordId"
+        },
+        {
+          "ref": "after.reviewer_id",
+          "equals": "reviewer-1"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.mutation_log.0.op",
+          "equals": "apply-create"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.proposal_id",
+          "equals": "$p"
+        },
+        {
+          "ref": "record.mutation_log.0.evidence.proposal_evidence",
+          "absent": true
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge and create proposals (2026-11-02, 2026-11-03)"
+        }
+      ],
+      "regression": "A purged record leaves the proposal that created it holding its whole candidate.",
+      "production_seam": false
+    },
+    {
+      "id": "purge-proposal-cites-tombstone",
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-prop-c",
+              "type": "raw",
+              "title": "purge-prop-c",
+              "body": "purge-prop-c evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "s"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$s"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Candidate Heading",
+              "body": "candidate body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "source_ids": [
+                  "$s"
+                ]
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "text"
+            }
+          ],
+          "expect_error": "PURGED"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "proposals"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "proposals",
+          "length": 0
+        }
+      ],
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decisions: purge and create proposals (2026-11-02, 2026-11-03)"
+        }
+      ],
+      "regression": "A new proposal can cite an erased record as a source.",
+      "production_seam": false
+    },
+    {
       "id": "create-request-key-retry",
       "source": [
         {
