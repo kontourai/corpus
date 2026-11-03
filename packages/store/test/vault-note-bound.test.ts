@@ -209,7 +209,7 @@ describe('vault note size bound', () => {
   });
 
   test('estimate versus applied note: a proposal id that YAML must quote', async () => {
-    // Digits are the one 200-character proposal id that costs two quote bytes in YAML.
+    // A digit-only id is one of the 200-character proposal ids that costs two quote bytes in YAML.
     let counter = 0;
     const digits = new KitObsidianStoreAdapter({
       storeRoot: root,
@@ -224,6 +224,30 @@ describe('vault note size bound', () => {
     internals.assertNoteFits = (text, operation) => { sizes[operation] = Buffer.byteLength(text); original(text, operation); };
     const proposal = await digits.proposeCreate(candidate({ type: 'concept', body: 'hello' }), 'proposer', { agent: 'distiller', proposal: 'add it' });
     await digits.applyCreate(proposal, '\u007f'.repeat(1022));
+    expect(sizes.proposeCreate).toBeGreaterThanOrEqual(sizes.create);
+  });
+
+  // Review round 3: an id-less candidate cannot be linked to as itself, so a link that names the
+  // stand-in id is a link to an absent record and renders as that id.
+  test('estimate versus applied note: links to an absent record that has the stand-in id', async () => {
+    // Default UUID ids: short generated ids would hide the few bytes this case is about.
+    const vault = new KitObsidianStoreAdapter({
+      storeRoot: root,
+      coordinationDirectory: join(base, 'coordination'),
+      coordinationIdentity: () => () => {},
+      lock: standaloneFileMutationLock,
+    });
+    const sizes: Record<string, number> = {};
+    const internals = vault as unknown as { assertNoteFits(text: string, operation: string): void };
+    const original = internals.assertNoteFits.bind(vault);
+    internals.assertNoteFits = (text, operation) => { sizes[operation] = Buffer.byteLength(text); original(text, operation); };
+    const kinds = ['source', 'appears-in', 'person', 'related', 'refines'];
+    const proposal = await vault.proposeCreate(
+      candidate({ id: undefined, type: 'person', title: 'X', body: 'hello', links: kinds.map((kind) => ({ target_id: '00000000-0000-0000-0000-000000000000', kind })) }),
+      'proposer',
+      { agent: 'distiller', proposal: 'add it' },
+    );
+    await vault.applyCreate(proposal, '\u007f'.repeat(1022));
     expect(sizes.proposeCreate).toBeGreaterThanOrEqual(sizes.create);
   });
 });

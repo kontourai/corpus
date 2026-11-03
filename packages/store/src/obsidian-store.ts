@@ -1226,18 +1226,20 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     const links = mergeLinks(candidate.links ?? [], extractWikilinks(candidate.body));
     const id = candidate.id || PLACEHOLDER_RECORD_ID;
     // `writeRecord` adds the new record to the index before it renders, so a link to the
-    // record itself shows its file name. Do the same here, or leave the index as it is when
-    // the destination cannot be chosen: `applyCreate` reports that.
+    // record itself shows its file name. Do the same here when the candidate names its id
+    // (`proposeCreate` already refused an id that is taken). An id-less candidate cannot be
+    // linked to by anything yet, and its stand-in id must not capture a link that names
+    // another record. If the destination cannot be chosen, size without the entry:
+    // `applyCreate` reports that.
     const pathIndex = this.loadPathIndex();
-    try {
-      const path = this.computeRelPath(candidate.category, candidate.title, id, candidate.type, pathIndex);
-      // An id-less candidate is sized under a stand-in id; leave a record that holds it alone.
-      if (!pathIndex.by_id[id]) {
+    if (candidate.id) {
+      try {
+        const path = this.computeRelPath(candidate.category, candidate.title, id, candidate.type, pathIndex);
         pathIndex.by_id[id] = { path, archived: false };
         pathIndex.by_path[path] = id;
+      } catch {
+        /* sized without the entry */
       }
-    } catch {
-      /* sized without the entry */
     }
     const record = this.newRecord(
       candidate,
