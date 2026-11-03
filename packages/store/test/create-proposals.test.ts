@@ -169,6 +169,37 @@ describe.each([
     expect((await store.getProposal(id))?.request_digest).toBe('58ebe4238514a655424b6bba85d879e3fb39ffed0c3e822adad098d3becacc67');
   });
 
+  test('structured source refs reject a changing array length', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    const target = Array.from({ length: 300 }, () => ref);
+    let lengthReads = 0;
+    const refs = new Proxy(target, { get(array, key, receiver) { return key === 'length' ? (++lengthReads === 1 ? 1 : 300) : Reflect.get(array, key, receiver); } });
+    const before = tree(root);
+    expect(await code(store.create(candidate({ id: 'changing-length', provenance: { agent: 'writer', source_refs: refs } })))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+    expect(await store.listByType('raw')).toEqual([]);
+  });
+
+  test('structured source refs snapshot length even if a proxy hides indices', async () => {
+    const ref = { kind: 'session-transcript' as const, harness: 'h', session_id: 's', transcript_ref: 't' };
+    const target = Array.from({ length: 300 }, () => ref);
+    let lengthReads = 0;
+    const refs = new Proxy(target, {
+      ownKeys() { return ['0', 'length']; },
+      get(array, key, receiver) { return key === 'length' ? (++lengthReads === 1 ? 1 : 300) : Reflect.get(array, key, receiver); },
+    });
+    const id = await store.create(candidate({ id: 'hidden-indices', provenance: { agent: 'writer', source_refs: refs } }));
+    expect((await store.get(id))?.provenance.source_refs).toEqual([ref]);
+    expect(await store.listByType('raw')).toHaveLength(1);
+  });
+
+  test('structured source refs reject class instances with valid own fields', async () => {
+    class Ref { kind = 'session-transcript' as const; harness = 'h'; session_id = 's'; transcript_ref = 't'; }
+    const before = tree(root);
+    expect(await code(store.create(candidate({ id: 'class-ref', provenance: { agent: 'writer', source_refs: [new Ref()] } })))).toBe('MISSING_EVIDENCE');
+    expect(tree(root)).toEqual(before);
+  });
+
   test('request key retries return the original receipt and conflicts write nothing', async () => {
     const options = { requestKey: 'request-1' };
     const id = await store.proposeCreate(candidate(), 'agent-a', evidence, options);
