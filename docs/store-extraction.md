@@ -467,11 +467,13 @@ faults into the self-approval and working-set rules and requires the targeted
 tests and vectors to fail.
 
 The [request-key decision](https://github.com/kontourai/corpus/issues/45) adds an
-optional `requestKey` to `proposeCreate`. A retry with matching candidate,
+optional `requestKey` to `proposeCreate`; keys must not be empty or whitespace-only
+and are limited to 1024 UTF-8 bytes. A retry with matching candidate,
 proposer and evidence returns the original proposal ID, including after
 settlement; a conflicting reuse returns `REQUEST_KEY_CONFLICT` without writing.
 The key digest and input digest are retained with the proposal in the same
-transaction. Four `create-request-key-*` vectors exercise retries, conflicts,
+transaction, including after rejection; retention after record purge is not yet
+verified. Four `create-request-key-*` vectors exercise retries, conflicts,
 rejection and unkeyed calls in both profiles. The proposal tests also check that
 conflicts do not change store bytes and that a retry after apply returns the
 original receipt.
@@ -492,7 +494,9 @@ references carry bounded, validated attribution through proposal storage and
 record creation. They neither authorize transcript access nor constitute review
 evidence; `note` remains free text. Both store profiles run the source-reference
 survival and validation conformance vectors. Validation copies reference objects
-before persistence, including arrays with inherited serialization hooks, rejects sparse arrays, and prevents shared caller objects from
+before persistence, including arrays with inherited serialization hooks; it refuses
+serialization that adds, removes or changes references. It rejects sparse arrays
+and prevents shared caller objects from
 generating excessive YAML aliases, while preserving aliases in unrelated fields.
 
 The vault's proposal-size estimate serializes validated `source_refs` with the

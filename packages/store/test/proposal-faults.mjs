@@ -27,6 +27,7 @@ function run(label, args, success) {
 }
 const build = ['run', 'build', '--workspace=@kontourai/corpus-store'];
 const unit = (pattern) => ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/create-proposals.test.ts', '-t', pattern];
+const vaultUnit = (pattern) => ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/vault-note-bound.test.ts', '-t', pattern];
 const vectors = (...ids) => ['run', 'conformance', '--workspace=@kontourai/corpus-store', '--', ...ids];
 
 /** Replace `from` with `to` in `source`, failing loudly when the anchor has drifted. */
@@ -51,6 +52,21 @@ ${source.slice(end)}`;
 };
 
 const injections = [
+  {
+    name: 'request-key-version',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "  if (value.request_key_hash !== undefined && value.request_digest_version !== 1) throw corrupt('missing or unsupported request digest version');\n", '') }],
+    checks: [{ label: 'unit', args: unit('keyed requests fail closed'), failure: /promise resolved/ }],
+  },
+  {
+    name: 'request-key-vault-bound',
+    files: [{ file: 'src/obsidian-store.ts', mutate: (s) => swap(s, '(validated, origin) => this.assertCandidateFits(validated, origin),', '(validated, origin) => { if (!options?.requestKey) this.assertCandidateFits(validated, origin); },') }],
+    checks: [{ label: 'unit', args: vaultUnit('keyed proposals enforce'), failure: /expected undefined to match object/ }],
+  },
+  {
+    name: 'request-key-proposal-bound',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (Buffer.byteLength(text) > maxBytes) {', "if (Buffer.byteLength(`${JSON.stringify({ ...proposal, request_key_hash: undefined, request_digest: undefined, request_digest_version: undefined }, null, 2)}\\n`) > maxBytes) {") }],
+    checks: [{ label: 'unit', args: unit('request key metadata counts toward'), failure: /expected undefined to match object/ }],
+  },
   {
     name: 'request-key-conflict-write',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';"), 'if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (metadata.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],

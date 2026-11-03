@@ -144,7 +144,7 @@ export class CreateProposals {
     freshnessPatch(projected);
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
-    if (sourceRefs !== undefined && JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs)) {
+    if (JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs)) {
       throw new MissingEvidenceError('proposeCreate: provenance serialization changed source_refs');
     }
     freshnessPatch(stored);
