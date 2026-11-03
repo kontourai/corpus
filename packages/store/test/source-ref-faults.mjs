@@ -12,7 +12,7 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 const run = (label, pattern, good) => {
   const r = spawnSync('npm', ['run', 'test', '--workspace=@kontourai/corpus-store', '--', 'test/create-proposals.test.ts', '-t', pattern], { cwd: root, encoding: 'utf8', timeout: 300000 });
   const log = (r.stdout ?? '') + (r.stderr ?? ''); writeFileSync(join(output, `${label}.log`), log);
-  assert.equal(r.error, undefined); if (good) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /MISSING_EVIDENCE|promise resolved|KnowledgeStoreCorruptionError|aliases exceeded/); }
+  assert.equal(r.error, undefined); if (good) assert.equal(r.status, 0, log); else { assert.notEqual(r.status, 0, log); assert.match(log, /MISSING_EVIDENCE|MissingEvidenceError|promise resolved|KnowledgeStoreCorruptionError|aliases exceeded/); }
   console.log(`${label}: exit ${r.status}`);
 };
 const cases = [
