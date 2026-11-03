@@ -52,6 +52,29 @@ ${source.slice(end)}`;
 
 const injections = [
   {
+    name: 'request-key-conflict-write',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "import { join } from 'node:path';", "import { appendFileSync } from 'node:fs';\nimport { join } from 'node:path';").replace('if (metadata.request_digest !== requestDigest) throw new RequestKeyConflictError();', "if (metadata.request_digest !== requestDigest) { appendFileSync(this.pathOf(existing.id), ' '); throw new RequestKeyConflictError(); }") }],
+    checks: [{ label: 'unit', args: unit('request key retries'), failure: /to deeply equal/ }],
+  },
+  {
+    name: 'request-key-retry-duplicates',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '          return existing.id;', '          continue;') }],
+    checks: [
+      { label: 'unit', args: unit('request key retries'), failure: /to be 'generated-/ },
+      { label: 'vector', args: vectors('create-request-key-retry'), failure: /create-request-key-retry/ },
+    ],
+  },
+  {
+    name: 'request-key-ignore-corruption',
+    files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "      const proposal = this.get(name.slice(0, -'.json'.length));", "      let proposal: KitCreateProposal | null; try { proposal = this.get(name.slice(0, -'.json'.length)); } catch { continue; }") }],
+    checks: [{ label: 'unit', args: unit('keyed requests fail closed'), failure: /promise resolved|expected.*reject/ }],
+  },
+  {
+    name: 'request-key-skip-recovery',
+    files: [{ file: 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '    if (!journal) return;\n    if (journal.phase', '    if (!journal) return;\n    if (journal.operation === "proposeCreate") return; // injected: no recovery\n    if (journal.phase') }],
+    checks: [{ label: 'unit', args: unit('keyed proposal recovers'), failure: /expected.*(false|crash-2)|to be false|deeply equal/ }],
+  },
+  {
     name: 'self-approval',
     files: [{
       file: 'src/shared/create-proposals.ts',
