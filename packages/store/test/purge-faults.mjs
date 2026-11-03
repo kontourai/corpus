@@ -29,7 +29,7 @@ const controls = [
   { id: 'cascade-on-any-lost-support', file: purge, mutate: (s) => swap(s, 'support.some((id) => !inStore.has(id) || alive.has(id))', 'support.every((id) => !inStore.has(id) || alive.has(id))'),
     args: conformance('purge-survivor-keeps-support', 'purge-source-ids-support'), reason: /(survivor|cascaded|e_after|f_after)/ },
   { id: 'outside-support-not-real', file: purge, mutate: (s) => swap(s, '!inStore.has(id) || alive.has(id)', 'alive.has(id)'),
-    args: conformance('purge-source-ids-support'), reason: /f_after\.status|result\.survivors/ },
+    args: conformance('purge-source-ids-support'), reason: /result\.cascaded/ },
   // The naive rule: a record survives while any support is not purged, so a cycle holds itself up.
   { id: 'no-cycle-rule', file: purge, mutate: (s) => swap(s, 'support.some((id) => !inStore.has(id) || alive.has(id))', 'support.some((id) => !gone.has(id))'),
     args: conformance('purge-cascade-cycle'), reason: /result\.cascaded/ },
