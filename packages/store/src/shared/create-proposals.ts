@@ -209,7 +209,7 @@ export class CreateProposals {
     });
   }
 
-  /** The rationale `reject` stores, validated. */
+  /** The rationale `rejectCreate` stores, validated. */
   static rationale(value: unknown): string {
     if (!isNonemptyString(value)) {
       throw new MissingEvidenceError('rejectCreate: missing required field: rationale');
