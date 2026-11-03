@@ -65,7 +65,7 @@ const injections = [
   {
     name: 'erased-key-retry',
     files: [{ file: 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);", "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) return existing.id;") }],
-    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /REQUEST_KEY_CONFLICT/ }],
+    checks: [{ label: 'unit', args: unit('erasure scrubs request digest'), failure: /promise resolved/ }],
   },
   {
     name: 'erased-key-digest-retained',
