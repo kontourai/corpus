@@ -263,7 +263,9 @@ silent behavior.
     the missing one or cites it as a source: a link can carry a label with the erased
     title, and a record that rests on it alone is one a purge would cascade, and only a
     record purge does either, so it refuses with a corruption error and writes nothing
-    (restore the record and the erasure purges it properly). Tombstones that refer to it
+    (restore the record and the erasure purges it properly; a record id named like an
+    `Object.prototype` property, such as `constructor`, still fails in the graph helpers
+    even then, [#66](https://github.com/kontourai/corpus/issues/66)). Tombstones that refer to it
     do not count. A vault always
     refuses the same way, because its path index lists a note that is missing.
     A host that wants to erase the proposal but not its record must not call this on an
