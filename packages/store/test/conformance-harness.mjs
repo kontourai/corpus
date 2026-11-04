@@ -396,7 +396,7 @@ export async function makeHarness(profile) {
           assert.equal(erased.status, 'fulfilled', `${settle} round ${round}: the erasure must succeed`);
           if (settled.status === 'rejected') {
             assert.equal(settled.reason.code, 'MISSING_EVIDENCE', `${settle} round ${round}: a settle that loses the race is refused cleanly`);
-            assert.match(settled.reason.message, /is rejected, not pending/, `${settle} round ${round}: a settle that loses the race must find the proposal settled, not fail on its erased candidate`);
+            assert.match(settled.reason.message, /is rejected, not pending/, `${settle} round ${round}: a settle that loses the race must find the proposal settled, not fail on its erased candidate (got ${settled.reason.code}: ${settled.reason.message})`);
           }
           const proposal = await adapter.getProposal(id);
           assert.ok(proposal.erasure, `${settle} round ${round}: the proposal must end erased`);
