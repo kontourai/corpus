@@ -383,7 +383,7 @@ export async function makeHarness(profile) {
       const stage = (round) => adapter.proposeCreate({ type: 'concept', title: `${marker} ${round}`, body: `${marker} body ${round}`, category: 'conformance.purge', provenance: { agent: 'drafter' } }, 'proposer-1', { agent: 'drafter', proposal: `${marker} evidence` });
       const racers = () => [createStore(profile, root, coordinationDirectory), createStore(profile, root, coordinationDirectory)];
       for (const settle of ['applyCreate', 'rejectCreate']) {
-        for (let round = 0; round < 4; round++) {
+        for (let round = 0; round < 6; round++) {
           const id = await stage(`${settle}-${round}`);
           const [a, b] = racers();
           const settling = () => a[settle](id, 'reviewer-1', ...(settle === 'rejectCreate' ? ['race rationale'] : []));
@@ -394,7 +394,10 @@ export async function makeHarness(profile) {
           if (round % 2 === 0) { settlingCall = settling(); erasingCall = erasing(); } else { erasingCall = erasing(); settlingCall = settling(); }
           const [settled, erased] = await Promise.allSettled([settlingCall, erasingCall]);
           assert.equal(erased.status, 'fulfilled', `${settle} round ${round}: the erasure must succeed`);
-          if (settled.status === 'rejected') assert.equal(settled.reason.code, 'MISSING_EVIDENCE', `${settle} round ${round}: a settle that loses the race is refused cleanly`);
+          if (settled.status === 'rejected') {
+            assert.equal(settled.reason.code, 'MISSING_EVIDENCE', `${settle} round ${round}: a settle that loses the race is refused cleanly`);
+            assert.match(settled.reason.message, /is rejected, not pending/, `${settle} round ${round}: a settle that loses the race must find the proposal settled, not fail on its erased candidate`);
+          }
           const proposal = await adapter.getProposal(id);
           assert.ok(proposal.erasure, `${settle} round ${round}: the proposal must end erased`);
           assert.equal(proposal.candidate.body, '');

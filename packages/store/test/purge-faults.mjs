@@ -189,7 +189,7 @@ const controls = [
   { id: 'proposal-reject-after-erasure', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
     args: focused('test/purge-proposal.test.ts', '-t', 'a reject that holds the lock'), reason: /rejectCreate after erasure must be refused/ },
   { id: 'proposal-settle-after-erasure-race', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
-    args: conformance('purge-proposal-concurrent-settlement'), reason: /no live record may survive|must end erased/ },
+    args: conformance('purge-proposal-concurrent-settlement'), reason: /must find the proposal settled|no live record may survive/ },
   // A retry after erasure is refused as a retired key, never compared with anything.
   { id: 'proposal-retry-after-erasure-compared', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);", ''),
     args: focused('test/purge-proposal.test.ts', '-t', 'a retry after erasing'), reason: /retired/ },
