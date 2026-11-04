@@ -1128,7 +1128,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
               // record may still link to it, labelled with the erased title, and a purge would strip
               // that label; with no record to purge, refuse instead of leaving it behind.
               const { graph } = this.rebuildIndexes();
-              if ((graph.reverse[recordId]?.length ?? 0) > 0) {
+              if (Object.hasOwn(graph.reverse, recordId) && graph.reverse[recordId].length > 0) {
                 throw new KnowledgeStoreCorruptionError(
                   `create proposal ${input.proposalId}: its record ${recordId} is missing but other records still link to it; restore the record or remove those links, then erase the proposal`,
                 );

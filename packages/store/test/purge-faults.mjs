@@ -211,7 +211,7 @@ const controls = [
   // Review of #64, round 2: cleanup custody, a still-linked missing record, nested evidence, bounded record ids.
   { id: 'recovery-removes-journal-before-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);\n    this.removeJournal();", "this.removeJournal();\n    if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);"),
     args: focused('test/purge-proposal.test.ts', '-t', 'folder cleanup is finished'), reason: /expected false to be true|to be true/ },
-  { id: 'default-proposal-purge-linked-missing-record', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if ((graph.reverse[recordId]?.length ?? 0) > 0) {', 'if (false) {'),
+  { id: 'default-proposal-purge-linked-missing-record', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (Object.hasOwn(graph.reverse, recordId) && graph.reverse[recordId].length > 0) {', 'if (false) {'),
     args: focused('test/purge-proposal.test.ts', '-t', 'is refused, and erased once it is restored'), reason: /instead of rejecting/ },
   { id: 'proposal-purge-nested-evidence-reread', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'this.purgeLocked([recordId], input.evidence)', 'this.purgeLocked([recordId], evidence)'),
     args: focused('test/purge-proposal.test.ts', '-t', 'the same holds for an applied proposal'), reason: /privacy-officer|corrupt|agent/ },
