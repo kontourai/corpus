@@ -64,8 +64,8 @@ const cases = [
   ['vault-create', 'src/obsidian-store.ts', "{ ...freshnessPatch(input), ...confidenceOnCreate(input, 'create') }", 'freshnessPatch(input)', 'create stores confidence', /expected undefined to be 0.75/, ['confidence-create-roundtrip', 'confidence-propose-apply-roundtrip'], /./],
   ['default-update-key', 'src/default-store.ts', "      'ttl_seconds',\n      'confidence',\n    ] as const;", "      'ttl_seconds',\n    ] as const;", 'update changes, keeps and clears confidence', /at least one mutable field/, ['confidence-update'], /./],
   ['vault-update-key', 'src/obsidian-store.ts', "      'ttl_seconds',\n      'confidence',\n    ] as const;", "      'ttl_seconds',\n    ] as const;", 'update changes, keeps and clears confidence', /at least one mutable field/, ['confidence-update'], /./],
-  ['default-update-apply', 'src/default-store.ts', "      ...(typeof confidence === 'number' ? { confidence } : {}),\n", '', 'update changes, keeps and clears confidence', /expected 0.4 to be 0/, ['confidence-update'], /./],
-  ['vault-update-apply', 'src/obsidian-store.ts', "      ...(typeof confidence === 'number' ? { confidence } : {}),\n", '', 'update changes, keeps and clears confidence', /expected 0.4 to be 0/, ['confidence-update'], /./],
+  ['default-update-apply', 'src/default-store.ts', "      ...(typeof confidence === 'number' ? { confidence } : {}),\n", '', 'update changes, keeps and clears confidence', /expected 0.4 to be \+?0/, ['confidence-update'], /./],
+  ['vault-update-apply', 'src/obsidian-store.ts', "      ...(typeof confidence === 'number' ? { confidence } : {}),\n", '', 'update changes, keeps and clears confidence', /expected 0.4 to be \+?0/, ['confidence-update'], /./],
   ['default-update-clear', 'src/default-store.ts', '    if (confidence === null) delete updated.confidence;\n', '', 'update changes, keeps and clears confidence', /expected true to be false/, ['confidence-update'], /./],
   ['vault-update-clear', 'src/obsidian-store.ts', '    if (confidence === null) delete updated.confidence;\n', '', 'update changes, keeps and clears confidence', /expected true to be false/, ['confidence-update'], /./],
   ['update-undefined-clears', 'src/shared/confidence.ts', '  if (raw === undefined) return undefined;\n  return raw === null ? null', '  if (raw === undefined) return null;\n  return raw === null ? null', 'update changes, keeps and clears confidence', /expected undefined to be 0.4/, [], /./],
@@ -84,7 +84,13 @@ assert.equal(git('status', '--porcelain'), '', 'Commit and confirm a clean tree'
 build('build-baseline');
 unit('unit-baseline', undefined);
 conformance('conformance-baseline', ALL_VECTORS);
+// `--from=NAME` resumes at that case, for a rerun after a fault in the script itself.
+const from = process.argv.find((arg) => arg.startsWith('--from='))?.slice('--from='.length);
+if (from) assert.ok(cases.some(([name]) => name === from), `unknown case: ${from}`);
+let started = !from;
 for (const [name, file, before, after, pattern, unitFailure, vectors, vectorFailure] of cases) {
+  started ||= name === from;
+  if (!started) continue;
   const path = join(root, 'packages/store', file);
   const original = readFileSync(path, 'utf8');
   assert.ok(original.includes(before), `missing anchor: ${name}`);
