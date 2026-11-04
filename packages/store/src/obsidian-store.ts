@@ -33,6 +33,7 @@ import type {
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
+  ProposalPurgeResult,
   PurgeEvidence,
   PurgeResult,
   RejectEvidence,
@@ -77,10 +78,12 @@ import {
 import {
   assertNoPurgedSupport,
   assertNotPurged,
+  isPurged,
   planPurge,
   survivorOf,
   TOMBSTONE_SHAPES,
   tombstoneOf,
+  validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
 import {
@@ -2105,14 +2108,20 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     return stone;
   }
 
-  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
-    // `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and
-    // path, so it would keep the erased titles. (The names are fixed by that command.)
+  /**
+   * `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and path, so it
+   * would keep erased titles and digests of erased files. (The names are fixed by that command.)
+   */
+  private assertNoMigrationArtifacts(operation: 'purge' | 'purgeProposal'): void {
     for (const kept of ['.corpus-store-migration/kit-v1-path-index.json', '.corpus-store-migration/manifest.json']) {
       if (this.files.readText(this.resolveStorePath(kept)) !== null) {
-        throw new ReadOnlyStoreError('purge', 'this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then purge.');
+        throw new ReadOnlyStoreError(operation, `this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then ${operation === 'purge' ? 'purge' : 'erase the proposal'}.`);
       }
     }
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    this.assertNoMigrationArtifacts('purge');
     const pathIndex = this.loadPathIndex();
     const records = new Map<string, KitRecord>();
     for (const id of Object.keys(pathIndex.by_id)) {
@@ -2178,6 +2187,36 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       proposalsScrubbed: proposals.scrubbed,
       proposalsBlocked: proposals.blocked,
     };
+  }
+
+  /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const input = validateProposalPurgeInput(proposalId, evidence);
+    return this.mutate(
+      'purgeProposal',
+      () => {
+        // The migration manifest hashes every file it saw, proposals included, and a hash of a whole
+        // proposal file can be confirmed against a guess at its content. Erasing it would leave that
+        // digest behind, so the host deletes the artifacts first, as for `purge`.
+        this.assertNoMigrationArtifacts('purgeProposal');
+        return this.proposals.purgeOne(
+          input.proposalId,
+          input.evidence,
+          () => new Date(this.services.clock()).toISOString(),
+          (recordId) => {
+            // A tombstone needs no second purge. A record the path index lists but whose note is missing
+            // is a corrupt vault, which `readRecord` refuses; nothing is written.
+            const pathIndex = this.loadPathIndex();
+            const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
+            return record && !isPurged(record) ? this.purgeLocked([recordId], input.evidence) : undefined;
+          },
+        );
+      },
+      { erasure: true },
+    );
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

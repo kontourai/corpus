@@ -36,6 +36,8 @@ import {
 } from './observation-file.js';
 
 const JOURNAL_VERSION = 1;
+/** Operations that run with `{ erasure: true }` and so prune the folders they empty. */
+const ERASURE_OPERATIONS: ReadonlySet<string> = new Set(['purge', 'purgeProposal']);
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
 /**
  * True when `text` starts the way every journal this engine writes does:
@@ -366,8 +368,9 @@ export class KnowledgeFileTransactions {
         this.persistJournal(context.journal);
         markerPersisted = true;
         this.hooks.afterCommitMarker?.(context.journal);
-        this.removeJournal();
+        // Prune while the journal still names the files: a crash in between leaves it for recovery to finish.
         if (options.erasure) this.pruneEmptyDirectories(context.journal);
+        this.removeJournal();
         this.observe(operation, 'applied');
         return result;
       } catch (error) {
@@ -381,6 +384,7 @@ export class KnowledgeFileTransactions {
           // An erasure is the exception: until the journal is gone it may still
           // hold the erased content, so it must not report success over that.
           if (options.erasure) {
+            this.pruneEmptyDirectories(context.journal);
             if (!markerPersisted) {
               try {
                 this.removeJournal();
@@ -389,7 +393,6 @@ export class KnowledgeFileTransactions {
                 throw unavailable(cleanup);
               }
             }
-            this.pruneEmptyDirectories(context.journal);
           }
           this.observe(operation, 'applied-readback');
           return result;
@@ -768,8 +771,10 @@ export class KnowledgeFileTransactions {
           this.assertNoSymlink(directory);
           if (!lstatSync(directory).isDirectory()) break;
           rmdirSync(directory);
-        } catch {
-          break; // not empty, already gone, or not ours to touch
+        } catch (error) {
+          // A folder that is already gone was removed by an interrupted earlier pass: carry on to its
+          // parent, which may still be empty. Anything else (not empty, not ours to touch) ends the walk.
+          if (!isMissing(error)) break;
         }
         directory = dirname(directory);
       }
@@ -780,6 +785,7 @@ export class KnowledgeFileTransactions {
     this.removeOrphanJournalTemporaries();
     const journal = this.loadJournal();
     if (!journal) return;
+    let applied = true;
     if (journal.phase === 'prepared') {
       if (this.allEntriesMatch(journal, 'after')) {
         // Crash after the final publish but before/during the commit marker.
@@ -788,10 +794,15 @@ export class KnowledgeFileTransactions {
       } else {
         this.rollback(journal);
         this.observe(journal.operation, 'recovered');
+        applied = false;
       }
     } else {
       this.observe(journal.operation, 'commit-cleanup');
     }
+    // An erasure that crashed before its own cleanup still owes it: a removed note must not leave its
+    // folder names behind (they can be the erased title or category). Done while the journal still
+    // names the files, so a crash during the cleanup is finished by the next recovery.
+    if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);
     this.removeJournal();
   }
 

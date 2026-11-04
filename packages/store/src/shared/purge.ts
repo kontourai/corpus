@@ -382,28 +382,55 @@ function unlabelErased(entry: KitMutationLogEntry, erased: ReadonlySet<string>):
   };
 }
 
-/** Input checks shared by both adapters; they run before any read or write. */
-export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
+/**
+ * The evidence checks every erasure shares (`purge` and `purgeProposal`): the actor and the
+ * reason are required, and bounded because they are copied into tombstones and proposals.
+ */
+function validatePurgeEvidence(op: string, evidence: PurgeEvidence): void {
   const text = (value: unknown) => typeof value === 'string' && value.trim() !== '';
   // Measured as JSON, which is how a proposal stores them: a control character is six bytes there.
   // Together with the copies a pending proposal's rejection makes, these stay inside the headroom
   // a stored proposal reserves for settlement.
   const bounded = (value: string, limit: number) => Buffer.byteLength(JSON.stringify(value)) <= limit;
   if (!text(evidence?.agent)) {
-    throw new MissingEvidenceError('purge: missing required evidence field: agent');
+    throw new MissingEvidenceError(`${op}: missing required evidence field: agent`);
   }
   if (!text(evidence.rationale)) {
-    throw new MissingEvidenceError('purge: missing required evidence field: rationale');
+    throw new MissingEvidenceError(`${op}: missing required evidence field: rationale`);
   }
   if (evidence.note !== undefined && typeof evidence.note !== 'string') {
-    throw new MissingEvidenceError('purge: evidence note must be a string');
+    throw new MissingEvidenceError(`${op}: evidence note must be a string`);
   }
   // These are copied into tombstones and proposals, which must stay loadable.
   if (!bounded(evidence.agent, 1024) || !bounded(evidence.rationale, 8 * 1024) || !bounded(evidence.note ?? '', 8 * 1024)) {
-    throw new MissingEvidenceError('purge: agent must be at most 1 KiB, rationale and note at most 8 KiB (as JSON)');
+    throw new MissingEvidenceError(`${op}: agent must be at most 1 KiB, rationale and note at most 8 KiB (as JSON)`);
   }
+}
+
+/** Input checks shared by both adapters; they run before any read or write. */
+export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
+  validatePurgeEvidence('purge', evidence);
   if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
     throw new MissingEvidenceError('purge: ids must be a non-empty array of record ids');
   }
   return ids as string[];
+}
+
+/**
+ * `purgeProposal`'s input checks, run before any read or write. Returns a snapshot of the evidence:
+ * each field is read once, so what is validated is what the erasure writes even if the caller's
+ * object (or an accessor on it) changes while the call waits for the store lock.
+ */
+export function validateProposalPurgeInput(
+  proposalId: unknown,
+  evidence: PurgeEvidence,
+): { proposalId: string; evidence: PurgeEvidence } {
+  const read = (key: keyof PurgeEvidence): unknown => (evidence === null || evidence === undefined ? undefined : evidence[key]);
+  const note = read('note');
+  const snapshot = { agent: read('agent'), rationale: read('rationale'), ...(note === undefined ? {} : { note }) } as PurgeEvidence;
+  validatePurgeEvidence('purgeProposal', snapshot);
+  if (typeof proposalId !== 'string' || proposalId === '') {
+    throw new MissingEvidenceError('purgeProposal: proposalId must be a non-empty string');
+  }
+  return { proposalId, evidence: snapshot };
 }

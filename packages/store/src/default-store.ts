@@ -26,6 +26,7 @@ import type {
   KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
+  ProposalPurgeResult,
   ProposeEvidence,
   PurgeEvidence,
   PurgeResult,
@@ -72,9 +73,12 @@ import {
 import {
   assertNoPurgedSupport,
   assertNotPurged,
+  isPurged,
   planPurge,
+  supportIds,
   survivorOf,
   tombstoneOf,
+  validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
 import {
@@ -1100,6 +1104,48 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       proposalsScrubbed: proposals.scrubbed,
       proposalsBlocked: proposals.blocked,
     };
+  }
+
+  /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const input = validateProposalPurgeInput(proposalId, evidence);
+    return this.files.mutate(
+      'purgeProposal',
+      () =>
+        this.proposals.purgeOne(
+          input.proposalId,
+          input.evidence,
+          () => new Date(this.services.clock()).toISOString(),
+          (recordId) => {
+            // An id that is not a safe, bounded filename (a hand-edited proposal) names no record.
+            if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;
+            const record = this.readRecord(recordId);
+            if (record === null) {
+              // The record's file is gone, so its alias and graph entries (a slug, link labels) have
+              // no record to be purged with. Rebuild them from the records that remain. A live record
+              // may still link to it or cite it as a source: a purge would strip its label with the
+              // erased title, or cascade it if it rested on this record alone. With no record to purge,
+              // refuse instead of leaving that behind.
+              this.rebuildIndexes();
+              const dependent = this.allRecords().find(
+                (other) => !isPurged(other) && (supportIds(other).includes(recordId) || (other.links ?? []).some((link) => link.target_id === recordId)),
+              );
+              if (dependent) {
+                throw new KnowledgeStoreCorruptionError(
+                  `create proposal ${input.proposalId}: its record ${recordId} is missing but record ${dependent.id} still refers to it; restore the record or remove the reference, then erase the proposal`,
+                );
+              }
+              return undefined;
+            }
+            // A tombstone needs no second purge.
+            return isPurged(record) ? undefined : this.purgeLocked([recordId], input.evidence);
+          },
+        ),
+      { erasure: true },
+    );
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

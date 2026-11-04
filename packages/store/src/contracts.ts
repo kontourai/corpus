@@ -208,6 +208,22 @@ export interface PurgeResult {
   proposalsBlocked: string[];
 }
 
+/** What one `purgeProposal` call changed. Holds ids, never content. */
+export interface ProposalPurgeResult {
+  proposalId: string;
+  /**
+   * The proposal already carried an `erasure` marker (an earlier `purgeProposal` or
+   * `purge` wrote it). Nothing was written, and the first marker is kept.
+   */
+  alreadyErased: boolean;
+  /**
+   * Set when this call purged the record an `applied` proposal created, as `purge([record_id])`
+   * would: its cascade, survivors and referrers are for the host to review. Absent otherwise,
+   * including when the created record was already a tombstone.
+   */
+  record?: PurgeResult;
+}
+
 // ── Create proposals (owner decision, 2026-11-03) ──────────────────────────
 
 /** A create proposal is `pending` until a reviewer settles it as `applied` or `rejected`. */
@@ -244,8 +260,9 @@ export interface KitCreateProposal {
   record_id?: string;
   /**
    * Set when a `purge` erased this proposal's candidate (owner decision, 2026-11-03):
-   * the proposal rested only on erased records, or created one. `candidate` is then a
-   * content-free stub and `evidence.proposal` is `[purged]`. A `pending` proposal is
+   * the proposal rested only on erased records, or created one. Also set by
+   * `purgeProposal`, which erases one named proposal whatever it rests on. `candidate` is
+   * then a content-free stub and `evidence.proposal` is `[purged]`. A `pending` proposal is
    * also settled as `rejected` by the purging agent, with the purge's rationale.
    */
   erasure?: { at: string; agent: string; rationale: string; note?: string };
@@ -388,6 +405,26 @@ export interface KnowledgeStorePurger {
    * history in lists.
    */
   purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult>;
+  /**
+   * Erase one create proposal by its proposal id (owner decision, 2026-11-04), in any
+   * state and whatever its sources rest on. Gated like `purge` (`READ_ONLY` without
+   * `allowPurge: true`), with the same evidence. It writes what a purge writes to a
+   * proposal: the candidate becomes a content-free stub (no title, body, tags, aliases,
+   * link labels, `source_refs` or provenance note), `evidence.proposal` becomes
+   * `[purged]`, a settled rationale becomes `[purged]`, and `erasure` records `at`,
+   * `agent`, `rationale` and `note`. A `pending` proposal is also settled `rejected` by
+   * the erasing agent, so it can never apply. The proposal keeps its id, proposer,
+   * state, `record_id` and settlement identity, plus the key hash if it had a
+   * `requestKey`; the key is retired, so every later use is refused with
+   * `REQUEST_KEY_CONFLICT`. No content hash is kept.
+   *
+   * An `applied` proposal's content also lives in the record it created, so this purges
+   * that record in the same transaction (cascade included, see `PurgeResult`) and
+   * reports it in `record`. Unknown or unsafe ids are `NOT_FOUND`. A proposal that is
+   * already erased is a no-op (`alreadyErased`). One transaction: an interrupted
+   * erasure is rolled back whole or applied whole, never half done.
+   */
+  purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult>;
 }
 
 /**
@@ -408,7 +445,8 @@ export interface KnowledgeStoreCreateProposals {
    * and not whitespace-only, must be well-formed Unicode, with a 1024 UTF-8 byte limit. Matching retries return
    * the original ID unless the proposal is erased or its key retired after a scrub; differing input refuses
    * REQUEST_KEY_CONFLICT. After erasure or retirement, all uses of that key are refused with
-   * REQUEST_KEY_CONFLICT and the content digest is removed. Use opaque keys.
+   * REQUEST_KEY_CONFLICT and the content digest is removed. This holds for `purgeProposal`
+   * too: a retry after it never returns the erased proposal's id and never stages again. Use opaque keys.
    * A corrupt retained proposal makes keyed lookup fail with KnowledgeStoreCorruptionError.
    */
   proposeCreate(

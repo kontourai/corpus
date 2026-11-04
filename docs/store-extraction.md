@@ -503,6 +503,23 @@ journal is resolved, and pin the original receipt after the complete after-image
 Keyed corruption checks fail closed; `proof:proposals` includes replayable key
 conflict, duplicate retry, corrupt-neighbour and recovery injections.
 
+The [proposal-erasure decision](https://github.com/kontourai/corpus/issues/62)
+adds `purgeProposal(proposalId, evidence)` to `KnowledgeStorePurger`: it erases one
+create proposal by its own id, pending, rejected or applied, with or without
+sources, using the same stub and `erasure` marker a record purge writes (one shared
+function), so there is no parallel tombstone and no new `erased` state. An applied
+proposal is erased together with the record it created in one transaction. Retries
+with an erased proposal's request key keep the typed `REQUEST_KEY_CONFLICT` refusal.
+Ten vectors joined the store vectors (180 per profile): `purge-proposal-erase-*`
+(no source, live sources, rejected, applied, request key, input validation), the
+bytes, interrupted-erasure and concurrent-settlement probes, and
+`root-binding-after-purge-proposal`. They all pass on both profiles; the expected-fail
+list is unchanged. The erased shape is built from an allowlist, evidence is read once, a vault with migration
+artifacts refuses every proposal (the manifest digests proposal files), and journal recovery removes the folders
+an interrupted erasure emptied; the last also applies to `purge`. `test/purge-proposal.test.ts` covers the same cases with gated
+locks for a deterministic apply/reject/erase order and crash children for each
+journal phase; `npm run proof:purge` gained controls for each rule.
+
 Key metadata is retained in the proposal file and counts toward its serialized
 size limit; it is not copied into the created note.
 The vault note-size check still runs before a new keyed proposal is staged; a
