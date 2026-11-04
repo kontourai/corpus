@@ -112,7 +112,7 @@ const controls = [
   // Create proposals (#42) carry their whole candidate outside every record path.
   { id: 'proposal-erasure-skipped', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);', 'const proposals = { rejected: [] as string[], scrubbed: [] as string[], blocked: [] as string[] };'),
     args: conformance('purge-proposal-sole-support-rejected', 'purge-proposal-record-erased', 'purge-store-bytes'), reason: /(proposalsRejected|proposalsScrubbed|after\.|is still on disk)/ },
-  { id: 'proposal-pending-not-rejected', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "? { state: 'rejected' as const,", "? { state: 'pending' as const,"),
+  { id: 'proposal-pending-not-rejected', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "return { ...erased, state: 'rejected',", "return { ...erased, state: 'pending',"),
     args: conformance('purge-proposal-sole-support-rejected'), reason: /after\.state/ },
   { id: 'proposal-created-record-not-followed', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "const createdErased = proposal.state === 'applied' && proposal.record_id !== undefined && newlyErased.has(proposal.record_id);", 'const createdErased = false;'),
     args: conformance('purge-proposal-record-erased'), reason: /(proposalsScrubbed|after\.)/ },
