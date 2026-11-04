@@ -3,7 +3,8 @@
 // recover the store and look at what was left. Exit 23 means the crash hook fired.
 //   node --import tsx purge-proposal-crash.ts <base> <default|vault> <phase> <proposalId>
 // phase: prepared (journal written, nothing published), first-publish (one file published),
-// final-publish (every file published, no commit marker), committed (commit marker written).
+// final-publish (every file published, no commit marker), committed (commit marker written),
+// journal-removal (the commit's cleanup is about to remove the journal).
 import { join } from 'node:path';
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '../../src/index.js';
 
@@ -31,5 +32,6 @@ hooks.afterFilePublish = () => {
   if ((phase === 'first-publish' && publications === 1) || (phase === 'final-publish' && publications === entries)) process.exit(23);
 };
 hooks.afterCommitMarker = () => { if (phase === 'committed') process.exit(23); };
+if (phase === 'journal-removal') (store as unknown as { files: { removeJournal: () => void } }).files.removeJournal = () => process.exit(23);
 await store.purgeProposal(proposalId, { agent: 'privacy-officer', rationale: 'crash drill' });
 throw new Error('Crash injection did not run');

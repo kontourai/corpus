@@ -368,8 +368,9 @@ export class KnowledgeFileTransactions {
         this.persistJournal(context.journal);
         markerPersisted = true;
         this.hooks.afterCommitMarker?.(context.journal);
-        this.removeJournal();
+        // Prune while the journal still names the files: a crash in between leaves it for recovery to finish.
         if (options.erasure) this.pruneEmptyDirectories(context.journal);
+        this.removeJournal();
         this.observe(operation, 'applied');
         return result;
       } catch (error) {
@@ -383,6 +384,7 @@ export class KnowledgeFileTransactions {
           // An erasure is the exception: until the journal is gone it may still
           // hold the erased content, so it must not report success over that.
           if (options.erasure) {
+            this.pruneEmptyDirectories(context.journal);
             if (!markerPersisted) {
               try {
                 this.removeJournal();
@@ -391,7 +393,6 @@ export class KnowledgeFileTransactions {
                 throw unavailable(cleanup);
               }
             }
-            this.pruneEmptyDirectories(context.journal);
           }
           this.observe(operation, 'applied-readback');
           return result;
@@ -796,10 +797,11 @@ export class KnowledgeFileTransactions {
     } else {
       this.observe(journal.operation, 'commit-cleanup');
     }
-    this.removeJournal();
     // An erasure that crashed before its own cleanup still owes it: a removed note must not leave its
-    // folder names behind (they can be the erased title or category).
+    // folder names behind (they can be the erased title or category). Done while the journal still
+    // names the files, so a crash during the cleanup is finished by the next recovery.
     if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);
+    this.removeJournal();
   }
 
   private allEntriesMatch(journal: Journal, side: 'before' | 'after'): boolean {

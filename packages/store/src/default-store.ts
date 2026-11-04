@@ -1124,8 +1124,15 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
             const record = this.readRecord(recordId);
             if (record === null) {
               // The record's file is gone, so its alias and graph entries (a slug, link labels) have
-              // no record to be purged with. Rebuild them from the records that remain.
-              this.rebuildIndexes();
+              // no record to be purged with. Rebuild them from the records that remain. Another
+              // record may still link to it, labelled with the erased title, and a purge would strip
+              // that label; with no record to purge, refuse instead of leaving it behind.
+              const { graph } = this.rebuildIndexes();
+              if ((graph.reverse[recordId]?.length ?? 0) > 0) {
+                throw new KnowledgeStoreCorruptionError(
+                  `create proposal ${input.proposalId}: its record ${recordId} is missing but other records still link to it; restore the record or remove those links, then erase the proposal`,
+                );
+              }
               return undefined;
             }
             // A tombstone needs no second purge.

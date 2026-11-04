@@ -258,9 +258,11 @@ silent behavior.
     `record` for the host to review. The proposal keeps `state: applied`. If the record
     is already a tombstone, or `record_id` names no record or is not a safe, bounded id
     (a hand-edited proposal), only the proposal is erased and `record` is absent. If the
-    record's file is gone, the default layout also rebuilds its alias and graph indexes in
-    the same transaction, since they still named it; a vault refuses with a corruption
-    error and writes nothing, because its path index lists a note that is missing.
+    record's file is gone, the default layout rebuilds its alias and graph indexes in the
+    same transaction, since they still named it, unless another record still links to the
+    missing one: such a link can carry a label with the erased title, which only a record
+    purge strips, so it refuses with a corruption error and writes nothing. A vault always
+    refuses the same way, because its path index lists a note that is missing.
     A host that wants to erase the proposal but not its record must not call this on an
     applied proposal.
   - **Idempotent.** An erased proposal, whether erased by this call or a record purge,
@@ -287,7 +289,10 @@ silent behavior.
     erasure can be retried. A crash after every file is published is applied on
     recovery, which also removes the folders the erasure emptied (a vault routes a
     record into a folder named for its category, which can name the data subject), as
-    the erasure would have after a clean commit. A journal left after the commit marker
+    the erasure would have after a clean commit. Folders are removed before the journal
+    that names them, so a second crash during that cleanup is finished by the next
+    recovery. (Removing them is best effort: a folder that is not empty, or whose path
+    is a symlink, is left alone.) A journal left after the commit marker
     holds none of the erased content.
     *Deferred, as for `purge`:* between the first journal write and the commit marker
     the journal holds the pre-erasure proposal, because rollback needs it, and a
@@ -300,10 +305,11 @@ silent behavior.
     corrupt *other* proposal does not block a pending or rejected erasure, but does
     block an applied one, because the record purge judges every proposal first.
     A vault that opens read-only (`kit-v1`) refuses with `READ_ONLY`. One that holds
-    `.corpus-store-migration/` refuses every proposal, as `purge` refuses every record:
+    `.corpus-store-migration/manifest.json` or `kit-v1-path-index.json` refuses every
+    proposal, as `purge` refuses every record:
     the migration manifest keeps a sha256 of each file it saw, proposal files included,
     and a digest of a whole proposal file can be checked against a guess at its content.
-    Delete the directory once the migration is verified, then erase. An id longer than
+    Delete those files (the directory) once the migration is verified, then erase. An id longer than
     a proposal id can be (200 characters) is `NOT_FOUND`.
   - **Not covered.** As for `purge`: copies outside the store's transaction, and the
     retained identities above (`proposer_id`, agents, session id, source ids, link

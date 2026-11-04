@@ -2,6 +2,8 @@
 // and requires the named check to fail for the stated reason, then restores the
 // file and requires the same check to pass again. Run on a clean, committed tree:
 //   npm run proof:purge --workspace=@kontourai/corpus-store -- [output-directory] [control ids...]
+// `--check-targets` (no tree or build needed) only checks that every control still finds its text to change,
+// so a refactor that moves code cannot leave a control that aborts the whole run.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -10,10 +12,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const checkTargets = process.argv[2] === '--check-targets';
 const output = resolve(process.argv[2] ?? join(tmpdir(), 'corpus-purge-faults'));
-mkdirSync(output, { recursive: true });
+if (!checkTargets) mkdirSync(output, { recursive: true });
 const git = (...args) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
-assert.equal(git('status', '--porcelain').stdout.trim(), '', 'Commit a clean baseline before mutation');
+if (!checkTargets) assert.equal(git('status', '--porcelain').stdout.trim(), '', 'Commit a clean baseline before mutation');
 const revision = git('rev-parse', 'HEAD').stdout.trim();
 const store = 'packages/store/';
 const purge = store + 'src/shared/purge.ts';
@@ -60,7 +63,7 @@ const controls = [
     args: conformance('purge-read-paths'), reason: /by_alias/ },
   { id: 'vault-title-path-survives', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'const target = this.tombstonePath(id, pathIndex);', 'const target = entry.path;'),
     args: conformance('purge-store-bytes'), reason: /ember-zebra-interview.* is still on disk/ },
-  { id: 'vault-survivors-not-rerendered', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'this.writeRecord(kept, pathIndex);', 'void kept;'),
+  { id: 'vault-survivors-not-rerendered', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "this.writeRecord(kept, pathIndex, { enforceNoteBound: 'purge' });", 'void kept;'),
     args: focused('test/purge.test.ts'), reason: /zebra-quartz-memo/ },
   { id: 'journal-keeps-before-images', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'for (const entry of context.journal.entries) entry.before = null;', ''),
     args: conformance('purge-journal-erasure'), reason: /still holds erased content in the journal|journal must/ },
@@ -90,7 +93,7 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /cut short by a crash/ },
   { id: 'orphan-unlink-failure-swallowed', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, '        } catch (error) {\n          throw unavailable(error);\n        }\n      }\n    }\n  }\n\n  /** Best effort', '        } catch {\n          // swallowed\n        }\n      }\n    }\n  }\n\n  /** Best effort'),
     args: focused('test/purge.test.ts'), reason: /cannot be removed fails the operation/ },
-  { id: 'readback-skips-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "            this.pruneEmptyDirectories(context.journal);\n          }\n          this.observe(operation, 'applied-readback');", "          }\n          this.observe(operation, 'applied-readback');"),
+  { id: 'readback-skips-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "          if (options.erasure) {\n            this.pruneEmptyDirectories(context.journal);\n            if (!markerPersisted) {", "          if (options.erasure) {\n            if (!markerPersisted) {"),
     args: focused('test/purge.test.ts'), reason: /commit marker had to be skipped/ },
   // Simple escapes (an escaped quote, newline, backslash) are no longer accepted.
   { id: 'journal-temp-prefix-too-strict', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (next !== undefined && ', 'if (false && next !== undefined && '),
@@ -157,7 +160,7 @@ const controls = [
   // purgeProposal (#62): erase one create proposal by its own id.
   { id: 'proposal-purge-always-allowed', file: store + 'src/default-store.ts', mutate: (s) => swap(s, "if (this.services.allowPurge !== true) {\n      throw new ReadOnlyStoreError('purgeProposal'", "if (this.services.allowPurge !== true && false) {\n      throw new ReadOnlyStoreError('purgeProposal'"),
     args: focused('test/purge-proposal.test.ts', '-t', 'it is refused without allowPurge'), reason: /instead of rejecting/ },
-  { id: 'proposal-purge-evidence-unchecked', file: purge, mutate: (s) => swap(s, "validatePurgeEvidence('purgeProposal', evidence);", ''),
+  { id: 'proposal-purge-evidence-unchecked', file: purge, mutate: (s) => swap(s, "validatePurgeEvidence('purgeProposal', snapshot);", ''),
     args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
   { id: 'proposal-purge-unknown-id-ignored', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);', 'if (!proposal) return { proposalId, alreadyErased: true };\n    assertErasable(proposal);'),
     args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
@@ -168,13 +171,13 @@ const controls = [
   { id: 'proposal-purge-source-refs-kept', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "      agent: provenance.agent,\n      ...(provenance.session_id ? { session_id: provenance.session_id } : {}),\n      ...(provenance.source_ids?.length ? { source_ids: [...provenance.source_ids] } : {}),\n    },\n    links: (candidate.links", "      agent: provenance.agent,\n      ...(provenance.source_refs ? { source_refs: provenance.source_refs } : {}),\n      ...(provenance.session_id ? { session_id: provenance.session_id } : {}),\n      ...(provenance.source_ids?.length ? { source_ids: [...provenance.source_ids] } : {}),\n    },\n    links: (candidate.links"),
     args: conformance('purge-proposal-erase-pending-no-source'), reason: /after\.candidate\.provenance\.source_refs must be absent/ },
   // An applied proposal's content lives in its record: the record purge must run, in both profiles.
-  { id: 'proposal-purge-applied-record-kept', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;', 'return undefined;'),
+  { id: 'proposal-purge-applied-record-kept', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return isPurged(record) ? undefined : this.purgeLocked([recordId], input.evidence);', 'return undefined;'),
     args: conformance('purge-proposal-erase-applied'), reason: /result\.record\.purged/ },
-  { id: 'vault-proposal-purge-applied-record-kept', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;', 'return undefined;'),
+  { id: 'vault-proposal-purge-applied-record-kept', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ? this.purgeLocked([recordId], input.evidence) : undefined;', 'return undefined;'),
     args: conformance('purge-proposal-erase-applied'), reason: /result\.record\.purged/ },
-  { id: 'proposal-purge-tombstone-repurged', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ?', 'return record ?'),
+  { id: 'proposal-purge-tombstone-repurged', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return isPurged(record) ? undefined : this.purgeLocked(', 'return this.purgeLocked('),
     args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /alreadyPurged/ },
-  { id: 'proposal-purge-unsafe-record-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const record = isSafePathSegment(recordId) ? this.readRecord(recordId) : null;', 'const record = this.readRecord(recordId);'),
+  { id: 'proposal-purge-unsafe-record-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;', 'if (recordId.length > 200) return undefined;'),
     args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /does not match its authoritative filename/ },
   { id: 'vault-proposal-purge-inherited-record-id', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null', 'this.readRecord(recordId, pathIndex)'),
     args: focused('test/purge-proposal.test.ts', '-t', 'an applied proposal whose record'), reason: /Invalid store path/ },
@@ -201,14 +204,37 @@ const controls = [
     args: focused('test/purge-proposal.test.ts', '-t', 'does not know'), reason: /instead of rejecting/ },
   { id: 'proposal-id-length-unbounded', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (!isSafePathSegment(id) || id.length > MAX_PROPOSAL_ID_LENGTH) return null;', 'if (!isSafePathSegment(id)) return null;'),
     args: focused('test/purge-proposal.test.ts', '-t', 'unsafe proposal id is NOT_FOUND'), reason: /ENAMETOOLONG/ },
-  { id: 'default-proposal-purge-stale-indexes-kept', file: store + 'src/default-store.ts', mutate: (s) => swap(s, '              this.rebuildIndexes();\n              return undefined;', '              return undefined;'),
+  { id: 'default-proposal-purge-stale-indexes-kept', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const { graph } = this.rebuildIndexes();', 'const graph = { reverse: {} as Record<string, unknown[]> };'),
     args: focused('test/purge-proposal.test.ts', '-t', 'a record whose file is gone'), reason: /needle-alias|NEEDLE-LABEL/ },
   { id: 'recovery-keeps-emptied-folders', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, 'if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);', ''),
     args: conformance('purge-proposal-journal-erasure'), reason: /left a folder named for the erased record/ },
+  // Review of #64, round 2: cleanup custody, a still-linked missing record, nested evidence, bounded record ids.
+  { id: 'recovery-removes-journal-before-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);\n    this.removeJournal();", "this.removeJournal();\n    if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);"),
+    args: focused('test/purge-proposal.test.ts', '-t', 'folder cleanup is finished'), reason: /expected false to be true|to be true/ },
+  { id: 'default-proposal-purge-linked-missing-record', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if ((graph.reverse[recordId]?.length ?? 0) > 0) {', 'if (false) {'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'is refused, and erased once it is restored'), reason: /instead of rejecting/ },
+  { id: 'proposal-purge-nested-evidence-reread', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'this.purgeLocked([recordId], input.evidence)', 'this.purgeLocked([recordId], evidence)'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'the same holds for an applied proposal'), reason: /privacy-officer|corrupt|agent/ },
+  { id: 'vault-proposal-purge-nested-evidence-reread', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'this.purgeLocked([recordId], input.evidence)', 'this.purgeLocked([recordId], evidence)'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'the same holds for an applied proposal'), reason: /privacy-officer|corrupt|agent/ },
+  { id: 'proposal-purge-record-id-length', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;', 'if (!isSafePathSegment(recordId)) return undefined;'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /ENAMETOOLONG/ },
+  { id: 'commit-removes-journal-before-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "        if (options.erasure) this.pruneEmptyDirectories(context.journal);\n        this.removeJournal();", "        this.removeJournal();\n        if (options.erasure) this.pruneEmptyDirectories(context.journal);"),
+    args: focused('test/purge-proposal.test.ts', '-t', 'a crash while the journal is being removed'), reason: /expected true to be false/ },
   // A retry after erasure is refused as a retired key, never compared with anything.
   { id: 'proposal-retry-after-erasure-compared', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);", ''),
     args: focused('test/purge-proposal.test.ts', '-t', 'a retry after erasing'), reason: /retired/ },
 ];
+
+if (checkTargets) {
+  const stale = controls.flatMap((control) => {
+    try { return control.mutate(readFileSync(join(repo, control.file), 'utf8')) === readFileSync(join(repo, control.file), 'utf8') ? [`${control.id}: changes nothing`] : []; }
+    catch (error) { return [`${control.id}: ${String(error.message).split('\n')[0]}`]; }
+  });
+  console.log(`${controls.length} controls, ${stale.length} stale`);
+  for (const line of stale) console.log(`  ${line}`);
+  process.exit(stale.length ? 1 : 0);
+}
 
 function run(label, args, success) {
   const result = spawnSync('npm', args, { cwd: repo, encoding: 'utf8', timeout: 300000, maxBuffer: 256 * 1024 * 1024 });

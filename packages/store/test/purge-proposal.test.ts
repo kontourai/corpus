@@ -610,6 +610,25 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
     }
   });
 
+  if (profile === 'default') {
+    test('a record whose file is gone but which another record still links to is refused, and erased once it is restored', async () => {
+      const id = await propose([], { title: 'NEEDLE-TITLE Sensitive Person' });
+      const recordId = await store.applyCreate(id, 'reviewer-1');
+      await store.create({ id: 'survivor', type: 'concept', title: 'survivor', body: 'survivor body', category: 'engineering', provenance: { agent: 'creator' }, links: [{ target_id: recordId, kind: 'related', label: 'NEEDLE-TITLE Sensitive Person' }] });
+      const file = join(root, 'records', `${recordId}.md`);
+      const saved = readFileSync(file, 'utf8');
+      rmSync(file);
+      const before = everything(root);
+      // Nothing can strip the survivor's label while the record is missing, so nothing is erased.
+      await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/still link to it/);
+      expect(everything(root)).toBe(before);
+      expect((await store.getProposal(id))!.erasure).toBeUndefined();
+      writeFileSync(file, saved);
+      await expect(store.purgeProposal(id, evidence)).resolves.toMatchObject({ record: { purged: [recordId], referrers: ['survivor'] } });
+      noContent();
+    });
+  }
+
   describe('what the caller hands in is read once', () => {
     test('evidence changed while the call waits for the lock is not what is written', async () => {
       const id = await propose([]);
@@ -627,6 +646,27 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       await expect(erasing).resolves.toEqual({ proposalId: id, alreadyErased: false });
       // Still a readable proposal, erased by the actor that was validated.
       expect((await store.getProposal(id))!).toMatchObject({ erasure: { agent: 'privacy-officer', rationale: 'erasure request 42' }, reviewer_id: 'privacy-officer' });
+    });
+
+    test('the same holds for an applied proposal, whose record purge gets the snapshot too', async () => {
+      const id = await propose([]);
+      const recordId = await store.applyCreate(id, 'reviewer-1');
+      const gate = gatedLock();
+      const holder = open(root, { lock: gate.lock });
+      gate.arm();
+      const holding = holder.rejectCreate(await propose([]), 'reviewer-9', 'hold the lock');
+      await gate.entered;
+      const mutable = { agent: 'privacy-officer', rationale: 'erasure request 42' };
+      const erasing = open().purgeProposal(id, mutable);
+      mutable.agent = '';
+      mutable.rationale = '';
+      gate.release();
+      await holding;
+      await expect(erasing).resolves.toMatchObject({ alreadyErased: false, record: { purged: [recordId] } });
+      const record = (await store.get(recordId))!;
+      expect(record.status).toBe('purged');
+      expect(record.mutation_log!.at(-1)).toMatchObject({ op: 'purged', agent: 'privacy-officer', rationale: 'erasure request 42' });
+      expect((await store.getProposal(id))!.erasure).toMatchObject({ agent: 'privacy-officer' });
     });
 
     test('an accessor that answers differently on its second read is read only once', async () => {
@@ -677,6 +717,32 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       await expect(open().purgeProposal(id, evidence)).resolves.toEqual({ proposalId: id, alreadyErased: false });
       expect(everything(root)).not.toContain(digest);
       noContent();
+    });
+
+    test('a crash during the recovery’s own folder cleanup is finished by the next recovery', async () => {
+      const id = await propose([], { category: 'private-category-741', title: 'private-title-741' });
+      await store.applyCreate(id, 'reviewer-1');
+      const first = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-crash.ts', import.meta.url)), base, profile, 'committed', id], { encoding: 'utf8', timeout: 60_000 });
+      expect(first.status, first.stderr).toBe(23);
+      const second = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-recover-crash.ts', import.meta.url)), base, profile, id], { encoding: 'utf8', timeout: 60_000 });
+      expect(second.status, second.stderr).toBe(24);
+      // The cleanup did not finish, so the journal that names the folder is still there to finish it.
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(true);
+      expect(existsSync(join(root, 'private-category-741'))).toBe(true);
+      await open().getProposal(id);
+      expect(existsSync(join(root, 'private-category-741'))).toBe(false);
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(false);
+    });
+
+    test('a crash while the journal is being removed has already removed the folder, and recovery only clears the journal', async () => {
+      const id = await propose([], { category: 'private-category-741', title: 'private-title-741' });
+      await store.applyCreate(id, 'reviewer-1');
+      const interrupted = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-crash.ts', import.meta.url)), base, profile, 'journal-removal', id], { encoding: 'utf8', timeout: 60_000 });
+      expect(interrupted.status, interrupted.stderr).toBe(23);
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(true);
+      expect(existsSync(join(root, 'private-category-741'))).toBe(false);
+      await open().getProposal(id);
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(false);
     });
 
     test('a crash at the commit marker leaves no emptied folder named for the erased record once the store recovers', async () => {
