@@ -1,6 +1,6 @@
 /**
  * Record confidence (kontourai/corpus#68): an optional number from 0 to 1 that a
- * writer attaches to a record, such as a compiled instinct. The store carries it
+ * writer attaches to a record, such as a compiled record. The store carries it
  * and bounds it; what the number means belongs to the writer.
  *
  * Validated at the mutation boundary so a malformed value never reaches disk, and
@@ -22,7 +22,11 @@ export function isConfidence(value: unknown): value is number {
 
 function describe(value: unknown): string {
   // `JSON.stringify(NaN)` is "null", which would hide what was refused.
-  return typeof value === 'number' ? String(value) : `a ${value === null ? 'null' : typeof value}`;
+  if (typeof value === 'number') return String(value);
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  if (typeof value === 'object') return 'an object';
+  return `a ${typeof value}`;
 }
 
 function validate(value: unknown, op: string): number {

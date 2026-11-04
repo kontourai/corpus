@@ -94,3 +94,13 @@ test('a malformed $number token fails the vector instead of passing through as a
     assert.equal(called, false);
   }
 });
+
+test('a $number getter that changes its answer cannot pass validation and then resolve differently', async () => {
+  // The first read is the valid token NaN; every later read is not a token. The adapter returns undefined,
+  // so the vector must fail. A runner that reads the property again after validating would resolve it
+  // to undefined and pass.
+  let reads = 0;
+  const token = { get $number() { return reads++ === 0 ? 'NaN' : 'unknown'; } };
+  const report = await runConformance(() => ({ echo: () => undefined }), { cases: [{ id: 'getter', operations: [{ call: 'echo', args: [], save: 'v' }], expected: [{ ref: 'v', equals: token }] }] });
+  assert.equal(report.passed, false, JSON.stringify(report));
+});

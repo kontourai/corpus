@@ -34,10 +34,11 @@ function resolve(value, values) {
   if (typeof value === 'string' && value.startsWith('$')) return reference(values, value.slice(1));
   if (Array.isArray(value)) return value.map((item) => resolve(item, values));
   if (value && typeof value === 'object' && Object.hasOwn(value, '$number')) {
-    const keys = Object.keys(value);
+    // Read once, so a getter cannot pass validation with one value and resolve with another.
+    const token = value.$number;
     // A string is required: `Object.hasOwn` would coerce an array like ["NaN"] to the key "NaN".
-    assert.ok(keys.length === 1 && typeof value.$number === 'string' && Object.hasOwn(NUMBER_TOKENS, value.$number), `malformed $number token: ${JSON.stringify(value)}`);
-    return NUMBER_TOKENS[value.$number];
+    assert.ok(Object.keys(value).length === 1 && typeof token === 'string' && Object.hasOwn(NUMBER_TOKENS, token), `malformed $number token: ${JSON.stringify(value)}`);
+    return NUMBER_TOKENS[token];
   }
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolve(item, values)]));
   return value;

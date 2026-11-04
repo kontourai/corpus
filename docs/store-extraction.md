@@ -377,6 +377,10 @@ vectors to fail for the right reason, and restores each. The eleven
 `confidence-*` vectors join the store vectors (191 per profile); see the
 [store README](../packages/store/README.md#decision-record-confidence-68) for the rules.
 
+EXECUTED on macOS, Node 24.22.1: 191 store vectors per profile, 190 passing and 1
+expected failure (`purge-journal-in-flight`), for both default and vault;
+`npm run proof:confidence` caught all 27 faults.
+
 ### A compiled record must link a raw source
 
 `create` of a compiled record requires a `source` link to an existing raw

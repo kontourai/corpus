@@ -181,6 +181,12 @@ describe.each(['default', 'vault'] as const)('record confidence — %s profile',
     await expect(store.proposeCreate(compiled({ confidence: Number.NaN }), 'proposer-1', proposalEvidence)).rejects.toThrow('proposeCreate: confidence must be a number from 0 to 1; got: NaN');
   });
 
+  test('the refusal shows a number as it is and anything else by its type', async () => {
+    for (const [value, shown] of [['0.5', 'a string'], [true, 'a boolean'], [null, 'null'], [[0.5], 'an array'], [{ value: 0.5 }, 'an object'], [1n, 'a bigint']] as const) {
+      await expect(store.create(compiled({ confidence: value as unknown as number }))).rejects.toThrow(`got: ${shown}`);
+    }
+  });
+
   test('propose, apply, read and update carry confidence end to end', async () => {
     const id = await store.proposeCreate(compiled({ confidence: 0.75 }), 'proposer-1', proposalEvidence);
     // Staged: the candidate holds it, and it is not a record yet.

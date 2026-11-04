@@ -110,7 +110,8 @@ export interface CreateInput {
   /**
    * From 0 to 1 inclusive. A value outside the range, NaN, an infinity or a non-number is
    * refused with `MISSING_EVIDENCE`, never clamped. In a proposal candidate it is part of
-   * the request-key digest, so a retry with a different confidence is `REQUEST_KEY_CONFLICT`.
+   * the request-key digest, so a retry under the same request key that changes, adds or drops it is
+   * `REQUEST_KEY_CONFLICT`.
    */
   confidence?: number;
 }

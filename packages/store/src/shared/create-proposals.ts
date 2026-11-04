@@ -151,7 +151,7 @@ export class CreateProposals {
     const sourceRefs = assertCreateFields(projected, 'proposeCreate');
     if (sourceRefs !== undefined) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };
     freshnessPatch(projected);
-    // Checked as read: the JSON copy below turns NaN into null, which would be refused with the wrong value.
+    // Validate before the JSON copy below: it turns NaN into null, and the refusal would then report null instead of NaN.
     confidenceOnCreate(projected, 'proposeCreate');
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
