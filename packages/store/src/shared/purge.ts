@@ -416,11 +416,21 @@ export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): strin
   return ids as string[];
 }
 
-/** `purgeProposal`'s input checks, run before any read or write. */
-export function validateProposalPurgeInput(proposalId: unknown, evidence: PurgeEvidence): string {
-  validatePurgeEvidence('purgeProposal', evidence);
+/**
+ * `purgeProposal`'s input checks, run before any read or write. Returns a snapshot of the evidence:
+ * each field is read once, so what is validated is what the erasure writes even if the caller's
+ * object (or an accessor on it) changes while the call waits for the store lock.
+ */
+export function validateProposalPurgeInput(
+  proposalId: unknown,
+  evidence: PurgeEvidence,
+): { proposalId: string; evidence: PurgeEvidence } {
+  const read = (key: keyof PurgeEvidence): unknown => (evidence === null || evidence === undefined ? undefined : evidence[key]);
+  const note = read('note');
+  const snapshot = { agent: read('agent'), rationale: read('rationale'), ...(note === undefined ? {} : { note }) } as PurgeEvidence;
+  validatePurgeEvidence('purgeProposal', snapshot);
   if (typeof proposalId !== 'string' || proposalId === '') {
     throw new MissingEvidenceError('purgeProposal: proposalId must be a non-empty string');
   }
-  return proposalId;
+  return { proposalId, evidence: snapshot };
 }

@@ -90,7 +90,8 @@ export class CreateProposals {
   // ── reads (call inside a read or mutation) ───────────────────────────────
 
   get(id: string): KitCreateProposal | null {
-    if (!isSafePathSegment(id)) return null;
+    // `stage` refuses a longer id, so a longer one names no proposal (and would only fail as ENAMETOOLONG).
+    if (!isSafePathSegment(id) || id.length > MAX_PROPOSAL_ID_LENGTH) return null;
     const path = this.pathOf(id);
     const text = this.files.readText(path, MAX_PROPOSAL_BYTES);
     return text === null ? null : parseProposal(text, path, id);
@@ -467,6 +468,10 @@ function assertErasable(proposal: KitCreateProposal): void {
   if (problem) throw corrupt(problem);
   if (!proposal.erasure) return;
   const { erasure } = proposal;
+  // Exactly the fields an erasure writes: an unknown field beside the marker could still hold content.
+  if (Object.keys(proposal).some((key) => !ERASED_PROPOSAL_KEYS.has(key))) {
+    throw corrupt('an erased proposal is not what a purge writes');
+  }
   const settled =
     proposal.state !== 'pending' &&
     isDeepStrictEqual(candidate, stubCandidate(candidate)) &&
@@ -484,18 +489,32 @@ function assertErasable(proposal: KitCreateProposal): void {
  * it can never apply.
  */
 function erasedOf(proposal: KitCreateProposal, evidence: PurgeEvidence, at: string): KitCreateProposal {
-  return {
-    ...proposal,
+  // Built field by field, never by spreading the stored proposal: a field this module does not know
+  // (a hand-edited or newer writer's) must not survive an erasure.
+  const erased: KitCreateProposal = {
+    id: proposal.id,
+    state: proposal.state,
     candidate: stubCandidate(proposal.candidate),
+    proposer_id: proposal.proposer_id,
     evidence: { agent: proposal.evidence.agent, proposal: PURGED_TITLE },
+    proposed_at: proposal.proposed_at,
+    ...(proposal.request_key_hash !== undefined ? { request_key_hash: proposal.request_key_hash } : {}),
+    ...(proposal.reviewer_id !== undefined ? { reviewer_id: proposal.reviewer_id } : {}),
+    ...(proposal.decided_at !== undefined ? { decided_at: proposal.decided_at } : {}),
+    ...(proposal.record_id !== undefined ? { record_id: proposal.record_id } : {}),
     erasure: { at, agent: evidence.agent, rationale: evidence.rationale, ...(evidence.note ? { note: evidence.note } : {}) },
-    ...(proposal.state === 'pending'
-      ? { state: 'rejected' as const, reviewer_id: evidence.agent, decided_at: at, rationale: evidence.rationale }
-      : proposal.state === 'rejected'
-        ? { rationale: PURGED_TITLE }
-        : {}),
   };
+  if (proposal.state === 'pending') {
+    return { ...erased, state: 'rejected', reviewer_id: evidence.agent, decided_at: at, rationale: evidence.rationale };
+  }
+  return proposal.state === 'rejected' ? { ...erased, rationale: PURGED_TITLE } : erased;
 }
+
+/** Every field an erased proposal can have (`erasedOf`, plus `request_key_retired` from `write`). */
+const ERASED_PROPOSAL_KEYS: ReadonlySet<string> = new Set([
+  'id', 'state', 'candidate', 'proposer_id', 'evidence', 'proposed_at', 'request_key_hash', 'request_key_retired',
+  'reviewer_id', 'decided_at', 'record_id', 'rationale', 'erasure',
+]);
 
 /** What is left of a candidate once it is erased: identity, provenance and link targets, no content. */
 function stubCandidate(candidate: CreateInput): CreateInput {

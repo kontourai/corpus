@@ -5,7 +5,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,7 @@ import {
   type KnowledgeStoreCreateProposals,
   type KnowledgeStorePurger,
 } from '../src/index.js';
+import { migrateVaultIndex } from '../src/migrate.js';
 
 type Store = KnowledgeStoreAdapter & KnowledgeStorePurger & KnowledgeStoreCreateProposals;
 type Profile = 'default' | 'vault';
@@ -229,7 +230,8 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
   test('an applied proposal whose record is already a tombstone, gone, or not a safe id is erased alone', async () => {
     const cases: Array<[string, (id: string, recordId: string) => void]> = [
       ['a tombstoned record', () => {}],
-      ['a record that no longer exists', (id) => rewrite(id, 'ghost-record')],
+      ['an id that names no record', (id) => rewrite(id, 'ghost-record')],
+      ['an id too long to be a record', (id) => rewrite(id, 'r'.repeat(300))],
       ['an inherited property name', (id) => rewrite(id, 'constructor')],
       // In the default layout `records/<id>.md` is joined, so this names a real record through a traversal.
       ['a path-like id that reaches a real record', (id, recordId) => rewrite(id, `../records/${recordId}`)],
@@ -283,9 +285,10 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
     await raw('a-record');
     const id = await propose([]);
     const snapshot = everything(root);
-    for (const target of ['no-such-proposal', '../escape', 'a/b', 'a-record', '.corpus-proposals']) {
+    for (const target of ['no-such-proposal', '../escape', 'a/b', 'a-record', '.corpus-proposals', 'a'.repeat(300)]) {
       await expect(store.purgeProposal(target, evidence), target).rejects.toMatchObject({ code: 'NOT_FOUND' });
     }
+    expect(await store.getProposal('a'.repeat(300))).toBeNull();
     expect(everything(root)).toBe(snapshot);
     // `purge` still takes record ids only.
     await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -582,8 +585,126 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
     expect((await store.getProposal(id))!.candidate.body).toBe('');
   }, 60_000);
 
+
+  test('a record whose file is gone: the default layout erases the proposal and rebuilds the derived indexes, the vault refuses as corrupt', async () => {
+    const id = await propose([], { aliases: ['team/needle-alias'], links: [{ target_id: 'anchor', kind: 'related', label: 'NEEDLE-LABEL' }] });
+    await raw('anchor');
+    // A candidate's links are checked at apply, so link the created record to the anchor afterwards.
+    const recordId = await store.applyCreate(id, 'reviewer-1');
+    await store.link(recordId, [{ target_id: 'anchor', kind: 'related', label: 'NEEDLE-LABEL' }], { agent: 'editor' });
+    expect(everything(root)).toContain('needle-alias');
+    const recordFile = profile === 'default'
+      ? join(root, 'records', `${recordId}.md`)
+      : join(root, (JSON.parse(readFileSync(join(root, 'path-index.json'), 'utf8')) as { by_id: Record<string, { path: string }> }).by_id[recordId].path);
+    rmSync(recordFile);
+    if (profile === 'default') {
+      await expect(store.purgeProposal(id, evidence)).resolves.toEqual({ proposalId: id, alreadyErased: false });
+      expect((await store.getProposal(id))!.erasure).toBeDefined();
+      // The alias and the link label lived in the derived indexes, which no longer name the record.
+      for (const needle of ['needle-alias', 'NEEDLE-LABEL', 'NEEDLE-CAND']) expect(everything(root), needle).not.toContain(needle);
+    } else {
+      const before = everything(root);
+      await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/missing record/);
+      expect(everything(root)).toBe(before);
+      expect((await store.getProposal(id))!.erasure).toBeUndefined();
+    }
+  });
+
+  describe('what the caller hands in is read once', () => {
+    test('evidence changed while the call waits for the lock is not what is written', async () => {
+      const id = await propose([]);
+      const gate = gatedLock();
+      const holder = open(root, { lock: gate.lock });
+      gate.arm();
+      const holding = holder.rejectCreate(await propose([]), 'reviewer-9', 'hold the lock');
+      await gate.entered;
+      const mutable = { agent: 'privacy-officer', rationale: 'erasure request 42', note: 'ticket 7' };
+      const erasing = open().purgeProposal(id, mutable);
+      mutable.agent = '';
+      mutable.rationale = '';
+      gate.release();
+      await holding;
+      await expect(erasing).resolves.toEqual({ proposalId: id, alreadyErased: false });
+      // Still a readable proposal, erased by the actor that was validated.
+      expect((await store.getProposal(id))!).toMatchObject({ erasure: { agent: 'privacy-officer', rationale: 'erasure request 42' }, reviewer_id: 'privacy-officer' });
+    });
+
+    test('an accessor that answers differently on its second read is read only once', async () => {
+      const id = await propose([]);
+      const reads: Record<string, number> = {};
+      const accessor = (key: string, value: string) => ({ get: () => ((reads[key] = (reads[key] ?? 0) + 1) === 1 ? value : ''), enumerable: true });
+      const tricky = Object.defineProperties({}, { agent: accessor('agent', 'privacy-officer'), rationale: accessor('rationale', 'erasure request 42') });
+      await expect(store.purgeProposal(id, tricky as never)).resolves.toEqual({ proposalId: id, alreadyErased: false });
+      expect((await store.getProposal(id))!.erasure).toMatchObject({ agent: 'privacy-officer', rationale: 'erasure request 42' });
+      expect(reads).toEqual({ agent: 1, rationale: 1 });
+    });
+  });
+
+  test('a field the store does not know does not survive an erasure, and an erased proposal that carries one is corrupt', async () => {
+    const id = await propose([]);
+    const path = join(root, '.corpus-proposals', `${id}.json`);
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    writeFileSync(path, JSON.stringify({ ...stored, extra: { body: 'NEEDLE-CAND leaked', source_refs: 'NEEDLE-REF', digest: sha256('Secret candidate body NEEDLE-CAND') } }, null, 2));
+    expect(everything(root)).toContain('leaked');
+    await expect(store.purgeProposal(id, evidence)).resolves.toEqual({ proposalId: id, alreadyErased: false });
+    const erased = readFileSync(path, 'utf8');
+    expect(erased).not.toContain('extra');
+    expect(erased).not.toContain('leaked');
+    expect(erased).not.toContain(sha256('Secret candidate body NEEDLE-CAND'));
+    noContent();
+    // An erased proposal that has gained a field is not what an erasure writes: it is refused, not reported as done.
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(erased), extra: { body: 'NEEDLE-CAND again' } }, null, 2));
+    await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/corrupt/);
+  });
+
   if (profile === 'vault') {
-    test('a vault that opens read-only refuses it, and one holding migration artifacts refuses an applied proposal but not a pending one', async () => {
+    test('the migration manifest’s digest of a proposal file is why a vault that still holds it refuses, until the host deletes it', async () => {
+      // A real migration: the Kit index is the only one on disk, `migrate` records a sha256 of every file.
+      const id = await propose([]);
+      await raw('seed');
+      renameSync(join(root, 'path-index.json'), join(root, '.graph-index.json'));
+      await migrateVaultIndex({ root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+      const manifest = JSON.parse(readFileSync(join(root, '.corpus-store-migration', 'manifest.json'), 'utf8')) as { files: Record<string, string> };
+      const original = readFileSync(join(root, '.corpus-proposals', `${id}.json`));
+      const digest = manifest.files[`.corpus-proposals/${id}.json`];
+      expect(digest, 'the manifest hashes the proposal file').toBe(createHash('sha256').update(original).digest('hex'));
+
+      const before = everything(root);
+      await expect(open().purgeProposal(id, evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.stringMatching(/migration/) });
+      expect(everything(root)).toBe(before);
+      // The host removes the artifacts, as for `purge`; then the erasure leaves no digest of the proposal behind.
+      rmSync(join(root, '.corpus-store-migration'), { recursive: true });
+      await expect(open().purgeProposal(id, evidence)).resolves.toEqual({ proposalId: id, alreadyErased: false });
+      expect(everything(root)).not.toContain(digest);
+      noContent();
+    });
+
+    test('a crash at the commit marker leaves no emptied folder named for the erased record once the store recovers', async () => {
+      const id = await propose([], { category: 'private-category-741', title: 'private-title-741' });
+      await store.applyCreate(id, 'reviewer-1');
+      expect(existsSync(join(root, 'private-category-741'))).toBe(true);
+      for (const phase of ['committed', 'final-publish']) {
+        const interrupted = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-crash.ts', import.meta.url)), base, profile, phase, id], { encoding: 'utf8', timeout: 60_000 });
+        expect(interrupted.status, interrupted.stderr).toBe(23);
+        await open().getProposal(id);
+        expect(existsSync(join(root, 'private-category-741')), phase).toBe(false);
+        expect(everything(root), phase).not.toContain('private-title-741');
+        if (phase === 'committed') {
+          // Erase a second one at the other phase.
+          const next = await propose([], { category: 'private-category-741', title: 'private-title-741', aliases: ['team/needle-alias-2'] });
+          await store.applyCreate(next, 'reviewer-1');
+          const second = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-crash.ts', import.meta.url)), base, profile, 'final-publish', next], { encoding: 'utf8', timeout: 60_000 });
+          expect(second.status, second.stderr).toBe(23);
+          await open().getProposal(next);
+          expect(existsSync(join(root, 'private-category-741')), 'final-publish').toBe(false);
+          break;
+        }
+      }
+    });
+  }
+
+  if (profile === 'vault') {
+    test('a vault that opens read-only refuses it, and one holding migration artifacts refuses every proposal', async () => {
       const readOnlyRoot = join(base, 'kit-v1');
       cpSync(fileURLToPath(new URL('./fixtures/kit-v1/kit-vault', import.meta.url)), readOnlyRoot, { recursive: true });
       await expect(open(readOnlyRoot).purgeProposal('anything', evidence)).rejects.toMatchObject({ code: 'READ_ONLY' });
@@ -594,9 +715,8 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       mkdirSync(join(root, '.corpus-store-migration'), { recursive: true });
       writeFileSync(join(root, '.corpus-store-migration', 'manifest.json'), '{}');
       const before = everything(root);
-      await expect(store.purgeProposal(applied, evidence)).rejects.toMatchObject({ code: 'READ_ONLY' });
+      for (const target of [applied, pending]) await expect(store.purgeProposal(target, evidence), target).rejects.toMatchObject({ code: 'READ_ONLY' });
       expect(everything(root)).toBe(before);
-      await expect(store.purgeProposal(pending, evidence)).resolves.toEqual({ proposalId: pending, alreadyErased: false });
     });
   }
 });

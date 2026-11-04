@@ -245,16 +245,24 @@ silent behavior.
     and `note`. It keeps `id`, `state`, `proposer_id`, `evidence.agent`, `proposed_at`,
     the settlement identity and times, and `record_id`. **No content hash is kept**, and
     a keyed proposal's input digest is removed. Both code paths share one function
-    (`erasedOf`), so a record purge and `purgeProposal` cannot drift apart.
+    (`erasedOf`), so a record purge and `purgeProposal` cannot drift apart. It builds the
+    erased proposal field by field, so a field the store does not know does not survive,
+    and an *erased* proposal that carries one is corrupt, not reported as done.
+    The evidence is read once, before the call waits for the store lock, so a caller that
+    changes the object (or an accessor on it) afterwards cannot change what is written.
   - **By state.** *Pending*: settled `rejected` by the erasing agent with the erasure
     rationale, so it can never apply. *Rejected*: the reviewer's rationale becomes
     `[purged]` and the reviewer stays. *Applied*: the content also lives in the record
     it created, so `purgeProposal` purges that record in the same transaction, cascade,
     survivors and referrers included, and returns the record purge's result as
     `record` for the host to review. The proposal keeps `state: applied`. If the record
-    is already a tombstone, no longer exists, or `record_id` is not a safe id, only the
-    proposal is erased and `record` is absent. A host that wants to erase the proposal
-    but not its record must not call this on an applied proposal.
+    is already a tombstone, or `record_id` names no record or is not a safe, bounded id
+    (a hand-edited proposal), only the proposal is erased and `record` is absent. If the
+    record's file is gone, the default layout also rebuilds its alias and graph indexes in
+    the same transaction, since they still named it; a vault refuses with a corruption
+    error and writes nothing, because its path index lists a note that is missing.
+    A host that wants to erase the proposal but not its record must not call this on an
+    applied proposal.
   - **Idempotent.** An erased proposal, whether erased by this call or a record purge,
     returns `alreadyErased: true` and writes nothing, so the first marker (who, when,
     why) is never overwritten and a repeat or racing call is harmless.
@@ -277,17 +285,26 @@ silent behavior.
     indexes and proposal included). A crash before every file is published rolls back
     on the next locked operation: the proposal and its key are as they were, and the
     erasure can be retried. A crash after every file is published is applied on
-    recovery. A journal left after the commit marker holds none of the erased content.
+    recovery, which also removes the folders the erasure emptied (a vault routes a
+    record into a folder named for its category, which can name the data subject), as
+    the erasure would have after a clean commit. A journal left after the commit marker
+    holds none of the erased content.
     *Deferred, as for `purge`:* between the first journal write and the commit marker
-    the journal holds the pre-erasure proposal, because rollback needs it. This is the
-    same window `purge-journal-in-flight` lists; it is not closed here.
+    the journal holds the pre-erasure proposal, because rollback needs it, and a
+    committed journal still lists the file paths it touched (a vault note's path
+    contains its title slug) until the next locked operation, including any read,
+    recovers it. This is the same window `purge-journal-in-flight` lists; it is not
+    closed here.
   - **Failure.** A corrupt target proposal (unreadable, an `erasure` marker over intact
     content, an invalid candidate shape) stops the call before anything is written. A
     corrupt *other* proposal does not block a pending or rejected erasure, but does
     block an applied one, because the record purge judges every proposal first.
-    A vault that opens read-only (`kit-v1`) refuses with `READ_ONLY`; one that holds
-    `.corpus-store-migration/` refuses an applied proposal for the same reason `purge`
-    does (the artifacts keep record titles), and still erases pending and rejected ones.
+    A vault that opens read-only (`kit-v1`) refuses with `READ_ONLY`. One that holds
+    `.corpus-store-migration/` refuses every proposal, as `purge` refuses every record:
+    the migration manifest keeps a sha256 of each file it saw, proposal files included,
+    and a digest of a whole proposal file can be checked against a guess at its content.
+    Delete the directory once the migration is verified, then erase. An id longer than
+    a proposal id can be (200 characters) is `NOT_FOUND`.
   - **Not covered.** As for `purge`: copies outside the store's transaction, and the
     retained identities above (`proposer_id`, agents, session id, source ids, link
     targets). Those are the same identity references a record tombstone keeps.

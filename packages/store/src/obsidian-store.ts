@@ -2108,14 +2108,20 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     return stone;
   }
 
-  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
-    // `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and
-    // path, so it would keep the erased titles. (The names are fixed by that command.)
+  /**
+   * `corpus-store migrate` keeps the Kit index and a manifest of every file's hash and path, so it
+   * would keep erased titles and digests of erased files. (The names are fixed by that command.)
+   */
+  private assertNoMigrationArtifacts(operation: 'purge' | 'purgeProposal'): void {
     for (const kept of ['.corpus-store-migration/kit-v1-path-index.json', '.corpus-store-migration/manifest.json']) {
       if (this.files.readText(this.resolveStorePath(kept)) !== null) {
-        throw new ReadOnlyStoreError('purge', 'this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then purge.');
+        throw new ReadOnlyStoreError(operation, `this vault holds .corpus-store-migration/, which keeps the original index and file hashes; delete it once the migration is verified, then ${operation === 'purge' ? 'purge' : 'erase the proposal'}.`);
       }
     }
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    this.assertNoMigrationArtifacts('purge');
     const pathIndex = this.loadPathIndex();
     const records = new Map<string, KitRecord>();
     for (const id of Object.keys(pathIndex.by_id)) {
@@ -2188,22 +2194,27 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
-    const id = validateProposalPurgeInput(proposalId, evidence);
+    const input = validateProposalPurgeInput(proposalId, evidence);
     return this.mutate(
       'purgeProposal',
-      () =>
-        this.proposals.purgeOne(
-          id,
-          evidence,
+      () => {
+        // The migration manifest hashes every file it saw, proposals included, and a hash of a whole
+        // proposal file can be confirmed against a guess at its content. Erasing it would leave that
+        // digest behind, so the host deletes the artifacts first, as for `purge`.
+        this.assertNoMigrationArtifacts('purgeProposal');
+        return this.proposals.purgeOne(
+          input.proposalId,
+          input.evidence,
           () => new Date(this.services.clock()).toISOString(),
           (recordId) => {
-            // A tombstone needs no second purge. The vault's own purge also refuses a vault that
-            // still holds migration artifacts, so an applied proposal waits for the host there.
+            // A tombstone needs no second purge. A record the path index lists but whose note is missing
+            // is a corrupt vault, which `readRecord` refuses; nothing is written.
             const pathIndex = this.loadPathIndex();
             const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
-            return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;
+            return record && !isPurged(record) ? this.purgeLocked([recordId], input.evidence) : undefined;
           },
-        ),
+        );
+      },
       { erasure: true },
     );
   }

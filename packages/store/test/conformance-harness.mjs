@@ -375,6 +375,14 @@ export async function makeHarness(profile) {
       await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
       const whole = await afterPartial.purgeProposal(applied, { agent: 'privacy-officer', rationale: 'retry' });
       assert.deepEqual(whole.record.purged, [recordId]);
+      // A crash at the commit marker of an applied proposal leaves nothing named for the erased record once recovered:
+      // not its content, and not the folder its category routed it to.
+      const routed = await adapter.proposeCreate({ type: 'concept', title: `${marker} routed`, body: `${marker} routed body`, category: 'private.pathleak741', provenance: { agent: 'drafter' } }, 'proposer-1', { agent: 'drafter', proposal: `${marker} evidence` });
+      await adapter.applyCreate(routed, 'reviewer-1');
+      const late = await child([profile, root, coordinationDirectory, 'crash-purge-proposal', `committed,${routed}`]);
+      assert.equal(late.code, 23, late.stderr);
+      await createStore(profile, root, coordinationDirectory).getProposal(routed);
+      assert.equal((await folders()).some((folder) => folder.includes('pathleak741')), false, 'a recovered erasure left a folder named for the erased record');
       return { check: true };
     },
     async 'purge-proposal-concurrent-settlement'() {

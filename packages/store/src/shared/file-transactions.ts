@@ -36,6 +36,8 @@ import {
 } from './observation-file.js';
 
 const JOURNAL_VERSION = 1;
+/** Operations that run with `{ erasure: true }` and so prune the folders they empty. */
+const ERASURE_OPERATIONS: ReadonlySet<string> = new Set(['purge', 'purgeProposal']);
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
 /**
  * True when `text` starts the way every journal this engine writes does:
@@ -780,6 +782,7 @@ export class KnowledgeFileTransactions {
     this.removeOrphanJournalTemporaries();
     const journal = this.loadJournal();
     if (!journal) return;
+    let applied = true;
     if (journal.phase === 'prepared') {
       if (this.allEntriesMatch(journal, 'after')) {
         // Crash after the final publish but before/during the commit marker.
@@ -788,11 +791,15 @@ export class KnowledgeFileTransactions {
       } else {
         this.rollback(journal);
         this.observe(journal.operation, 'recovered');
+        applied = false;
       }
     } else {
       this.observe(journal.operation, 'commit-cleanup');
     }
     this.removeJournal();
+    // An erasure that crashed before its own cleanup still owes it: a removed note must not leave its
+    // folder names behind (they can be the erased title or category).
+    if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);
   }
 
   private allEntriesMatch(journal: Journal, side: 'before' | 'after'): boolean {

@@ -514,7 +514,9 @@ Ten vectors joined the store vectors (180 per profile): `purge-proposal-erase-*`
 (no source, live sources, rejected, applied, request key, input validation), the
 bytes, interrupted-erasure and concurrent-settlement probes, and
 `root-binding-after-purge-proposal`. They all pass on both profiles; the expected-fail
-list is unchanged. `test/purge-proposal.test.ts` covers the same cases with gated
+list is unchanged. The erased shape is built from an allowlist, evidence is read once, a vault with migration
+artifacts refuses every proposal (the manifest digests proposal files), and journal recovery removes the folders
+an interrupted erasure emptied; the last also applies to `purge`. `test/purge-proposal.test.ts` covers the same cases with gated
 locks for a deterministic apply/reject/erase order and crash children for each
 journal phase; `npm run proof:purge` gained controls for each rule.
 

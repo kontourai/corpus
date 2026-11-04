@@ -1110,18 +1110,26 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
-    const id = validateProposalPurgeInput(proposalId, evidence);
+    const input = validateProposalPurgeInput(proposalId, evidence);
     return this.files.mutate(
       'purgeProposal',
       () =>
         this.proposals.purgeOne(
-          id,
-          evidence,
+          input.proposalId,
+          input.evidence,
           () => new Date(this.services.clock()).toISOString(),
           (recordId) => {
-            // An unsafe id (a hand-edited proposal) names no record; a tombstone needs no second purge.
-            const record = isSafePathSegment(recordId) ? this.readRecord(recordId) : null;
-            return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;
+            // An id that is not a safe, bounded filename (a hand-edited proposal) names no record.
+            if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;
+            const record = this.readRecord(recordId);
+            if (record === null) {
+              // The record's file is gone, so its alias and graph entries (a slug, link labels) have
+              // no record to be purged with. Rebuild them from the records that remain.
+              this.rebuildIndexes();
+              return undefined;
+            }
+            // A tombstone needs no second purge.
+            return isPurged(record) ? undefined : this.purgeLocked([recordId], input.evidence);
           },
         ),
       { erasure: true },
