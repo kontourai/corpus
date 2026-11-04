@@ -231,7 +231,8 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       ['a tombstoned record', () => {}],
       ['a record that no longer exists', (id) => rewrite(id, 'ghost-record')],
       ['an inherited property name', (id) => rewrite(id, 'constructor')],
-      ['a path-like id', (id) => rewrite(id, '../escape')],
+      // In the default layout `records/<id>.md` is joined, so this names a real record through a traversal.
+      ['a path-like id that reaches a real record', (id, recordId) => rewrite(id, `../records/${recordId}`)],
     ];
     const rewrite = (id: string, recordId: string) => {
       const path = join(root, '.corpus-proposals', `${id}.json`);

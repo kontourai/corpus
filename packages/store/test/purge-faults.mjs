@@ -175,7 +175,7 @@ const controls = [
   { id: 'proposal-purge-tombstone-repurged', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ?', 'return record ?'),
     args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /alreadyPurged/ },
   { id: 'proposal-purge-unsafe-record-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const record = isSafePathSegment(recordId) ? this.readRecord(recordId) : null;', 'const record = this.readRecord(recordId);'),
-    args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /escape|outside|path/i },
+    args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /does not match its authoritative filename/ },
   { id: 'vault-proposal-purge-inherited-record-id', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null', 'this.readRecord(recordId, pathIndex)'),
     args: focused('test/purge-proposal.test.ts', '-t', 'vault profile > an applied proposal whose record'), reason: /Invalid store path/ },
   // Interrupted erasure: the erasure flag is what drops the before-images at the commit marker.
