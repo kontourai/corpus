@@ -121,6 +121,22 @@ describe.each(['default', 'vault'] as const)('record confidence — %s profile',
     }
   });
 
+  test('a confidence inherited from a prototype is never record content', async () => {
+    // Only an own property is a field, as for the freshness fields: a polluted prototype must not write one.
+    const inherits = <T extends object>(fields: T, extra: object): T => Object.assign(Object.create(extra), fields);
+    await store.create(inherits(compiled({ id: 'inherited-create' }), { confidence: 0.75 }));
+    expect(Object.hasOwn((await store.get('inherited-create'))!, 'confidence')).toBe(false);
+
+    const staged = await store.proposeCreate(inherits(compiled({ id: 'inherited-proposal' }), { confidence: 0.75 }), 'proposer-1', proposalEvidence);
+    expect(Object.hasOwn((await store.getProposal(staged))!.candidate, 'confidence')).toBe(false);
+
+    await store.create(compiled({ id: 'inherited-update', confidence: 0.4 }));
+    await store.update('inherited-update', inherits({ title: 'Retitled' }, { confidence: 0.9 }), { agent: 'editor' });
+    expect((await store.get('inherited-update'))?.confidence).toBe(0.4);
+    // A bad inherited value is not read, so it cannot refuse a good write.
+    await store.create(inherits(compiled({ id: 'inherited-bad' }), { confidence: 7 }));
+  });
+
   test('negative zero is stored as zero', async () => {
     await store.create(compiled({ confidence: -0 }));
     expect(Object.is((await open().get('instinct-1'))?.confidence, 0)).toBe(true);

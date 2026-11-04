@@ -35,7 +35,8 @@ function resolve(value, values) {
   if (Array.isArray(value)) return value.map((item) => resolve(item, values));
   if (value && typeof value === 'object' && Object.hasOwn(value, '$number')) {
     const keys = Object.keys(value);
-    assert.ok(keys.length === 1 && Object.hasOwn(NUMBER_TOKENS, value.$number), `malformed $number token: ${JSON.stringify(value)}`);
+    // A string is required: `Object.hasOwn` would coerce an array like ["NaN"] to the key "NaN".
+    assert.ok(keys.length === 1 && typeof value.$number === 'string' && Object.hasOwn(NUMBER_TOKENS, value.$number), `malformed $number token: ${JSON.stringify(value)}`);
     return NUMBER_TOKENS[value.$number];
   }
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolve(item, values)]));

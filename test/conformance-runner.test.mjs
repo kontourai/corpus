@@ -86,7 +86,7 @@ test('$number tokens write the numbers JSON cannot, in arguments and in expected
 });
 
 test('a malformed $number token fails the vector instead of passing through as an object', async () => {
-  for (const token of [{ $number: 'nan' }, { $number: 5 }, { $number: 'NaN', extra: true }, { $number: '__proto__' }]) {
+  for (const token of [{ $number: 'nan' }, { $number: 5 }, { $number: 'NaN', extra: true }, { $number: '__proto__' }, { $number: ['NaN'] }, { $number: ['-0'] }, { $number: null }]) {
     let called = false;
     const report = await runConformance(() => ({ echo() { called = true; } }), { cases: [{ id: 'bad', operations: [{ call: 'echo', args: [token] }], expected: [] }] });
     assert.equal(report.passed, false, JSON.stringify(token));
