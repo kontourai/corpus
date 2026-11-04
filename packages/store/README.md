@@ -216,6 +216,82 @@ silent behavior.
     filesystem snapshot, and search or vector indexes a host built from
     `get`/lists (the host must rebuild them from the working set).
 
+- **A create proposal can be erased by its own id (2026-11-04).** Decided by the
+  delivery orchestrator for [corpus#62](https://github.com/kontourai/corpus/issues/62)
+  under the owner's standing direction; the owner may override it. `purge` reaches a
+  proposal only through the records it rests on, so a pending or rejected proposal
+  with no sources, or with sources nobody is erasing, kept its candidate text.
+  `purgeProposal(proposalId, { agent, rationale, note? })` closes that. It is on
+  `KnowledgeStorePurger` next to `purge` and returns a `ProposalPurgeResult`
+  (`proposalId`, `alreadyErased`, and `record` for an applied proposal).
+  - **Host call.** Check `assertAdapterBoundTo(adapter, authorizedRoot)`, authorize the
+    actor, then call `purgeProposal(proposalId, { agent: <actor>, rationale, note })`
+    on an adapter built with `allowPurge: true`. Without it the call is `READ_ONLY`
+    before any I/O, even for an unknown id. The store cannot tell who may erase; it
+    records the actor you pass. `agent` and `rationale` are required and bounded
+    exactly as for `purge` (`MISSING_EVIDENCE`), because they are copied into the
+    proposal. The proposals directory is derived from the adapter's own root, so an
+    adapter bound to one root cannot reach another root's proposal.
+  - **Ids.** Proposal ids only. An unknown id, a path-like id, or a record id is
+    `NOT_FOUND`, and `purge` still takes record ids only. To find proposals, use
+    `listProposals`; an erased one has `erasure` set (there is no new `erased` state:
+    the existing `erasure` marker that a record purge writes is the one signal, so
+    `listProposals({ state })` and the state union are unchanged).
+  - **What it writes.** Exactly what a record purge writes to a proposal: the candidate
+    becomes a stub that keeps its type, `provenance.agent`, `session_id`, `source_ids`
+    and link targets and kinds, with title `[purged]`, empty body, category `purged`,
+    and no tags, aliases, expiry, link labels, provenance `note` or `source_refs`;
+    `evidence.proposal` becomes `[purged]`; `erasure` holds `at`, `agent`, `rationale`
+    and `note`. It keeps `id`, `state`, `proposer_id`, `evidence.agent`, `proposed_at`,
+    the settlement identity and times, and `record_id`. **No content hash is kept**, and
+    a keyed proposal's input digest is removed. Both code paths share one function
+    (`erasedOf`), so a record purge and `purgeProposal` cannot drift apart.
+  - **By state.** *Pending*: settled `rejected` by the erasing agent with the erasure
+    rationale, so it can never apply. *Rejected*: the reviewer's rationale becomes
+    `[purged]` and the reviewer stays. *Applied*: the content also lives in the record
+    it created, so `purgeProposal` purges that record in the same transaction, cascade,
+    survivors and referrers included, and returns the record purge's result as
+    `record` for the host to review. The proposal keeps `state: applied`. If the record
+    is already a tombstone, no longer exists, or `record_id` is not a safe id, only the
+    proposal is erased and `record` is absent. A host that wants to erase the proposal
+    but not its record must not call this on an applied proposal.
+  - **Idempotent.** An erased proposal, whether erased by this call or a record purge,
+    returns `alreadyErased: true` and writes nothing, so the first marker (who, when,
+    why) is never overwritten and a repeat or racing call is harmless.
+  - **Request keys.** A retry with the key of an erased proposal is refused with
+    `REQUEST_KEY_CONFLICT` (a typed error, not the tombstone's id), whatever its input.
+    This is the 2026-11-03 "refuse all retries after purge" rule, now also reached by
+    `purgeProposal`: the key hash stays so the key cannot be reused, the digest goes,
+    and nothing is compared with the erased content. Returning the tombstone would
+    tell a retrying client its content was accepted. A caller that retries *without* a
+    key makes a new proposal, which is a new request and not a resurrection.
+  - **Concurrent settlement.** Every operation takes the store lock, so erase and
+    apply or reject are serialized. Erase first: `applyCreate` and `rejectCreate` are
+    refused with `MISSING_EVIDENCE` (the proposal is `rejected`), no record is created.
+    Apply first: the erase finds an applied proposal and purges the record it made.
+    Reject first: the erase removes the reviewer's rationale. Two erasures: one writes,
+    the other reports `alreadyErased`. In every order nothing of the candidate remains
+    and no live record comes of an erased proposal.
+  - **Interrupted erasure.** One journaled transaction with the purge's `erasure`
+    option, so it is applied whole or rolled back whole (an applied proposal's record,
+    indexes and proposal included). A crash before every file is published rolls back
+    on the next locked operation: the proposal and its key are as they were, and the
+    erasure can be retried. A crash after every file is published is applied on
+    recovery. A journal left after the commit marker holds none of the erased content.
+    *Deferred, as for `purge`:* between the first journal write and the commit marker
+    the journal holds the pre-erasure proposal, because rollback needs it. This is the
+    same window `purge-journal-in-flight` lists; it is not closed here.
+  - **Failure.** A corrupt target proposal (unreadable, an `erasure` marker over intact
+    content, an invalid candidate shape) stops the call before anything is written. A
+    corrupt *other* proposal does not block a pending or rejected erasure, but does
+    block an applied one, because the record purge judges every proposal first.
+    A vault that opens read-only (`kit-v1`) refuses with `READ_ONLY`; one that holds
+    `.corpus-store-migration/` refuses an applied proposal for the same reason `purge`
+    does (the artifacts keep record titles), and still erases pending and rejected ones.
+  - **Not covered.** As for `purge`: copies outside the store's transaction, and the
+    retained identities above (`proposer_id`, agents, session id, source ids, link
+    targets). Those are the same identity references a record tombstone keeps.
+
 - **A vault note is limited to 16 MiB.** The vault reads each note with a
   16 MiB bound (`VAULT_NOTE_MAX_BYTES`, 16777216 bytes) when it checks a new
   record's identity, so a larger note would make every later `create` fail.
@@ -280,7 +356,8 @@ silent behavior.
     root it authorized. A CLI default remains a CLI concern. A vault opened
     read-only (`kit-v1`) refuses `proposeCreate`, `applyCreate` and `rejectCreate`
     with `READ_ONLY`.
-  - `purge` reaches proposals; see the purge decision above.
+  - `purge` reaches proposals; see the purge decision above. `purgeProposal` erases
+    one by its own id; see its decision above.
 
 Every decision is implemented except the journal window named in the purge
 decision, which is the single entry on the expected-fail list.

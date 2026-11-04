@@ -15651,6 +15651,1257 @@
           "equals": true
         }
       ]
+    },
+    {
+      "id": "purge-proposal-erase-pending-no-source",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "A pending proposal with no sources keeps its candidate after purgeProposal, can still be applied, or the call is not idempotent.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Pending Heading",
+              "body": "pending body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note pending body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref pending body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag pending body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence pending body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "concept",
+            {
+              "includeHistory": true
+            }
+          ],
+          "save": "records"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "someone-else",
+              "rationale": "another request"
+            }
+          ],
+          "save": "again"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "afterAgain"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.proposalId",
+          "equals": "$p"
+        },
+        {
+          "ref": "result.alreadyErased",
+          "equals": false
+        },
+        {
+          "ref": "after.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "after.reviewer_id",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.proposer_id",
+          "equals": "proposer-1"
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.erasure.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.candidate.tags",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.note",
+          "absent": true
+        },
+        {
+          "ref": "records",
+          "length": 0
+        },
+        {
+          "ref": "again.alreadyErased",
+          "equals": true
+        },
+        {
+          "ref": "afterAgain.erasure.agent",
+          "equals": "privacy-officer"
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-erase-live-sources",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "Erasing a proposal whose sources are live records leaves its content, or alters the source records.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "erase-live-src",
+              "type": "raw",
+              "title": "erase-live-src",
+              "body": "erase-live-src evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "src"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$src"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Supported Heading",
+              "body": "supported body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note supported body",
+                "source_ids": [
+                  "$src",
+                  "external-conversation-1"
+                ],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref supported body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag supported body"
+              ],
+              "links": [
+                {
+                  "target_id": "$src",
+                  "kind": "related",
+                  "label": "label supported body"
+                }
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence supported body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$src"
+          ],
+          "save": "sourceAfter"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.alreadyErased",
+          "equals": false
+        },
+        {
+          "ref": "after.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.erasure.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.candidate.tags",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.note",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_ids.0",
+          "equals": "$src"
+        },
+        {
+          "ref": "after.candidate.links.0.target_id",
+          "equals": "$src"
+        },
+        {
+          "ref": "after.candidate.links.0.label",
+          "absent": true
+        },
+        {
+          "ref": "sourceAfter",
+          "equals": "$before"
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-erase-rejected",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "A rejected proposal keeps its candidate or the reviewer's rationale after purgeProposal.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Rejected Heading",
+              "body": "rejected body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note rejected body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref rejected body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag rejected body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence rejected body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "rejectCreate",
+          "args": [
+            "$p",
+            "reviewer-2",
+            "reviewer prose rejected body"
+          ]
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.alreadyErased",
+          "equals": false
+        },
+        {
+          "ref": "after.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "after.reviewer_id",
+          "equals": "reviewer-2"
+        },
+        {
+          "ref": "after.rationale",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.erasure.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.candidate.tags",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.note",
+          "absent": true
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-erase-applied",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "Erasing an applied proposal leaves the record it created, or the proposal's own candidate.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Applied Heading",
+              "body": "applied body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note applied body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref applied body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag applied body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence applied body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "save": "recordId"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$recordId"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "again"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.alreadyErased",
+          "equals": false
+        },
+        {
+          "ref": "result.record.purged",
+          "equals": [
+            "$recordId"
+          ]
+        },
+        {
+          "ref": "result.record.proposalsScrubbed",
+          "equals": [
+            "$p"
+          ]
+        },
+        {
+          "ref": "after.state",
+          "equals": "applied"
+        },
+        {
+          "ref": "after.record_id",
+          "equals": "$recordId"
+        },
+        {
+          "ref": "after.reviewer_id",
+          "equals": "reviewer-1"
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.erasure.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.candidate.tags",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.note",
+          "absent": true
+        },
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "record.body",
+          "equals": ""
+        },
+        {
+          "ref": "again.alreadyErased",
+          "equals": true
+        },
+        {
+          "ref": "again.record",
+          "absent": true
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-erase-request-key",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "A request-key retry after purgeProposal returns the erased proposal's id, stages the content again, or compares against a digest of it.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Keyed Heading",
+              "body": "keyed body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note keyed body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref keyed body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag keyed body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence keyed body"
+            },
+            {
+              "requestKey": "conformance-opaque-key"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Keyed Heading",
+              "body": "keyed body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note keyed body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref keyed body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag keyed body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence keyed body"
+            },
+            {
+              "requestKey": "conformance-opaque-key"
+            }
+          ],
+          "save": "again"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Keyed Heading",
+              "body": "keyed body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note keyed body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref keyed body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag keyed body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence keyed body"
+            },
+            {
+              "requestKey": "conformance-opaque-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Another Heading",
+              "body": "another body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note another body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref another body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag another body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence another body"
+            },
+            {
+              "requestKey": "conformance-opaque-key"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "list"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "again",
+          "equals": "$p"
+        },
+        {
+          "ref": "list",
+          "length": 1
+        },
+        {
+          "ref": "after.request_key_retired",
+          "equals": true
+        },
+        {
+          "ref": "after.request_digest",
+          "absent": true
+        },
+        {
+          "ref": "after.request_digest_version",
+          "absent": true
+        },
+        {
+          "ref": "after.evidence.proposal",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.title",
+          "equals": "[purged]"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": ""
+        },
+        {
+          "ref": "after.erasure.agent",
+          "equals": "privacy-officer"
+        },
+        {
+          "ref": "after.erasure.rationale",
+          "equals": "erasure request 42"
+        },
+        {
+          "ref": "after.candidate.tags",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.source_refs",
+          "absent": true
+        },
+        {
+          "ref": "after.candidate.provenance.note",
+          "absent": true
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-erase-input-validation",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "purgeProposal accepts an unknown, unsafe or record id, a missing actor or reason, or purge starts accepting proposal ids.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "erase-validation-src",
+              "type": "raw",
+              "title": "erase-validation-src",
+              "body": "erase-validation-src evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Validation Heading",
+              "body": "validation body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note validation body",
+                "source_ids": [],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref validation body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag validation body"
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence validation body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "no-such-proposal",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "../escape",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$src",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "",
+              "rationale": "r"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "a",
+              "rationale": " "
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$p"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "expect_error": "NOT_FOUND"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "after"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$src"
+          ],
+          "save": "sourceAfter"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "after.state",
+          "equals": "pending"
+        },
+        {
+          "ref": "after.candidate.body",
+          "equals": "validation body"
+        },
+        {
+          "ref": "sourceAfter.status",
+          "equals": "active"
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-store-bytes",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "A proposal erasure leaves candidate text, evidence, source references or a digest of them in any stored byte or path.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "erase-bytes-src",
+              "type": "raw",
+              "title": "erase-bytes-src",
+              "body": "erase-bytes-src evidence",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "type": "concept",
+              "title": "Bytes Heading",
+              "body": "bytes body",
+              "category": "conformance.purge",
+              "provenance": {
+                "agent": "drafter",
+                "session_id": "session-1",
+                "note": "note bytes body",
+                "source_ids": [
+                  "$src"
+                ],
+                "source_refs": [
+                  {
+                    "kind": "session-transcript",
+                    "harness": "h",
+                    "session_id": "s-1",
+                    "transcript_ref": "ref bytes body"
+                  }
+                ]
+              },
+              "tags": [
+                "tag bytes body"
+              ],
+              "aliases": [
+                "conformance/bytes-alias"
+              ],
+              "links": [
+                {
+                  "target_id": "$src",
+                  "kind": "related",
+                  "label": "label bytes body"
+                }
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "drafter",
+              "proposal": "evidence bytes body"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "present",
+          "subject": "proposal",
+          "markers": [
+            "Bytes Heading",
+            "bytes body",
+            "tag bytes body",
+            "note bytes body",
+            "ref bytes body",
+            "evidence bytes body",
+            "label bytes body",
+            "conformance/bytes-alias"
+          ]
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "absent",
+          "subject": "proposal",
+          "markers": [
+            "Bytes Heading",
+            "bytes body",
+            "tag bytes body",
+            "note bytes body",
+            "ref bytes body",
+            "evidence bytes body",
+            "label bytes body",
+            "conformance/bytes-alias"
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "rebuilt",
+          "subject": "proposal",
+          "markers": [
+            "Bytes Heading",
+            "bytes body",
+            "tag bytes body",
+            "note bytes body",
+            "ref bytes body",
+            "evidence bytes body",
+            "label bytes body",
+            "conformance/bytes-alias"
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-journal-erasure",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "An interrupted proposal erasure is half applied, leaves erased content in a committed journal, or loses the proposal's key.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "purge-proposal-journal-erasure"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "purge-proposal-concurrent-settlement",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: erase a create proposal (2026-11-04)"
+        }
+      ],
+      "regression": "An apply or reject racing purgeProposal leaves a live record, a settled proposal that keeps its candidate, or a proposal erased twice.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "purge-proposal-concurrent-settlement"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "root-binding-after-purge-proposal",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Owner decision: adapter root binding (2026-11-03)"
+        }
+      ],
+      "regression": "A proposal erasure changes or detaches the adapter root binding.",
+      "production_seam": false,
+      "operations": [
+        {
+          "special": "root-binding",
+          "mode": "purge-proposal"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
     }
   ]
 }

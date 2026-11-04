@@ -60,14 +60,19 @@ export async function makeHarness(profile) {
   }
   const specials = {
     async 'root-binding'({ operation }) {
-      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy', 'purge'].includes(operation.mode), 'unknown root-binding mode');
+      assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy', 'purge', 'purge-proposal'].includes(operation.mode), 'unknown root-binding mode');
       if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
-      if (operation.mode === 'purge') {
+      if (operation.mode === 'purge' || operation.mode === 'purge-proposal') {
         const initial = adapter.rootBinding(); const marker = await readFile(join(root, '.corpus-root-id'), 'utf8');
-        await adapter.create(input('binding-purge'));
-        await adapter.purge(['binding-purge'], { agent: 'eraser', rationale: 'requested' });
+        if (operation.mode === 'purge') {
+          await adapter.create(input('binding-purge'));
+          await adapter.purge(['binding-purge'], { agent: 'eraser', rationale: 'requested' });
+        } else {
+          const proposal = await adapter.proposeCreate(input('binding-purge-proposal'), 'proposer-1', { agent: 'drafter', proposal: 'binding drill' });
+          await adapter.purgeProposal(proposal, { agent: 'eraser', rationale: 'requested' });
+        }
         await adapter.reindex();
-        assert.equal((await adapter.get('binding-purge')).status, 'purged');
+        if (operation.mode === 'purge') assert.equal((await adapter.get('binding-purge')).status, 'purged');
         assert.equal(adapter.rootBinding(), initial); assert.equal(await readFile(join(root, '.corpus-root-id'), 'utf8'), marker);
         assert.equal(createStore(profile, root, coordinationDirectory).rootBinding(), initial);
         assertAdapterBoundTo(adapter, root);
@@ -277,7 +282,8 @@ export async function makeHarness(profile) {
           return { check: true };
         })();
       }
-      assert.equal((await adapter.get('purge-bytes-a')).status, 'purged');
+      // `subject: "proposal"` is for a proposal erasure, which has no record of its own to check.
+      if (operation.subject !== 'proposal') assert.equal((await adapter.get('purge-bytes-a')).status, 'purged');
       for (const marker of operation.markers) assert.equal(found(marker), false, `${JSON.stringify(marker)} is still on disk`);
       // No plain digest of any erased value, in any common encoding.
       for (const marker of operation.markers) {
@@ -328,6 +334,81 @@ export async function makeHarness(profile) {
         }
         await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
       }
+      return { check: true };
+    },
+    async 'purge-proposal-journal-erasure'() {
+      const marker = 'PROPOSAL-JOURNAL-MARKER-ALPHA-7';
+      const journalPath = join(root, '.station-knowledge-transaction.json');
+      const proposal = (tag) => adapter.proposeCreate({ type: 'concept', title: `${marker} ${tag}`, body: `${marker} body`, category: 'conformance.purge', provenance: { agent: 'drafter' } }, 'proposer-1', { agent: 'drafter', proposal: `${marker} evidence` }, { requestKey: `journal-${tag}` });
+      const bytes = (journal) => journal.entries.flatMap((entry) => [entry.before, entry.after]).filter((side) => side !== null).map((side) => Buffer.from(side, 'base64').toString('utf8')).join('\n');
+      // Crash after the commit marker: the journal left behind holds none of the erased content, and the proposal is erased.
+      const committed = await proposal('committed');
+      const marked = await child([profile, root, coordinationDirectory, 'crash-purge-proposal', `committed,${committed}`]);
+      assert.equal(marked.code, 23, marked.stderr);
+      const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+      assert.equal(journal.phase, 'committed');
+      assert.equal(journal.operation, 'purgeProposal');
+      assert.equal(bytes(journal).includes(marker), false, 'the committed journal still holds erased content');
+      const reopened = createStore(profile, root, coordinationDirectory);
+      const erased = await reopened.getProposal(committed);
+      assert.equal(erased.candidate.title, '[purged]');
+      assert.equal(erased.request_key_retired, true);
+      await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
+      // A crash before the first publication rolls back whole: the proposal is intact and can be erased again.
+      const prepared = await proposal('prepared');
+      const interrupted = await child([profile, root, coordinationDirectory, 'crash-purge-proposal', `prepared,${prepared}`]);
+      assert.equal(interrupted.code, 23, interrupted.stderr);
+      const recovered = createStore(profile, root, coordinationDirectory);
+      const intact = await recovered.getProposal(prepared);
+      assert.equal(intact.state, 'pending');
+      assert.ok(intact.candidate.body.includes(marker));
+      await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
+      assert.equal((await recovered.purgeProposal(prepared, { agent: 'privacy-officer', rationale: 'retry' })).alreadyErased, false);
+      // An applied proposal spans the record and the proposal: a partial publication is rolled back whole.
+      const applied = await proposal('applied');
+      const recordId = await adapter.applyCreate(applied, 'reviewer-1');
+      const partial = await child([profile, root, coordinationDirectory, 'crash-purge-proposal', `first-publish,${applied}`]);
+      assert.equal(partial.code, 23, partial.stderr);
+      const afterPartial = createStore(profile, root, coordinationDirectory);
+      assert.equal((await afterPartial.get(recordId)).status, 'active', 'the record must not be half purged');
+      assert.equal((await afterPartial.getProposal(applied)).erasure, undefined, 'the proposal must not be half erased');
+      await assert.rejects(readFile(journalPath), { code: 'ENOENT' });
+      const whole = await afterPartial.purgeProposal(applied, { agent: 'privacy-officer', rationale: 'retry' });
+      assert.deepEqual(whole.record.purged, [recordId]);
+      return { check: true };
+    },
+    async 'purge-proposal-concurrent-settlement'() {
+      const marker = 'RACE-MARKER-ALPHA-7';
+      const evidence = { agent: 'privacy-officer', rationale: 'race drill' };
+      const stage = (round) => adapter.proposeCreate({ type: 'concept', title: `${marker} ${round}`, body: `${marker} body ${round}`, category: 'conformance.purge', provenance: { agent: 'drafter' } }, 'proposer-1', { agent: 'drafter', proposal: `${marker} evidence` });
+      const racers = () => [createStore(profile, root, coordinationDirectory), createStore(profile, root, coordinationDirectory)];
+      for (const settle of ['applyCreate', 'rejectCreate']) {
+        for (let round = 0; round < 4; round++) {
+          const id = await stage(`${settle}-${round}`);
+          const [a, b] = racers();
+          const settling = () => a[settle](id, 'reviewer-1', ...(settle === 'rejectCreate' ? ['race rationale'] : []));
+          const erasing = () => b.purgeProposal(id, evidence);
+          // Start each side first in turn; the store lock, not the call order, decides who wins.
+          let settlingCall;
+          let erasingCall;
+          if (round % 2 === 0) { settlingCall = settling(); erasingCall = erasing(); } else { erasingCall = erasing(); settlingCall = settling(); }
+          const [settled, erased] = await Promise.allSettled([settlingCall, erasingCall]);
+          assert.equal(erased.status, 'fulfilled', `${settle} round ${round}: the erasure must succeed`);
+          if (settled.status === 'rejected') assert.equal(settled.reason.code, 'MISSING_EVIDENCE', `${settle} round ${round}: a settle that loses the race is refused cleanly`);
+          const proposal = await adapter.getProposal(id);
+          assert.ok(proposal.erasure, `${settle} round ${round}: the proposal must end erased`);
+          assert.equal(proposal.candidate.body, '');
+          for (const record of await adapter.listByType('concept', { includeHistory: true })) assert.equal(record.status, 'purged', `${settle} round ${round}: no live record may survive`);
+        }
+      }
+      const id = await stage('double');
+      const [a, b] = racers();
+      const both = await Promise.all([a.purgeProposal(id, evidence), b.purgeProposal(id, { agent: 'second', rationale: 'second request' })]);
+      assert.deepEqual(both.map((result) => result.alreadyErased).sort(), [false, true]);
+      const files = [];
+      const walk = async (directory) => { for (const entry of await readdir(directory, { withFileTypes: true })) { const path = join(directory, entry.name); if (entry.isDirectory()) await walk(path); else files.push(await readFile(path, 'utf8')); } };
+      await walk(root);
+      assert.equal(files.some((text) => text.includes(marker)), false, 'erased content is still on disk');
       return { check: true };
     },
     async 'purge-journal-in-flight'() {

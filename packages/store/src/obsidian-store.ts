@@ -33,6 +33,7 @@ import type {
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
+  ProposalPurgeResult,
   PurgeEvidence,
   PurgeResult,
   RejectEvidence,
@@ -77,10 +78,12 @@ import {
 import {
   assertNoPurgedSupport,
   assertNotPurged,
+  isPurged,
   planPurge,
   survivorOf,
   TOMBSTONE_SHAPES,
   tombstoneOf,
+  validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
 import {
@@ -2178,6 +2181,31 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       proposalsScrubbed: proposals.scrubbed,
       proposalsBlocked: proposals.blocked,
     };
+  }
+
+  /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const id = validateProposalPurgeInput(proposalId, evidence);
+    return this.mutate(
+      'purgeProposal',
+      () =>
+        this.proposals.purgeOne(
+          id,
+          evidence,
+          () => new Date(this.services.clock()).toISOString(),
+          (recordId) => {
+            // A tombstone needs no second purge. The vault's own purge also refuses a vault that
+            // still holds migration artifacts, so an applied proposal waits for the host there.
+            const pathIndex = this.loadPathIndex();
+            const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
+            return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;
+          },
+        ),
+      { erasure: true },
+    );
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

@@ -26,6 +26,7 @@ import type {
   KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
+  ProposalPurgeResult,
   ProposeEvidence,
   PurgeEvidence,
   PurgeResult,
@@ -72,9 +73,11 @@ import {
 import {
   assertNoPurgedSupport,
   assertNotPurged,
+  isPurged,
   planPurge,
   survivorOf,
   tombstoneOf,
+  validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
 import {
@@ -1100,6 +1103,29 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       proposalsScrubbed: proposals.scrubbed,
       proposalsBlocked: proposals.blocked,
     };
+  }
+
+  /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+    if (this.services.allowPurge !== true) {
+      throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
+    }
+    const id = validateProposalPurgeInput(proposalId, evidence);
+    return this.files.mutate(
+      'purgeProposal',
+      () =>
+        this.proposals.purgeOne(
+          id,
+          evidence,
+          () => new Date(this.services.clock()).toISOString(),
+          (recordId) => {
+            // An unsafe id (a hand-edited proposal) names no record; a tombstone needs no second purge.
+            const record = isSafePathSegment(recordId) ? this.readRecord(recordId) : null;
+            return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;
+          },
+        ),
+      { erasure: true },
+    );
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

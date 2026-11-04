@@ -49,6 +49,7 @@ for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
  const closed = new KitDefaultStoreAdapter({ storeRoot: new URL('./closed', import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
  const id = await closed.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  await assert.rejects(closed.purge([id], { agent: 'consumer', rationale: 'test' }), { code: 'READ_ONLY' });
+ await assert.rejects(closed.purgeProposal('proposal', { agent: 'consumer', rationale: 'test' }), { code: 'READ_ONLY' });
 }
 await assert.rejects(import('@kontourai/corpus-store/src/default-store.ts'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
@@ -70,7 +71,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type ProposalPurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -87,6 +88,9 @@ const purger: KnowledgeStorePurger = new KitDefaultStoreAdapter({ ...options, al
 const outcome: PurgeResult = await purger.purge([id], { agent: 'privacy-officer', rationale: 'erasure request' });
 assert.deepEqual(outcome.purged, [id]);
 assert.equal((await stores[0].get(id))?.status, 'purged');
+// A proposal is erased by its own id through the same privileged type, and an unknown id is NOT_FOUND.
+const erasedProposal: Promise<ProposalPurgeResult> = purger.purgeProposal('no-such-proposal', { agent: 'privacy-officer', rationale: 'erasure request' });
+await assert.rejects(erasedProposal, { code: 'NOT_FOUND' });
 function invalidConfigurations(): void {
   // @ts-expect-error Coordination identity must be supplied even with an explicit lock and directory.
   new KitDefaultStoreAdapter({ storeRoot: resolve("invalid-identity"), lock, coordinationDirectory: resolve("invalid-coordination") });

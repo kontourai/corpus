@@ -154,6 +154,43 @@ const controls = [
     args: focused('test/purge.test.ts'), reason: /made of a very long (type|created_at) can still be erased/ },
   { id: 'rationale-cut-from-spaces', file: purge, mutate: (s) => swap(s, 'leadingJson(evidence.rationale.trimStart(), maxBytes)', 'leadingJson(evidence.rationale, maxBytes)'),
     args: focused('test/purge.test.ts'), reason: /leading spaces cannot leave only spaces/ },
+  // purgeProposal (#62): erase one create proposal by its own id.
+  { id: 'proposal-purge-always-allowed', file: store + 'src/default-store.ts', mutate: (s) => swap(s, "if (this.services.allowPurge !== true) {\n      throw new ReadOnlyStoreError('purgeProposal'", "if (this.services.allowPurge !== true && false) {\n      throw new ReadOnlyStoreError('purgeProposal'"),
+    args: focused('test/purge-proposal.test.ts', '-t', 'it is refused without allowPurge'), reason: /instead of rejecting/ },
+  { id: 'proposal-purge-evidence-unchecked', file: purge, mutate: (s) => swap(s, "validatePurgeEvidence('purgeProposal', evidence);", ''),
+    args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
+  { id: 'proposal-purge-unknown-id-ignored', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);', 'if (!proposal) return { proposalId, alreadyErased: true };\n    assertErasable(proposal);'),
+    args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
+  { id: 'proposal-purge-not-idempotent', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '    if (proposal.erasure) return { proposalId, alreadyErased: true };\n', ''),
+    args: conformance('purge-proposal-erase-pending-no-source'), reason: /again\.alreadyErased/ },
+  { id: 'proposal-purge-marker-trusted', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '    assertErasable(proposal);\n    if (proposal.erasure) return { proposalId, alreadyErased: true };', '    if (proposal.erasure) return { proposalId, alreadyErased: true };'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'a corrupt proposal is not erased'), reason: /instead of rejecting/ },
+  { id: 'proposal-purge-source-refs-kept', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "      agent: provenance.agent,\n      ...(provenance.session_id ? { session_id: provenance.session_id } : {}),\n      ...(provenance.source_ids?.length ? { source_ids: [...provenance.source_ids] } : {}),\n    },\n    links: (candidate.links", "      agent: provenance.agent,\n      ...(provenance.source_refs ? { source_refs: provenance.source_refs } : {}),\n      ...(provenance.session_id ? { session_id: provenance.session_id } : {}),\n      ...(provenance.source_ids?.length ? { source_ids: [...provenance.source_ids] } : {}),\n    },\n    links: (candidate.links"),
+    args: conformance('purge-proposal-erase-pending-no-source'), reason: /after\.candidate\.provenance\.source_refs must be absent/ },
+  // An applied proposal's content lives in its record: the record purge must run, in both profiles.
+  { id: 'proposal-purge-applied-record-kept', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;', 'return undefined;'),
+    args: conformance('purge-proposal-erase-applied'), reason: /result\.record\.purged/ },
+  { id: 'vault-proposal-purge-applied-record-kept', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ? this.purgeLocked([recordId], evidence) : undefined;', 'return undefined;'),
+    args: conformance('purge-proposal-erase-applied'), reason: /result\.record\.purged/ },
+  { id: 'proposal-purge-tombstone-repurged', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'return record && !isPurged(record) ?', 'return record ?'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /alreadyPurged/ },
+  { id: 'proposal-purge-unsafe-record-id', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'const record = isSafePathSegment(recordId) ? this.readRecord(recordId) : null;', 'const record = this.readRecord(recordId);'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'whose record is already a tombstone'), reason: /escape|outside|path/i },
+  { id: 'vault-proposal-purge-inherited-record-id', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, 'Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null', 'this.readRecord(recordId, pathIndex)'),
+    args: focused('test/purge-proposal.test.ts', '-t', 'vault profile > an applied proposal whose record'), reason: /Invalid store path/ },
+  // Interrupted erasure: the erasure flag is what drops the before-images at the commit marker.
+  { id: 'proposal-purge-journal-keeps-before-images', file: store + 'src/default-store.ts', mutate: (s) => swap(s, "      { erasure: true },\n    );\n  }\n\n  // ── get / getLinks", "    );\n  }\n\n  // ── get / getLinks"),
+    args: conformance('purge-proposal-journal-erasure'), reason: /committed journal still holds erased content/ },
+  { id: 'vault-proposal-purge-journal-keeps-before-images', file: store + 'src/obsidian-store.ts', mutate: (s) => swap(s, "      { erasure: true },\n    );\n  }\n\n  // ── get / getLinks", "    );\n  }\n\n  // ── get / getLinks"),
+    args: conformance('purge-proposal-journal-erasure'), reason: /committed journal still holds erased content/ },
+  // Concurrent settlement: an erased proposal is settled `rejected`, and that is what keeps a queued apply out.
+  { id: 'proposal-settle-after-erasure', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
+    args: focused('test/purge-proposal.test.ts', '-t', 'erase holds the lock while an apply is queued'), reason: /applyCreate after erasure must be refused/ },
+  { id: 'proposal-settle-after-erasure-race', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
+    args: conformance('purge-proposal-concurrent-settlement'), reason: /no live record may survive|must end erased/ },
+  // A retry after erasure is refused as a retired key, never compared with anything.
+  { id: 'proposal-retry-after-erasure-compared', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (existing && (Object.hasOwn(existing, 'erasure') || existing.request_key_retired === true)) throw new RequestKeyConflictError(true);", ''),
+    args: focused('test/purge-proposal.test.ts', '-t', 'a retry after erasing'), reason: /retired/ },
 ];
 
 function run(label, args, success) {
