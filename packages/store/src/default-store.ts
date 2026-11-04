@@ -75,6 +75,7 @@ import {
   assertNotPurged,
   isPurged,
   planPurge,
+  supportIds,
   survivorOf,
   tombstoneOf,
   validateProposalPurgeInput,
@@ -1124,13 +1125,17 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
             const record = this.readRecord(recordId);
             if (record === null) {
               // The record's file is gone, so its alias and graph entries (a slug, link labels) have
-              // no record to be purged with. Rebuild them from the records that remain. Another
-              // record may still link to it, labelled with the erased title, and a purge would strip
-              // that label; with no record to purge, refuse instead of leaving it behind.
-              const { graph } = this.rebuildIndexes();
-              if (Object.hasOwn(graph.reverse, recordId) && graph.reverse[recordId].length > 0) {
+              // no record to be purged with. Rebuild them from the records that remain. A live record
+              // may still link to it or cite it as a source: a purge would strip its label with the
+              // erased title, or cascade it if it rested on this record alone. With no record to purge,
+              // refuse instead of leaving that behind.
+              this.rebuildIndexes();
+              const dependent = this.allRecords().find(
+                (other) => !isPurged(other) && (supportIds(other).includes(recordId) || (other.links ?? []).some((link) => link.target_id === recordId)),
+              );
+              if (dependent) {
                 throw new KnowledgeStoreCorruptionError(
-                  `create proposal ${input.proposalId}: its record ${recordId} is missing but other records still link to it; restore the record or remove those links, then erase the proposal`,
+                  `create proposal ${input.proposalId}: its record ${recordId} is missing but record ${dependent.id} still refers to it; restore the record or remove the reference, then erase the proposal`,
                 );
               }
               return undefined;

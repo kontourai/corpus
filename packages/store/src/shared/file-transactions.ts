@@ -771,8 +771,10 @@ export class KnowledgeFileTransactions {
           this.assertNoSymlink(directory);
           if (!lstatSync(directory).isDirectory()) break;
           rmdirSync(directory);
-        } catch {
-          break; // not empty, already gone, or not ours to touch
+        } catch (error) {
+          // A folder that is already gone was removed by an interrupted earlier pass: carry on to its
+          // parent, which may still be empty. Anything else (not empty, not ours to touch) ends the walk.
+          if (!isMissing(error)) break;
         }
         directory = dirname(directory);
       }

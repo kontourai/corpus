@@ -259,9 +259,12 @@ silent behavior.
     is already a tombstone, or `record_id` names no record or is not a safe, bounded id
     (a hand-edited proposal), only the proposal is erased and `record` is absent. If the
     record's file is gone, the default layout rebuilds its alias and graph indexes in the
-    same transaction, since they still named it, unless another record still links to the
-    missing one: such a link can carry a label with the erased title, which only a record
-    purge strips, so it refuses with a corruption error and writes nothing. A vault always
+    same transaction, since they still named it, unless another live record still links to
+    the missing one or cites it as a source: a link can carry a label with the erased
+    title, and a record that rests on it alone is one a purge would cascade, and only a
+    record purge does either, so it refuses with a corruption error and writes nothing
+    (restore the record and the erasure purges it properly). Tombstones that refer to it
+    do not count. A vault always
     refuses the same way, because its path index lists a note that is missing.
     A host that wants to erase the proposal but not its record must not call this on an
     applied proposal.
@@ -291,8 +294,9 @@ silent behavior.
     record into a folder named for its category, which can name the data subject), as
     the erasure would have after a clean commit. Folders are removed before the journal
     that names them, so a second crash during that cleanup is finished by the next
-    recovery. (Removing them is best effort: a folder that is not empty, or whose path
-    is a symlink, is left alone.) A journal left after the commit marker
+    recovery, including through a folder an interrupted pass already removed. (Removing
+    them is best effort: a folder that is not empty, or whose path is a symlink, is
+    left alone.) A journal left after the commit marker
     holds none of the erased content.
     *Deferred, as for `purge`:* between the first journal write and the commit marker
     the journal holds the pre-erasure proposal, because rollback needs it, and a

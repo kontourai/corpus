@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
@@ -620,12 +620,39 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       rmSync(file);
       const before = everything(root);
       // Nothing can strip the survivor's label while the record is missing, so nothing is erased.
-      await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/still link to it/);
+      await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/still refers to it/);
       expect(everything(root)).toBe(before);
       expect((await store.getProposal(id))!.erasure).toBeUndefined();
       writeFileSync(file, saved);
       await expect(store.purgeProposal(id, evidence)).resolves.toMatchObject({ record: { purged: [recordId], referrers: ['survivor'] } });
       noContent();
+    });
+  }
+
+  if (profile === 'default') {
+    test('a record that rests on the missing one only through source_ids blocks the erasure too, and a tombstoned referrer does not', async () => {
+      const id = await propose([]);
+      const recordId = await store.applyCreate(id, 'reviewer-1');
+      await store.create({ id: 'dependent', type: 'concept', title: 'dependent', body: 'DEPENDENT-NEEDLE body', category: 'engineering', provenance: { agent: 'creator', source_ids: [recordId] } });
+      await store.create({ id: 'old-referrer', type: 'concept', title: 'old-referrer', body: 'old', category: 'engineering', provenance: { agent: 'creator' }, links: [{ target_id: recordId, kind: 'related', label: 'NEEDLE-LABEL' }] });
+      await store.purge(['old-referrer'], { agent: 'someone', rationale: 'earlier' });
+      const file = join(root, 'records', `${recordId}.md`);
+      const saved = readFileSync(file, 'utf8');
+      rmSync(file);
+      const before = everything(root);
+      await expect(store.purgeProposal(id, evidence)).rejects.toThrow(/dependent still refers to it/);
+      expect(everything(root)).toBe(before);
+      writeFileSync(file, saved);
+      // With the record back, the purge cascades the dependent, which is what the refusal protected.
+      await expect(store.purgeProposal(id, evidence)).resolves.toMatchObject({ record: { purged: [recordId], cascaded: ['dependent'] } });
+      expect(everything(root)).not.toContain('DEPENDENT-NEEDLE');
+      // A tombstone keeps only a link target, so once only tombstones refer to a missing record it does not block.
+      const next = await propose([], { aliases: ['team/needle-alias-9'] });
+      const nextRecord = await store.applyCreate(next, 'reviewer-1');
+      await store.create({ id: 'second-referrer', type: 'concept', title: 'second', body: 'second', category: 'engineering', provenance: { agent: 'creator' }, links: [{ target_id: nextRecord, kind: 'related' }] });
+      await store.purge(['second-referrer'], { agent: 'someone', rationale: 'earlier' });
+      rmSync(join(root, 'records', `${nextRecord}.md`));
+      await expect(store.purgeProposal(next, evidence)).resolves.toEqual({ proposalId: next, alreadyErased: false });
     });
   }
 
@@ -742,6 +769,24 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(true);
       expect(existsSync(join(root, 'private-category-741'))).toBe(false);
       await open().getProposal(id);
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(false);
+    });
+
+    test('a crash after the cleanup removed the innermost folder is finished by the next recovery, through the missing leaf', async () => {
+      const id = await propose([], { category: 'private-category-741.nested.deeper', title: 'private-title-741' });
+      const recordId = await store.applyCreate(id, 'reviewer-1');
+      const note = (JSON.parse(readFileSync(join(root, 'path-index.json'), 'utf8')) as { by_id: Record<string, { path: string }> }).by_id[recordId].path;
+      const innermost = join(root, dirname(note));
+      expect(dirname(note).split('/').length, 'the category routes into nested folders').toBeGreaterThan(2);
+      const first = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-crash.ts', import.meta.url)), base, profile, 'committed', id], { encoding: 'utf8', timeout: 60_000 });
+      expect(first.status, first.stderr).toBe(23);
+      const second = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/purge-proposal-recover-crash.ts', import.meta.url)), base, profile, id, innermost], { encoding: 'utf8', timeout: 60_000 });
+      expect(second.status, second.stderr).toBe(24);
+      expect(existsSync(innermost), 'the interrupted pass removed the innermost folder').toBe(false);
+      expect(existsSync(join(root, 'private-category-741')), 'its ancestors are still there').toBe(true);
+      expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(true);
+      await open().getProposal(id);
+      expect(existsSync(join(root, 'private-category-741'))).toBe(false);
       expect(existsSync(join(root, '.station-knowledge-transaction.json'))).toBe(false);
     });
 
