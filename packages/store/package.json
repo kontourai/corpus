@@ -48,7 +48,8 @@
     "proof:round2": "node test/round2-faults.mjs",
     "compare:station": "node test/station-byte-comparison.mjs",
     "proof:purge": "node test/purge-faults.mjs",
-    "proof:confidence": "node test/confidence-faults.mjs"
+    "proof:confidence": "node test/confidence-faults.mjs",
+    "proof:preview": "node test/preview-faults.mjs"
   },
   "dependencies": {
     "js-yaml": "5.4.2"

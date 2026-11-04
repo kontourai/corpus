@@ -26,9 +26,12 @@ import type {
   KnowledgeStorePurger,
   LinkEvidence,
   ListOptions,
+  ProposalPurgePreview,
   ProposalPurgeResult,
   ProposeEvidence,
   PurgeEvidence,
+  PurgeOptions,
+  PurgePreview,
   PurgeResult,
   RejectEvidence,
   RetireEvidence,
@@ -43,10 +46,11 @@ import {
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
   ReadOnlyStoreError,
+  StaleRevisionError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { assertCreateFields } from './shared/create-input.js';
-import { CreateProposals } from './shared/create-proposals.js';
+import { CreateProposals, type ProposalErasePlan } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
 import { confidenceOnCreate, confidenceOnUpdate } from './shared/confidence.js';
@@ -76,12 +80,17 @@ import {
   assertNotPurged,
   isPurged,
   planPurge,
+  type PurgePlan,
   supportIds,
   survivorOf,
   tombstoneOf,
+  validateExpectedRevision,
+  validatePreviewProposalInput,
+  validatePreviewPurgeInput,
   validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
+import { StoreRevision } from './shared/revision.js';
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
@@ -94,6 +103,16 @@ import {
 } from './shared/wikilinks.js';
 
 const logger = diagnostics;
+
+/** What a record purge decided: read it for a preview, write it to commit. Never leaves the adapter. */
+interface PurgeExecution {
+  records: ReadonlyMap<string, KitRecord>;
+  plan: PurgePlan;
+  proposals: ProposalErasePlan;
+}
+
+/** The record step of `purgeProposal`: purge the record, or just rebuild indexes when its file is gone. */
+type RecordStep = { purge: PurgeExecution } | { rebuild: true };
 
 export type { ReindexResult };
 
@@ -1064,20 +1083,73 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
   // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
 
-  async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
+  async purge(ids: string[], evidence: PurgeEvidence, options?: PurgeOptions): Promise<PurgeResult> {
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const requested = validatePurgeInput(ids, evidence);
-    return this.files.mutate('purge', () => this.purgeLocked(requested, evidence), { erasure: true });
+    const expected = validateExpectedRevision('purge', options);
+    return this.files.mutate('purge', () => {
+      this.assertRevision('purge', expected);
+      return this.purgeLocked(requested, evidence);
+    }, { erasure: true });
   }
 
-  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+  /**
+   * Read-only (kontourai/corpus#69): what `purge(ids)` would do. It runs `planPurgeLocked`, which
+   * `purge` runs too, so the lists cannot drift from the committed result. It needs no `allowPurge`.
+   */
+  async previewPurge(ids: string[]): Promise<PurgePreview> {
+    const requested = validatePreviewPurgeInput(ids);
+    return this.files.read(() => {
+      const revision = this.revisionLocked();
+      return { ...this.purgeResultOf(this.planPurgeLocked(requested)), revision };
+    });
+  }
+
+  /** The store as `expectedRevision` names it: see `shared/revision.ts`. */
+  private revisionLocked(): string {
+    const revision = new StoreRevision(this.binding ?? '');
+    for (const id of this.listIds().sort()) revision.add('record', id, this.files.readText(this.recordPath(id)));
+    for (const part of this.proposals.revisionParts()) revision.add('proposal', part.name, part.text);
+    return revision.value();
+  }
+
+  /** Refuse before any write when the store is not the one the host previewed. */
+  private assertRevision(op: string, expected: string | undefined): void {
+    if (expected !== undefined && this.revisionLocked() !== expected) throw new StaleRevisionError(op);
+  }
+
+  /** Decide a record purge. Read-only: `commitPurgeLocked` writes it and `previewPurge` reports it. */
+  private planPurgeLocked(requested: string[]): PurgeExecution {
     const records = new Map(this.allRecords().map((record) => [record.id, record]));
     for (const id of requested) {
       if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
     }
     const plan = planPurge(requested, records);
+    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };
+  }
+
+  /** The lists of a `PurgeResult`: ids only. The one place a plan becomes a result, for preview and commit. */
+  private purgeResultOf({ plan, proposals }: PurgeExecution): PurgeResult {
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    return this.commitPurgeLocked(this.planPurgeLocked(requested), evidence);
+  }
+
+  private commitPurgeLocked(execution: PurgeExecution, evidence: PurgeEvidence): PurgeResult {
+    const { records, plan } = execution;
     const now = new Date(this.services.clock()).toISOString();
     const graph = this.loadGraph();
     const aliasIndex = this.loadAliasIndex();
@@ -1100,59 +1172,80 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     }
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
-    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
-    return {
-      purged: plan.purged,
-      cascaded: plan.cascaded,
-      survivors: plan.survivors,
-      referrers: plan.referrers,
-      alreadyPurged: plan.alreadyPurged,
-      proposalsRejected: proposals.rejected,
-      proposalsScrubbed: proposals.scrubbed,
-      proposalsBlocked: proposals.blocked,
-    };
+    this.proposals.commitErase(execution.proposals, evidence, now);
+    return this.purgeResultOf(execution);
   }
 
   /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
-  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence, options?: PurgeOptions): Promise<ProposalPurgeResult> {
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const input = validateProposalPurgeInput(proposalId, evidence);
+    const expected = validateExpectedRevision('purgeProposal', options);
     return this.files.mutate(
       'purgeProposal',
-      () =>
-        this.proposals.purgeOne(
-          input.proposalId,
+      () => {
+        this.assertRevision('purgeProposal', expected);
+        return this.proposals.commitOne(
+          this.planPurgeProposalLocked(input.proposalId),
           input.evidence,
           () => new Date(this.services.clock()).toISOString(),
-          (recordId) => {
-            // An id that is not a safe, bounded filename (a hand-edited proposal) names no record.
-            if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;
-            const record = this.readRecord(recordId);
-            if (record === null) {
+          (step) => {
+            if ('rebuild' in step) {
               // The record's file is gone, so its alias and graph entries (a slug, link labels) have
-              // no record to be purged with. Rebuild them from the records that remain. A live record
-              // may still link to it or cite it as a source: a purge would strip its label with the
-              // erased title, or cascade it if it rested on this record alone. With no record to purge,
-              // refuse instead of leaving that behind.
+              // no record to be purged with. Rebuild them from the records that remain.
               this.rebuildIndexes();
-              const dependent = this.allRecords().find(
-                (other) => !isPurged(other) && (supportIds(other).includes(recordId) || (other.links ?? []).some((link) => link.target_id === recordId)),
-              );
-              if (dependent) {
-                throw new KnowledgeStoreCorruptionError(
-                  `create proposal ${input.proposalId}: its record ${recordId} is missing but record ${dependent.id} still refers to it; restore the record or remove the reference, then erase the proposal`,
-                );
-              }
               return undefined;
             }
-            // A tombstone needs no second purge.
-            return isPurged(record) ? undefined : this.purgeLocked([recordId], input.evidence);
+            return this.commitPurgeLocked(step.purge, input.evidence);
           },
-        ),
+        );
+      },
       { erasure: true },
     );
+  }
+
+  /** Read-only (kontourai/corpus#69): what `purgeProposal(proposalId)` would do. Needs no `allowPurge`. */
+  async previewPurgeProposal(proposalId: string): Promise<ProposalPurgePreview> {
+    const id = validatePreviewProposalInput(proposalId);
+    return this.files.read(() => {
+      const revision = this.revisionLocked();
+      const plan = this.planPurgeProposalLocked(id);
+      const step = plan.record;
+      return {
+        proposalId: plan.proposal.id,
+        alreadyErased: plan.alreadyErased,
+        ...(step && 'purge' in step ? { record: this.purgeResultOf(step.purge) } : {}),
+        revision,
+        state: plan.proposal.state,
+        ...(plan.proposal.record_id !== undefined ? { recordId: plan.proposal.record_id } : {}),
+      };
+    });
+  }
+
+  private planPurgeProposalLocked(proposalId: string) {
+    return this.proposals.planOne<RecordStep>(proposalId, (recordId) => {
+      // An id that is not a safe, bounded filename (a hand-edited proposal) names no record.
+      if (!isSafePathSegment(recordId) || recordId.length > 200) return undefined;
+      const record = this.readRecord(recordId);
+      if (record === null) {
+        // A live record may still link to the missing one or cite it as a source: a purge would
+        // strip its label with the erased title, or cascade it if it rested on this record alone.
+        // With no record to purge, refuse instead of leaving that behind.
+        const dependent = this.allRecords().find(
+          (other) => !isPurged(other) && (supportIds(other).includes(recordId) || (other.links ?? []).some((link) => link.target_id === recordId)),
+        );
+        if (dependent) {
+          throw new KnowledgeStoreCorruptionError(
+            `create proposal ${proposalId}: its record ${recordId} is missing but record ${dependent.id} still refers to it; restore the record or remove the reference, then erase the proposal`,
+          );
+        }
+        return { rebuild: true };
+      }
+      // A tombstone needs no second purge.
+      return isPurged(record) ? undefined : { purge: this.planPurgeLocked([recordId]) };
+    });
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

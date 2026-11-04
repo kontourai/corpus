@@ -33,8 +33,11 @@ import type {
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
+  ProposalPurgePreview,
   ProposalPurgeResult,
   PurgeEvidence,
+  PurgeOptions,
+  PurgePreview,
   PurgeResult,
   RejectEvidence,
   RetireEvidence,
@@ -48,10 +51,11 @@ import {
   KnowledgeStoreCorruptionError,
   MissingEvidenceError,
   ReadOnlyStoreError,
+  StaleRevisionError,
 } from './errors.js';
 import { isValidCategory } from './shared/category.js';
 import { assertCreateFields } from './shared/create-input.js';
-import { CreateProposals, PROPOSALS_DIRECTORY } from './shared/create-proposals.js';
+import { CreateProposals, PROPOSALS_DIRECTORY, type ProposalErasePlan } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
 import { confidenceOnCreate, confidenceOnUpdate } from './shared/confidence.js';
@@ -81,12 +85,17 @@ import {
   assertNotPurged,
   isPurged,
   planPurge,
+  type PurgePlan,
   survivorOf,
   TOMBSTONE_SHAPES,
   tombstoneOf,
+  validateExpectedRevision,
+  validatePreviewProposalInput,
+  validatePreviewPurgeInput,
   validateProposalPurgeInput,
   validatePurgeInput,
 } from './shared/purge.js';
+import { StoreRevision } from './shared/revision.js';
 import {
   assertKitRecord,
   VALID_STATUS_TRANSITIONS,
@@ -405,6 +414,13 @@ export function assertPathIndex(value: unknown, source: string): PathIndex {
   return index as PathIndex;
 }
 
+/** What a record purge decided: read it for a preview, write it to commit. Never leaves the adapter. */
+interface PurgeExecution {
+  records: ReadonlyMap<string, KitRecord>;
+  plan: PurgePlan;
+  proposals: ProposalErasePlan;
+}
+
 export interface KitObsidianStoreOptions extends StoreOptions {
   /** Subfolder name for raw/compiled (source-level) records under each category. Default "sources". */
   sourcesDir?: string;
@@ -591,14 +607,19 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     options: { erasure?: boolean } = {},
   ): Promise<T> {
     return this.files.mutate(operation, () => {
-      if (this.readPathIndexSource().format === 'kit-v1') {
-        throw new ReadOnlyStoreError(
-          operation,
-          `this vault uses the Knowledge Kit index ${KIT_V1_PATH_INDEX_FILE} and opens read-only; convert it with corpus-store migrate.`,
-        );
-      }
+      this.assertWritableFormat(operation);
       return body();
     }, options);
+  }
+
+  /** A `kit-v1` vault refuses writes, and a preview of one, before any I/O. */
+  private assertWritableFormat(operation: string): void {
+    if (this.readPathIndexSource().format === 'kit-v1') {
+      throw new ReadOnlyStoreError(
+        operation,
+        `this vault uses the Knowledge Kit index ${KIT_V1_PATH_INDEX_FILE} and opens read-only; convert it with corpus-store migrate.`,
+      );
+    }
   }
 
   private savePathIndex(index: PathIndex): void {
@@ -2062,12 +2083,48 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── purge (owner decision, 2026-11-02) ─────────────────────────────────
 
-  async purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult> {
+  async purge(ids: string[], evidence: PurgeEvidence, options?: PurgeOptions): Promise<PurgeResult> {
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purge', 'purge is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const requested = validatePurgeInput(ids, evidence);
-    return this.mutate('purge', () => this.purgeLocked(requested, evidence), { erasure: true });
+    const expected = validateExpectedRevision('purge', options);
+    return this.mutate('purge', () => {
+      this.assertRevision('purge', expected);
+      return this.purgeLocked(requested, evidence);
+    }, { erasure: true });
+  }
+
+  /**
+   * Read-only (kontourai/corpus#69): what `purge(ids)` would do. It runs `planPurgeLocked`, which
+   * `purge` runs too, so the lists cannot drift from the committed result. It needs no `allowPurge`.
+   */
+  async previewPurge(ids: string[]): Promise<PurgePreview> {
+    const requested = validatePreviewPurgeInput(ids);
+    return this.files.read(() => {
+      this.assertWritableFormat('previewPurge');
+      const revision = this.revisionLocked();
+      return { ...this.purgeResultOf(this.planPurgeLocked(requested)), revision };
+    });
+  }
+
+  /** The store as `expectedRevision` names it: see `shared/revision.ts`. */
+  private revisionLocked(): string {
+    const revision = new StoreRevision(this.binding ?? '');
+    const pathIndex = this.loadPathIndex();
+    for (const [id, entry] of Object.entries(pathIndex.by_id).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      // The id, where the note lives and whether it is archived all belong to the revision, with its bytes.
+      let text: string | null = null;
+      try { text = this.files.readText(this.getAbsPath(id, pathIndex)!); } catch { /* an unreadable note still has a revision */ }
+      revision.add('record', `${id}\0${entry.path}\0${entry.archived ? 'archived' : 'live'}`, text);
+    }
+    for (const part of this.proposals.revisionParts()) revision.add('proposal', part.name, part.text);
+    return revision.value();
+  }
+
+  /** Refuse before any write when the store is not the one the host previewed. */
+  private assertRevision(op: string, expected: string | undefined): void {
+    if (expected !== undefined && this.revisionLocked() !== expected) throw new StaleRevisionError(op);
   }
 
   /** An id-derived, title-free path for a tombstone; an occupied name gets a numeric suffix. */
@@ -2125,7 +2182,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     }
   }
 
-  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+  /** Decide a record purge. Read-only: `commitPurgeLocked` writes it and `previewPurge` reports it. */
+  private planPurgeLocked(requested: string[]): PurgeExecution {
     this.assertNoMigrationArtifacts('purge');
     const pathIndex = this.loadPathIndex();
     const records = new Map<string, KitRecord>();
@@ -2137,6 +2195,30 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
     }
     const plan = planPurge(requested, records);
+    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };
+  }
+
+  /** The lists of a `PurgeResult`: ids only. The one place a plan becomes a result, for preview and commit. */
+  private purgeResultOf({ plan, proposals }: PurgeExecution): PurgeResult {
+    return {
+      purged: plan.purged,
+      cascaded: plan.cascaded,
+      survivors: plan.survivors,
+      referrers: plan.referrers,
+      alreadyPurged: plan.alreadyPurged,
+      proposalsRejected: proposals.rejected,
+      proposalsScrubbed: proposals.scrubbed,
+      proposalsBlocked: proposals.blocked,
+    };
+  }
+
+  private purgeLocked(requested: string[], evidence: PurgeEvidence): PurgeResult {
+    return this.commitPurgeLocked(this.planPurgeLocked(requested), evidence);
+  }
+
+  private commitPurgeLocked(execution: PurgeExecution, evidence: PurgeEvidence): PurgeResult {
+    const { records, plan } = execution;
+    const pathIndex = this.loadPathIndex();
     const now = new Date(this.services.clock()).toISOString();
     const graph = this.loadGraph();
     const aliasIndex = this.loadAliasIndex();
@@ -2181,47 +2263,62 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     this.savePathIndex(pathIndex);
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
-    const proposals = this.proposals.erase(plan.erased, plan.allErased, evidence, now);
-    return {
-      purged: plan.purged,
-      cascaded: plan.cascaded,
-      survivors: plan.survivors,
-      referrers: plan.referrers,
-      alreadyPurged: plan.alreadyPurged,
-      proposalsRejected: proposals.rejected,
-      proposalsScrubbed: proposals.scrubbed,
-      proposalsBlocked: proposals.blocked,
-    };
+    this.proposals.commitErase(execution.proposals, evidence, now);
+    return this.purgeResultOf(execution);
   }
 
   /** Erase one create proposal by proposal id (owner decision, 2026-11-04); see `KnowledgeStorePurger`. */
-  async purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult> {
+  async purgeProposal(proposalId: string, evidence: PurgeEvidence, options?: PurgeOptions): Promise<ProposalPurgeResult> {
     if (this.services.allowPurge !== true) {
       throw new ReadOnlyStoreError('purgeProposal', 'purgeProposal is disabled for this store; the host enables it with allowPurge: true after its own authorization.');
     }
     const input = validateProposalPurgeInput(proposalId, evidence);
+    const expected = validateExpectedRevision('purgeProposal', options);
     return this.mutate(
       'purgeProposal',
       () => {
-        // The migration manifest hashes every file it saw, proposals included, and a hash of a whole
-        // proposal file can be confirmed against a guess at its content. Erasing it would leave that
-        // digest behind, so the host deletes the artifacts first, as for `purge`.
-        this.assertNoMigrationArtifacts('purgeProposal');
-        return this.proposals.purgeOne(
-          input.proposalId,
+        this.assertRevision('purgeProposal', expected);
+        return this.proposals.commitOne(
+          this.planPurgeProposalLocked(input.proposalId),
           input.evidence,
           () => new Date(this.services.clock()).toISOString(),
-          (recordId) => {
-            // A tombstone needs no second purge. A record the path index lists but whose note is missing
-            // is a corrupt vault, which `readRecord` refuses; nothing is written.
-            const pathIndex = this.loadPathIndex();
-            const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
-            return record && !isPurged(record) ? this.purgeLocked([recordId], input.evidence) : undefined;
-          },
+          (step) => this.commitPurgeLocked(step, input.evidence),
         );
       },
       { erasure: true },
     );
+  }
+
+  /** Read-only (kontourai/corpus#69): what `purgeProposal(proposalId)` would do. Needs no `allowPurge`. */
+  async previewPurgeProposal(proposalId: string): Promise<ProposalPurgePreview> {
+    const id = validatePreviewProposalInput(proposalId);
+    return this.files.read(() => {
+      this.assertWritableFormat('previewPurgeProposal');
+      const revision = this.revisionLocked();
+      const plan = this.planPurgeProposalLocked(id);
+      return {
+        proposalId: plan.proposal.id,
+        alreadyErased: plan.alreadyErased,
+        ...(plan.record ? { record: this.purgeResultOf(plan.record) } : {}),
+        revision,
+        state: plan.proposal.state,
+        ...(plan.proposal.record_id !== undefined ? { recordId: plan.proposal.record_id } : {}),
+      };
+    });
+  }
+
+  private planPurgeProposalLocked(proposalId: string) {
+    // The migration manifest hashes every file it saw, proposals included, and a hash of a whole
+    // proposal file can be confirmed against a guess at its content. Erasing it would leave that
+    // digest behind, so the host deletes the artifacts first, as for `purge`.
+    this.assertNoMigrationArtifacts('purgeProposal');
+    return this.proposals.planOne<PurgeExecution>(proposalId, (recordId) => {
+      // A tombstone needs no second purge. A record the path index lists but whose note is missing
+      // is a corrupt vault, which `readRecord` refuses; nothing is written.
+      const pathIndex = this.loadPathIndex();
+      const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
+      return record && !isPurged(record) ? this.planPurgeLocked([recordId]) : undefined;
+    });
   }
 
   // ── get / getLinks (§7, Addendum H) ───────────────────────────────────

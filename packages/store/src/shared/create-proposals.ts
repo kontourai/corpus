@@ -41,6 +41,25 @@ import { PURGED_CATEGORY, PURGED_TITLE, supportIds } from './purge.js';
  * a vault may hold ordinary notes in a `proposals` category.
  */
 export const PROPOSALS_DIRECTORY = '.corpus-proposals';
+
+/** What a purge does to create proposals (`planErase`), decided before anything is written. */
+export interface ProposalErasePlan {
+  /** Pending proposals that rested only on erased records: each is rejected and erased. */
+  rejected: string[];
+  /** Proposals whose candidate is erased, pending or settled. Includes `rejected`. */
+  scrubbed: string[];
+  /** Pending proposals with some erased support and some left. */
+  blocked: string[];
+  /** The writes, in proposal order: erase the whole candidate, or write `next` (link labels dropped). */
+  writes: ({ erase: KitCreateProposal } | { next: KitCreateProposal })[];
+}
+
+/** What `purgeProposal` does (`planOne`); `record` is the adapter's plan for the record an applied proposal created. */
+export interface ProposalPurgePlan<R> {
+  proposal: KitCreateProposal;
+  alreadyErased: boolean;
+  record?: R;
+}
 export const PROPOSAL_STATES: readonly CreateProposalState[] = ['pending', 'applied', 'rejected'];
 /** The mutation-log op the created record carries (see `applyOrigin`). */
 export const APPLY_CREATE_OP = 'apply-create';
@@ -285,7 +304,8 @@ export class CreateProposals {
   }
 
   /**
-   * Purge (owner decision, 2026-11-03): erase every proposal that carries erased content.
+   * Purge (owner decision, 2026-11-03): decide which proposals carry erased content, and what
+   * erasing them does. Read-only: `commitErase` writes, and `previewPurge` reports this plan.
    *
    * A proposal carries its whole candidate in every state, so the candidate is erased when
    * it rests only on erased records (its support, as for a record, is `provenance.source_ids`
@@ -298,15 +318,8 @@ export class CreateProposals {
    * those is reported as blocked, because `applyCreate` will refuse the erased support.
    * `newlyErased` holds the records this purge erases; `allErased` also holds earlier tombstones.
    */
-  erase(
-    newlyErased: ReadonlySet<string>,
-    allErased: ReadonlySet<string>,
-    evidence: PurgeEvidence,
-    at: string,
-  ): { rejected: string[]; scrubbed: string[]; blocked: string[] } {
-    const rejected: string[] = [];
-    const scrubbed: string[] = [];
-    const blocked: string[] = [];
+  planErase(newlyErased: ReadonlySet<string>, allErased: ReadonlySet<string>): ProposalErasePlan {
+    const plan: ProposalErasePlan = { rejected: [], scrubbed: [], blocked: [], writes: [] };
     for (const proposal of this.list()) {
       assertErasable(proposal);
       if (proposal.erasure) continue; // already erased by an earlier purge
@@ -317,58 +330,76 @@ export class CreateProposals {
         support.some((id) => newlyErased.has(id)) && support.every((id) => allErased.has(id));
       if (createdErased || restsOnErased) {
         const pending = proposal.state === 'pending';
-        this.write(erasedOf(proposal, evidence, at));
-        (pending ? rejected : scrubbed).push(proposal.id);
-        if (pending) scrubbed.push(proposal.id);
+        plan.writes.push({ erase: proposal });
+        (pending ? plan.rejected : plan.scrubbed).push(proposal.id);
+        if (pending) plan.scrubbed.push(proposal.id);
         continue;
       }
       const links = proposal.candidate.links;
       if (links?.some((link) => newlyErased.has(link.target_id) && link.label !== undefined)) {
-        this.write({
-          ...proposal,
-          candidate: {
-            ...proposal.candidate,
-            links: links.map((link) => {
-              if (!newlyErased.has(link.target_id) || link.label === undefined) return link;
-              const { label: _label, ...unlabeled } = link;
-              return unlabeled;
-            }),
+        plan.writes.push({
+          next: {
+            ...proposal,
+            candidate: {
+              ...proposal.candidate,
+              links: links.map((link) => {
+                if (!newlyErased.has(link.target_id) || link.label === undefined) return link;
+                const { label: _label, ...unlabeled } = link;
+                return unlabeled;
+              }),
+            },
           },
         });
       }
-      if (proposal.state === 'pending' && support.some((id) => newlyErased.has(id))) blocked.push(proposal.id);
+      if (proposal.state === 'pending' && support.some((id) => newlyErased.has(id))) plan.blocked.push(proposal.id);
     }
-    return { rejected, scrubbed, blocked };
+    return plan;
+  }
+
+  /** Write what `planErase` decided. `evidence` and `at` are the purge's. */
+  commitErase(plan: ProposalErasePlan, evidence: PurgeEvidence, at: string): void {
+    for (const action of plan.writes) {
+      this.write('erase' in action ? erasedOf(action.erase, evidence, at) : action.next);
+    }
   }
 
   /**
    * `purgeProposal` (owner decision, 2026-11-04): erase one named proposal, in any state and
-   * whatever it rests on, with the same content-free result `erase` writes. It exists because
-   * `erase` only reaches a proposal through the records it rests on, so a pending or rejected
+   * whatever it rests on, with the same content-free result `erasedOf` writes. It exists because
+   * `planErase` only reaches a proposal through the records it rests on, so a pending or rejected
    * proposal with no sources, or with sources that are not being purged, could never be erased.
    *
-   * An applied proposal's content also lives in the record it created, so `purgeRecord` purges
-   * that record first, in the same transaction; the purge erases this proposal as it does for
-   * any proposal whose record it erases. `purgeRecord` returns nothing when there is no live
-   * record to purge, and the proposal is then erased alone. A pending or rejected proposal reads
-   * and writes only itself, so a corrupt neighbour does not block it; an applied one runs the
-   * record purge, which judges every proposal and stops on a corrupt one, as `purge` does.
-   *
-   * Idempotent: an erased proposal is returned as it is, so the first marker (who, when, why)
-   * is never overwritten and nothing is written.
+   * An applied proposal's content also lives in the record it created, so `planRecord` plans the
+   * purge of that record first and `commitOne` commits it in the same transaction; that purge
+   * erases this proposal as it does for any proposal whose record it erases. `planRecord` returns
+   * nothing when there is no live record to purge, and the proposal is then erased alone. A pending
+   * or rejected proposal reads and writes only itself, so a corrupt neighbour does not block it; an
+   * applied one plans the record purge, which judges every proposal and stops on a corrupt one, as
+   * `purge` does. This step is read-only; `previewPurgeProposal` reports it.
    */
-  purgeOne(
-    proposalId: string,
-    evidence: PurgeEvidence,
-    now: () => string,
-    purgeRecord: (recordId: string) => PurgeResult | undefined,
-  ): ProposalPurgeResult {
+  planOne<R>(proposalId: string, planRecord: (recordId: string) => R | undefined): ProposalPurgePlan<R> {
     const proposal = this.get(proposalId);
     if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);
     assertErasable(proposal);
-    if (proposal.erasure) return { proposalId, alreadyErased: true };
+    if (proposal.erasure) return { proposal, alreadyErased: true };
     const record =
-      proposal.state === 'applied' && proposal.record_id !== undefined ? purgeRecord(proposal.record_id) : undefined;
+      proposal.state === 'applied' && proposal.record_id !== undefined ? planRecord(proposal.record_id) : undefined;
+    return { proposal, alreadyErased: false, ...(record === undefined ? {} : { record }) };
+  }
+
+  /**
+   * Idempotent: an erased proposal is returned as it is, so the first marker (who, when, why)
+   * is never overwritten and nothing is written.
+   */
+  commitOne<R>(
+    plan: ProposalPurgePlan<R>,
+    evidence: PurgeEvidence,
+    now: () => string,
+    commitRecord: (record: R) => PurgeResult | undefined,
+  ): ProposalPurgeResult {
+    const proposalId = plan.proposal.id;
+    if (plan.alreadyErased) return { proposalId, alreadyErased: true };
+    const record = plan.record === undefined ? undefined : commitRecord(plan.record);
     // The record purge erases this proposal itself. Otherwise do it here.
     const current = this.get(proposalId)!;
     if (!current.erasure) {
@@ -376,6 +407,17 @@ export class CreateProposals {
       this.write(erasedOf(current, evidence, now()));
     }
     return { proposalId, alreadyErased: false, ...(record ? { record } : {}) };
+  }
+
+  /**
+   * Every file in the proposals directory, in name order, as text. For the store revision: raw
+   * bytes, nothing parsed, so a corrupt proposal still has a revision.
+   */
+  revisionParts(): { name: string; text: string | null }[] {
+    return this.files
+      .listFileNames(this.directory)
+      .sort()
+      .map((name) => ({ name, text: this.files.readText(join(this.directory, name), MAX_PROPOSAL_BYTES) }));
   }
 
   /** The rationale `rejectCreate` stores, validated. */

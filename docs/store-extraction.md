@@ -374,12 +374,32 @@ every case on both profiles, and `npm run proof:confidence` injects 28 faults
 update keys and clear, the YAML number type, read validation, the reserved
 dimension, the tombstone and the proposal stub), requires the named test and
 vectors to fail for the right reason, and restores each. The eleven
-`confidence-*` vectors join the store vectors (191 per profile); see the
+`confidence-*` vectors join the store vectors (then 191 per profile); see the
 [store README](../packages/store/README.md#decision-record-confidence-68) for the rules.
 
-EXECUTED on macOS, Node 24.22.1: 191 store vectors per profile, 190 passing and 1
-expected failure (`purge-journal-in-flight`), for both default and vault;
+EXECUTED on macOS, Node 24.22.1: 209 store vectors per profile (with the purge
+preview vectors), 208 passing and 1 expected failure (`purge-journal-in-flight`), for both default and vault;
 `npm run proof:confidence` caught all 28 faults.
+
+### Purge preview and revision
+
+`planPurgeLocked` (both adapters) decides a record purge without writing, and
+`commitPurgeLocked` writes it; `CreateProposals.planErase` / `commitErase` and
+`planOne` / `commitOne` split proposal erasure the same way. `purge`,
+`purgeProposal` and the two previews all go through those plans, and the
+preview's lists and the committed result come from one function
+(`purgeResultOf`), so they cannot be built two ways. The revision
+(`shared/revision.ts`) is a keyed digest of the raw bytes of the record notes and
+the proposals directory. `test/purge-preview.test.ts` runs every case on both
+profiles in a store where every purge category is non-empty, and the eighteen
+`purge-preview-*` vectors bring the store vectors to 209 per profile.
+`npm run proof:preview` injects 26 faults (a preview that drops a list, writes,
+leaks titles or needs `allowPurge`; a revision that ignores records, note bytes,
+proposals or its key; an erasure that skips the check, a wrong error code, an
+empty `expectedRevision`, a preview that skips the migration-artifact and
+read-only refusals) and requires each to be caught. The existing `proof:purge`
+controls were re-anchored to the split code and re-run. See the
+[store README](../packages/store/README.md#decision-purge-preview-and-revision-69).
 
 ### A compiled record must link a raw source
 

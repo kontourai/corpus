@@ -533,7 +533,7 @@ They stay out of returned records. Names must be unique identifiers and may not
 replace record fields. Omit the option to preserve ordinary unknown frontmatter.
 
 - `@kontourai/corpus-store`: constructors, record/evidence/interface types
-  (including `KnowledgeStorePurger`, `PurgeEvidence` and `PurgeResult`), service
+  (including `KnowledgeStorePurger`, `PurgeEvidence`, `PurgeResult`, `PurgePreview`, `ProposalPurgePreview` and `PurgeOptions`), service
   option types (including `allowPurge`), reindex result type and standalone lock.
 - `@kontourai/corpus-store/errors`: the unchanged domain and persistence error
   constructors/classifier. Persistence errors do not gain new codes here.
@@ -624,6 +624,32 @@ A record can carry `confidence`: how sure the writer was, as a number from 0 (no
 - **Update.** `update(id, { confidence })` sets, changes or (with `null`) clears it, and other updates keep it. The mutation log names the field in `evidence.fields`, never the number.
 - **Request keys.** `confidence` is part of the candidate, so it is part of the request digest. A retry with the same candidate and the same confidence returns the original proposal id, in any state, including after `applyCreate`. A retry that changes the confidence, adds it, or drops it is a different request and fails with `REQUEST_KEY_CONFLICT` without writing. Returning the original id instead would hand the caller a record whose confidence is not the one it just sent.
 - **Purge.** Purging a record erases its `confidence` along with its title, body, tags and expiry; the tombstone left behind has no `confidence`. The same happens to records removed by a cascade and to a proposal erased with `purgeProposal`. A record the cascade leaves in place, because other sources still support it, keeps its `confidence` and its other content, except link labels that name an erased source. The update log keeps the field *name* `confidence` but never the number. The in-flight purge journal limitation above applies to this field as to every other.
+
+### Decision: purge preview and revision ([#69](https://github.com/kontourai/corpus/issues/69))
+
+Before you erase, you can see what will go. `previewPurge(ids)` and `previewPurgeProposal(proposalId)` return the same lists the erasure will return: the records erased, the records that fall with them, the records that keep other support, the records that only refer to them, what happens to proposals, and the record behind an applied proposal. They return ids and states only, change nothing, and need no `allowPurge`. To erase what you previewed, pass the preview's `revision` back; if anything changed in between, the erasure refuses and writes nothing.
+
+```ts
+const preview = await store.previewPurge(['rec-1']);          // read-only
+// show preview.purged, .cascaded, .survivors, .referrers, .proposalsRejected ... to the person
+try {
+  await store.purge(['rec-1'], { agent, rationale }, { expectedRevision: preview.revision });
+} catch (error) {
+  if (error.code !== 'STALE_REVISION') throw error;
+  // The store changed after the preview. Preview again, show the new lists, and ask again.
+}
+```
+
+`previewPurgeProposal(proposalId)` and `purgeProposal(proposalId, evidence, { expectedRevision })` work the same way for a create proposal.
+
+- **One plan, not two.** `purge` and the previews run the same planning code (`planPurgeLocked`, then `planErase` for proposals), and the committed result is built by the same function as the preview. The lists cannot differ unless the store changed between the two calls. The tests compare them for a cascade, a support cycle, shared support, referrers, pending, rejected and applied proposals, records that are already tombstones, and an erased proposal.
+- **What you get.** `PurgePreview` is a `PurgeResult` plus `revision`. `ProposalPurgePreview` is a `ProposalPurgeResult` plus `revision`, the proposal's `state` now (a `pending` one is settled `rejected` by the erasure), and `recordId`, the record an applied proposal created. Its `record` holds the plan for erasing that record, with its cascade.
+- **Read-only.** A preview writes no record, proposal or index. Like every read of the store, it first finishes a transaction that an earlier crash left half done. It refuses what the erasure would refuse: an unknown id is `NOT_FOUND`, a vault that holds migration artifacts or opens read-only is `READ_ONLY`, and a corrupt proposal stops a record preview just as it stops `purge` (a pending proposal's own preview reads only that proposal, as its erasure does). Hosts that hand callers the ordinary adapter type keep the previews off it, since they are on `KnowledgeStorePurger`.
+- **No content.** A preview holds ids, states and the revision. The `STALE_REVISION` message names no record or proposal.
+- **The revision** is an opaque token for the whole store as the preview saw it: a keyed digest of the raw bytes of every record note and every file in the proposals directory. It changes on any write to a record or a proposal, on the first use of a request key, on a key retired by a scrub, and on an edit made outside the store (a person editing a vault by hand). It does not change when a request-key retry matches an existing proposal, because that writes nothing and does not change the plan. Nothing is parsed, so a corrupt neighbour does not stop a pending proposal's preview, and nothing is stored: the store keeps no counter. The key is the root's identity marker when it has one, so a token cannot be checked against a guess at the content without the marker, and it differs between stores that hold identical notes.
+- **STALE_REVISION.** With `expectedRevision`, `purge` and `purgeProposal` compare it with the store's revision under the same lock, before anything is written. A mismatch throws `StaleRevisionError` (`code: 'STALE_REVISION'`) and writes nothing. Refresh and reconfirm: preview again, show the new lists, and pass the new revision. A malformed `expectedRevision` (empty, not text) is `MISSING_EVIDENCE`. Without it, both verbs behave as before.
+- **What it is not.** The revision covers the whole store, not only the records affected, so an unrelated write also makes a preview stale; the cost is one more preview. It is not a lock: a write that lands after the check is a normal later write. It is not an authorization, so the host still decides who may erase. Keep it only until the person confirms: it is content-free, but it changes with every write.
+- **Cost.** A preview and a revision check read every record and proposal file, as `purge` already does.
 
 ### Owner decision: structured source references (2026-11-03)
 
