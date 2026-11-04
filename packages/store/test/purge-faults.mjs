@@ -186,6 +186,8 @@ const controls = [
   // Concurrent settlement: an erased proposal is settled `rejected`, and that is what keeps a queued apply out.
   { id: 'proposal-settle-after-erasure', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
     args: focused('test/purge-proposal.test.ts', '-t', 'erase holds the lock while an apply is queued'), reason: /applyCreate after erasure must be refused/ },
+  { id: 'proposal-reject-after-erasure', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
+    args: focused('test/purge-proposal.test.ts', '-t', 'a reject that holds the lock'), reason: /rejectCreate after erasure must be refused/ },
   { id: 'proposal-settle-after-erasure-race', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, "if (proposal.state !== 'pending') {", "if (proposal.state !== 'pending' && proposal.erasure === undefined) {"),
     args: conformance('purge-proposal-concurrent-settlement'), reason: /no live record may survive|must end erased/ },
   // A retry after erasure is refused as a retired key, never compared with anything.

@@ -404,7 +404,8 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       const applying = applier.applyCreate(id, 'reviewer-1').catch((error: Error) => error);
       gate.release();
       expect(await erasing).toEqual({ proposalId: id, alreadyErased: false });
-      expect(await applying, 'applyCreate after erasure must be refused').toMatchObject({ code: 'MISSING_EVIDENCE' });
+      // Refused because the proposal is settled, not because its erased candidate happens to be invalid.
+      expect(await applying, 'applyCreate after erasure must be refused').toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringMatching(/is rejected, not pending/) });
       expect(await store.listByType('concept', { includeHistory: true })).toEqual([]);
       expect(await store.getProposal(id)).toMatchObject({ state: 'rejected', erasure: { agent: 'privacy-officer' } });
       noContent();
@@ -451,7 +452,7 @@ describe.each(['default', 'vault'] as const)('purgeProposal — %s profile', (pr
       const rejecting2 = open().rejectCreate(second, 'reviewer-2', 'Reviewer prose NEEDLE-REVIEW').catch((error: Error) => error);
       gate2.release();
       await erasing2;
-      expect(await rejecting2).toMatchObject({ code: 'MISSING_EVIDENCE' });
+      expect(await rejecting2, 'rejectCreate after erasure must be refused').toMatchObject({ code: 'MISSING_EVIDENCE', message: expect.stringMatching(/is rejected, not pending/) });
       expect(await store.getProposal(second)).toMatchObject({ reviewer_id: 'privacy-officer', rationale: 'erasure request 42' });
       noContent();
     });
