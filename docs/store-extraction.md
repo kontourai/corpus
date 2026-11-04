@@ -369,8 +369,8 @@ EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 122 passing and
 `shared/confidence.ts` validates the optional `confidence` (a number from 0 to 1)
 for both profiles at `create`, `proposeCreate` and `update`, and
 `assertKitRecord` validates it again on read. `test/confidence.test.ts` runs
-every case on both profiles, and `npm run proof:confidence` injects 27 faults
-(bounds, clamping, NaN, type, null, inherited values, the candidate keys, the request digest, the
+every case on both profiles, and `npm run proof:confidence` injects 28 faults
+(bounds, clamping, NaN, type, null, inherited values, a revoked proxy, the candidate keys, the request digest, the
 update keys and clear, the YAML number type, read validation, the reserved
 dimension, the tombstone and the proposal stub), requires the named test and
 vectors to fail for the right reason, and restores each. The eleven
@@ -379,7 +379,7 @@ vectors to fail for the right reason, and restores each. The eleven
 
 EXECUTED on macOS, Node 24.22.1: 191 store vectors per profile, 190 passing and 1
 expected failure (`purge-journal-in-flight`), for both default and vault;
-`npm run proof:confidence` caught all 27 faults.
+`npm run proof:confidence` caught all 28 faults.
 
 ### A compiled record must link a raw source
 

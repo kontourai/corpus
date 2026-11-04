@@ -24,8 +24,10 @@ function describe(value: unknown): string {
   // `JSON.stringify(NaN)` is "null", which would hide what was refused.
   if (typeof value === 'number') return String(value);
   if (value === null) return 'null';
-  if (Array.isArray(value)) return 'an array';
-  if (typeof value === 'object') return 'an object';
+  if (typeof value === 'object') {
+    // `Array.isArray` throws on a revoked Proxy; the refusal must still be MISSING_EVIDENCE.
+    try { return Array.isArray(value) ? 'an array' : 'an object'; } catch { return 'an object'; }
+  }
   return `a ${typeof value}`;
 }
 

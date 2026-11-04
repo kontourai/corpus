@@ -187,6 +187,15 @@ describe.each(['default', 'vault'] as const)('record confidence — %s profile',
     }
   });
 
+  test('a revoked proxy is refused with MISSING_EVIDENCE, not a TypeError', async () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    expect(await code(store.create(compiled({ confidence: proxy as unknown as number })))).toBe('MISSING_EVIDENCE');
+    expect(await code(store.proposeCreate(compiled({ confidence: proxy as unknown as number }), 'proposer-1', proposalEvidence))).toBe('MISSING_EVIDENCE');
+    await store.create(compiled({ confidence: 0.5 }));
+    expect(await code(store.update('instinct-1', { confidence: proxy as unknown as number }, { agent: 'editor' }))).toBe('MISSING_EVIDENCE');
+  });
+
   test('propose, apply, read and update carry confidence end to end', async () => {
     const id = await store.proposeCreate(compiled({ confidence: 0.75 }), 'proposer-1', proposalEvidence);
     // Staged: the candidate holds it, and it is not a record yet.
