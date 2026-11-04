@@ -31,6 +31,7 @@ import { isRecord } from '../is-record.js';
 import { isSafePathSegment } from '../path-safety.js';
 import type { ResolvedServices } from '../services.js';
 import { assertCreateFields } from './create-input.js';
+import { confidenceOnCreate } from './confidence.js';
 import { freshnessPatch } from './freshness.js';
 import type { KnowledgeFileTransactions } from './file-transactions.js';
 import { PURGED_CATEGORY, PURGED_TITLE, supportIds } from './purge.js';
@@ -66,7 +67,7 @@ const MAX_RATIONALE_BYTES = 16 * 1024;
 const serializedBytes = (value: string) => Buffer.byteLength(JSON.stringify(value));
 const CANDIDATE_KEYS = [
   'id', 'type', 'title', 'body', 'category', 'tags', 'aliases', 'links',
-  'provenance', 'expires_at', 'ttl_seconds',
+  'provenance', 'expires_at', 'ttl_seconds', 'confidence',
 ] as const;
 
 const isNonemptyString = (value: unknown): value is string =>
@@ -150,6 +151,8 @@ export class CreateProposals {
     const sourceRefs = assertCreateFields(projected, 'proposeCreate');
     if (sourceRefs !== undefined) projected.provenance = { ...projected.provenance, source_refs: sourceRefs };
     freshnessPatch(projected);
+    // Checked as read: the JSON copy below turns NaN into null, which would be refused with the wrong value.
+    confidenceOnCreate(projected, 'proposeCreate');
     const stored = jsonClone(projected);
     assertCreateFields(stored, 'proposeCreate');
     if (JSON.stringify(stored.provenance.source_refs) !== JSON.stringify(sourceRefs)) {
@@ -411,7 +414,7 @@ export class CreateProposals {
  */
 function projectCandidate(candidate: CreateInput): CreateInput {
   const source = candidate as unknown as Record<string, unknown>;
-  const ownOnly = new Set(['expires_at', 'ttl_seconds']);
+  const ownOnly = new Set(['expires_at', 'ttl_seconds', 'confidence']);
   const projected: Record<string, unknown> = {};
   for (const key of CANDIDATE_KEYS) {
     if (ownOnly.has(key) && !Object.hasOwn(source, key)) continue;

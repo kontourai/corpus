@@ -86,6 +86,8 @@ export interface KitRecord {
   updated_at: string; // ISO-8601
   expires_at?: string; // ISO-8601 (Addendum J — optional record-carried expiry)
   ttl_seconds?: number; // Addendum J — relative expiry in seconds from created_at
+  /** The writer's confidence in the record, from 0 to 1 inclusive. Any record type may carry it. Purge drops it. */
+  confidence?: number;
   status?: KitRecordStatus;
   mutation_log?: KitMutationLogEntry[];
 }
@@ -105,6 +107,12 @@ export interface CreateInput {
   provenance: KitProvenance;
   expires_at?: string;
   ttl_seconds?: number;
+  /**
+   * From 0 to 1 inclusive. A value outside the range, NaN, an infinity or a non-number is
+   * refused with `MISSING_EVIDENCE`, never clamped. In a proposal candidate it is part of
+   * the request-key digest, so a retry with a different confidence is `REQUEST_KEY_CONFLICT`.
+   */
+  confidence?: number;
 }
 
 export interface UpdateFields {
@@ -117,6 +125,8 @@ export interface UpdateFields {
   /** `null`/`""` clears the field (Addendum J.2). */
   expires_at?: string | null;
   ttl_seconds?: number | null;
+  /** From 0 to 1 inclusive, validated as on create. `null` clears it. */
+  confidence?: number | null;
 }
 
 export interface UpdateEvidence {

@@ -54,6 +54,7 @@ import { assertCreateFields } from './shared/create-input.js';
 import { CreateProposals, PROPOSALS_DIRECTORY } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
+import { confidenceOnCreate, confidenceOnUpdate } from './shared/confidence.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
 import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
@@ -413,7 +414,7 @@ export interface KitObsidianStoreOptions extends StoreOptions {
 
 const RESERVED_DIMENSIONS = new Set([
   'id', 'type', 'title', 'body', 'category', 'tags', 'aliases', 'links', 'provenance',
-  'created_at', 'updated_at', 'expires_at', 'ttl_seconds', 'status', 'mutation_log',
+  'created_at', 'updated_at', 'expires_at', 'ttl_seconds', 'confidence', 'status', 'mutation_log',
   '_body_sentinel', '__proto__', 'constructor', 'prototype',
 ]);
 
@@ -1203,7 +1204,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       registerAliases(aliasIndex, id, aliases);
     }
 
-    const fresh = freshnessPatch(input);
+    const fresh = { ...freshnessPatch(input), ...confidenceOnCreate(input, 'create') };
 
     const explicitLinks = input.links ?? [];
     const wikilinks = extractWikilinks(input.body);
@@ -1233,7 +1234,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     now: string,
     aliases: string[],
     links: KitLink[],
-    fresh: ReturnType<typeof freshnessPatch>,
+    fresh: ReturnType<typeof freshnessPatch> & ReturnType<typeof confidenceOnCreate>,
     sourceRefs: ReturnType<typeof assertCreateFields>,
     origin?: (at: string) => KitMutationLogEntry,
   ): KitRecord {
@@ -1304,7 +1305,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       PLACEHOLDER_TIMESTAMP,
       aliases,
       links,
-      freshnessPatch(candidate),
+      { ...freshnessPatch(candidate), ...confidenceOnCreate(candidate, 'proposeCreate') },
       assertCreateFields(candidate, 'proposeCreate'),
       () => origin,
     );
@@ -1440,6 +1441,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       'aliases',
       'expires_at',
       'ttl_seconds',
+      'confidence',
     ] as const;
     const suppliedFields = fields as Record<string, unknown>;
     const supplied = mutableKeys.filter((k) => suppliedFields[k] !== undefined);
@@ -1456,6 +1458,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     }
 
     const fresh = freshnessPatch(fields);
+    const confidence = confidenceOnUpdate(fields);
     const now = new Date(this.services.clock()).toISOString();
 
     const mergedAliases: string[] = Array.isArray(record.aliases)
@@ -1501,6 +1504,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       ...(fields.tags !== undefined ? { tags: fields.tags } : {}),
       ...(mergedAliases.length ? { aliases: mergedAliases } : {}),
       ...fresh,
+      ...(typeof confidence === 'number' ? { confidence } : {}),
       links: newLinks,
       updated_at: now,
       mutation_log: [
@@ -1514,6 +1518,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
         },
       ],
     };
+    if (confidence === null) delete updated.confidence;
 
     const graph = this.loadGraph();
     removeLinksFromGraph(graph, id);

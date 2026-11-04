@@ -65,3 +65,32 @@ test('vector scopes partition the vectors into store and host obligations', () =
   assert.equal(vectorScope({ id: 'unscoped' }), 'store');
   assert.throws(() => vectorScope({ id: 'typo', scope: 'hosts' }), /vector typo: unknown scope "hosts"/);
 });
+
+test('$number tokens write the numbers JSON cannot, in arguments and in expected values', async () => {
+  const received = [];
+  const cases = [{
+    id: 'numbers',
+    operations: [{ call: 'echo', args: [{ nested: [{ $number: 'NaN' }] }, { $number: 'Infinity' }, { $number: '-Infinity' }, { $number: '-0' }], save: 'echoed' }],
+    expected: [{ ref: 'echoed', equals: { $number: 'NaN' } }],
+  }];
+  const report = await runConformance(() => ({ echo(...args) { received.push(args); return Number.NaN; } }), { cases });
+  assert.equal(report.passed, true, JSON.stringify(report));
+  const [nested, infinity, negativeInfinity, negativeZero] = received[0];
+  assert.ok(Number.isNaN(nested.nested[0]));
+  assert.equal(infinity, Number.POSITIVE_INFINITY);
+  assert.equal(negativeInfinity, Number.NEGATIVE_INFINITY);
+  assert.ok(Object.is(negativeZero, -0));
+  // A returned 0 is not -0, and a token is compared as the number it stands for.
+  const wrong = await runConformance(() => ({ echo: () => 0 }), { cases: [{ id: 'zero', operations: [{ call: 'echo', args: [], save: 'v' }], expected: [{ ref: 'v', equals: { $number: '-0' } }] }] });
+  assert.equal(wrong.passed, false);
+});
+
+test('a malformed $number token fails the vector instead of passing through as an object', async () => {
+  for (const token of [{ $number: 'nan' }, { $number: 5 }, { $number: 'NaN', extra: true }, { $number: '__proto__' }]) {
+    let called = false;
+    const report = await runConformance(() => ({ echo() { called = true; } }), { cases: [{ id: 'bad', operations: [{ call: 'echo', args: [token] }], expected: [] }] });
+    assert.equal(report.passed, false, JSON.stringify(token));
+    assert.match(report.results[0].error, /malformed \$number token/);
+    assert.equal(called, false);
+  }
+});

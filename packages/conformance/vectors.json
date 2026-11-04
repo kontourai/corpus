@@ -16902,6 +16902,2200 @@
           "equals": true
         }
       ]
+    },
+    {
+      "id": "confidence-create-roundtrip",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cc-src",
+              "type": "raw",
+              "title": "cc-src",
+              "body": "source evidence for cc-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cc_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cc-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cc_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cc_src"
+                ]
+              },
+              "confidence": 0.75
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cc-zero",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cc_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cc_src"
+                ]
+              },
+              "confidence": 0
+            }
+          ],
+          "save": "zero"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cc-one",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cc_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cc_src"
+                ]
+              },
+              "confidence": 1
+            }
+          ],
+          "save": "one"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cc-none",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cc_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cc_src"
+                ]
+              }
+            }
+          ],
+          "save": "none"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "ra"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$zero"
+          ],
+          "save": "rzero"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$one"
+          ],
+          "save": "rone"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$none"
+          ],
+          "save": "rnone"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled"
+          ],
+          "save": "listed"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "ra.confidence",
+          "equals": 0.75
+        },
+        {
+          "ref": "rzero.confidence",
+          "equals": 0
+        },
+        {
+          "ref": "rone.confidence",
+          "equals": 1
+        },
+        {
+          "ref": "rnone.confidence",
+          "absent": true
+        },
+        {
+          "ref": "listed",
+          "length": 4
+        }
+      ]
+    },
+    {
+      "id": "confidence-exact-values",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cx-src",
+              "type": "raw",
+              "title": "cx-src",
+              "body": "source evidence for cx-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cx_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cx-1",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cx_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cx_src"
+                ]
+              },
+              "confidence": 0.30000000000000004
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cx-2",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cx_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cx_src"
+                ]
+              },
+              "confidence": 1e-07
+            }
+          ],
+          "save": "b"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cx-3",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cx_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cx_src"
+                ]
+              },
+              "confidence": 5e-324
+            }
+          ],
+          "save": "c"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cx-4",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cx_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cx_src"
+                ]
+              },
+              "confidence": 0.9999999999999999
+            }
+          ],
+          "save": "d"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "ra"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$b"
+          ],
+          "save": "rb"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$c"
+          ],
+          "save": "rc"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$d"
+          ],
+          "save": "rd"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "ra.confidence",
+          "equals": 0.30000000000000004
+        },
+        {
+          "ref": "rb.confidence",
+          "equals": 1e-07
+        },
+        {
+          "ref": "rc.confidence",
+          "equals": 5e-324
+        },
+        {
+          "ref": "rd.confidence",
+          "equals": 0.9999999999999999
+        }
+      ]
+    },
+    {
+      "id": "confidence-negative-zero",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cn-src",
+              "type": "raw",
+              "title": "cn-src",
+              "body": "source evidence for cn-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cn_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cn-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cn_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cn_src"
+                ]
+              },
+              "confidence": {
+                "$number": "-0"
+              }
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.confidence",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "confidence-create-refused",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-src",
+              "type": "raw",
+              "title": "cr-src",
+              "body": "source evidence for cr-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cr_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": 1.01
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": 1.0000001
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": -0.01
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": 100
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": "0.5"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": true
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": null
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": [
+                0.5
+              ]
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": {
+                "value": 0.5
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": {
+                "$number": "NaN"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": {
+                "$number": "Infinity"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cr-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cr_src"
+                ]
+              },
+              "confidence": {
+                "$number": "-Infinity"
+              }
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cr-a"
+          ],
+          "save": "record"
+        },
+        {
+          "call": "listByType",
+          "args": [
+            "compiled"
+          ],
+          "save": "listed"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record",
+          "equals": null
+        },
+        {
+          "ref": "listed",
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "confidence-propose-refused",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cp-src",
+              "type": "raw",
+              "title": "cp-src",
+              "body": "source evidence for cp-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cp_src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": 1.01
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": 1.0000001
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": -0.01
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": 100
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": "0.5"
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": true
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": null
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": [
+                0.5
+              ]
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": {
+                "value": 0.5
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": {
+                "$number": "NaN"
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": {
+                "$number": "Infinity"
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cp_src"
+                ]
+              },
+              "confidence": {
+                "$number": "-Infinity"
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "proposals"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "proposals",
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "confidence-propose-apply-roundtrip",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cpa-src",
+              "type": "raw",
+              "title": "cpa-src",
+              "body": "source evidence for cpa-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cpa_src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cpa-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cpa_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cpa_src"
+                ]
+              },
+              "confidence": 0.75
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "staged"
+        },
+        {
+          "call": "get",
+          "args": [
+            "cpa-a"
+          ],
+          "save": "before"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$p",
+            "reviewer-1"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "applied"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$r",
+            {
+              "confidence": 0.5
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "updated"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "staged.candidate.confidence",
+          "equals": 0.75
+        },
+        {
+          "ref": "before",
+          "equals": null
+        },
+        {
+          "ref": "r",
+          "equals": "cpa-a"
+        },
+        {
+          "ref": "applied.confidence",
+          "equals": 0.75
+        },
+        {
+          "ref": "updated.confidence",
+          "equals": 0.5
+        },
+        {
+          "ref": "updated.mutation_log.1.op",
+          "equals": "update"
+        },
+        {
+          "ref": "updated.mutation_log.1.evidence",
+          "equals": {
+            "fields": [
+              "confidence"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "confidence-update",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cu-src",
+              "type": "raw",
+              "title": "cu-src",
+              "body": "source evidence for cu-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cu_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cu-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cu_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cu_src"
+                ]
+              },
+              "confidence": 0.4
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "Retitled"
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "kept"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "confidence": 0
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "zero"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "confidence": 1.01
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "title": "Rejected",
+              "confidence": {
+                "$number": "NaN"
+              }
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "confidence": "0.5"
+            },
+            {
+              "agent": "editor"
+            }
+          ],
+          "expect_error": "MISSING_EVIDENCE"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "refused"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "confidence": null
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "cleared"
+        },
+        {
+          "call": "update",
+          "args": [
+            "$a",
+            {
+              "confidence": 0.6
+            },
+            {
+              "agent": "editor"
+            }
+          ]
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "again"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "kept.title",
+          "equals": "Retitled"
+        },
+        {
+          "ref": "kept.confidence",
+          "equals": 0.4
+        },
+        {
+          "ref": "zero.confidence",
+          "equals": 0
+        },
+        {
+          "ref": "refused.confidence",
+          "equals": 0
+        },
+        {
+          "ref": "refused.title",
+          "equals": "Retitled"
+        },
+        {
+          "ref": "cleared.confidence",
+          "absent": true
+        },
+        {
+          "ref": "again.confidence",
+          "equals": 0.6
+        }
+      ]
+    },
+    {
+      "id": "confidence-request-key",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "ck-src",
+              "type": "raw",
+              "title": "ck-src",
+              "body": "source evidence for ck-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "ck_src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              },
+              "confidence": 0.75
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "save": "first"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              },
+              "confidence": 0.75
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "save": "again"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              },
+              "confidence": 0.5
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              }
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "applyCreate",
+          "args": [
+            "$first",
+            "reviewer-1"
+          ],
+          "save": "r"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              },
+              "confidence": 0.75
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "save": "afterApply"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "ck-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$ck_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$ck_src"
+                ]
+              },
+              "confidence": 0.76
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            },
+            {
+              "requestKey": "confidence-key-1"
+            }
+          ],
+          "expect_error": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "call": "listProposals",
+          "args": [],
+          "save": "all"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$r"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "again",
+          "equals": "$first"
+        },
+        {
+          "ref": "afterApply",
+          "equals": "$first"
+        },
+        {
+          "ref": "all",
+          "length": 1
+        },
+        {
+          "ref": "all.0.candidate.confidence",
+          "equals": 0.75
+        },
+        {
+          "ref": "record.confidence",
+          "equals": 0.75
+        }
+      ]
+    },
+    {
+      "id": "confidence-purge-record",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cpr-src",
+              "type": "raw",
+              "title": "cpr-src",
+              "body": "source evidence for cpr-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cpr_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "purge-bytes-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cpr_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cpr_src"
+                ]
+              },
+              "confidence": 0.7312
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "present",
+          "markers": [
+            "0.7312"
+          ]
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$a"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "absent",
+          "markers": [
+            "0.7312"
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "rebuilt",
+          "markers": [
+            "0.7312"
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.confidence",
+          "absent": true
+        },
+        {
+          "ref": "result.purged",
+          "equals": [
+            "$a"
+          ]
+        },
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "confidence-purge-cascade",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cpc-src",
+              "type": "raw",
+              "title": "cpc-src",
+              "body": "source evidence for cpc-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cpc_src"
+        },
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cpc-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cpc_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cpc_src"
+                ]
+              },
+              "confidence": 0.7312
+            }
+          ],
+          "save": "a"
+        },
+        {
+          "call": "purge",
+          "args": [
+            [
+              "$cpc_src"
+            ],
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ],
+          "save": "result"
+        },
+        {
+          "call": "get",
+          "args": [
+            "$a"
+          ],
+          "save": "record"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result.cascaded",
+          "equals": [
+            "$a"
+          ]
+        },
+        {
+          "ref": "record.status",
+          "equals": "purged"
+        },
+        {
+          "ref": "record.confidence",
+          "absent": true
+        }
+      ]
+    },
+    {
+      "id": "confidence-purge-proposal",
+      "source": [
+        {
+          "repository": "corpus",
+          "path": "packages/store/README.md",
+          "clause": "Record confidence (kontourai/corpus#68)"
+        }
+      ],
+      "regression": "An adapter drops, clamps, rounds or accepts an out-of-range confidence, or keeps it after an erasure.",
+      "production_seam": false,
+      "operations": [
+        {
+          "call": "create",
+          "args": [
+            {
+              "id": "cpp-src",
+              "type": "raw",
+              "title": "cpp-src",
+              "body": "source evidence for cpp-src",
+              "category": "conformance.confidence",
+              "provenance": {
+                "agent": "creator"
+              }
+            }
+          ],
+          "save": "cpp_src"
+        },
+        {
+          "call": "proposeCreate",
+          "args": [
+            {
+              "id": "cpp-a",
+              "type": "compiled",
+              "title": "Prefer small pull requests",
+              "body": "Split work so a reviewer reads it in one sitting.",
+              "category": "conformance.confidence",
+              "links": [
+                {
+                  "target_id": "$cpp_src",
+                  "kind": "source"
+                }
+              ],
+              "provenance": {
+                "agent": "compiler",
+                "source_ids": [
+                  "$cpp_src"
+                ]
+              },
+              "confidence": 0.7312
+            },
+            "proposer-1",
+            {
+              "agent": "compiler",
+              "proposal": "Keep this instinct from the session"
+            }
+          ],
+          "save": "p"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "present",
+          "subject": "proposal",
+          "markers": [
+            "0.7312"
+          ]
+        },
+        {
+          "call": "purgeProposal",
+          "args": [
+            "$p",
+            {
+              "agent": "privacy-officer",
+              "rationale": "erasure request 42"
+            }
+          ]
+        },
+        {
+          "call": "getProposal",
+          "args": [
+            "$p"
+          ],
+          "save": "erased"
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "absent",
+          "subject": "proposal",
+          "markers": [
+            "0.7312"
+          ]
+        },
+        {
+          "special": "purge-store-bytes",
+          "mode": "rebuilt",
+          "subject": "proposal",
+          "markers": [
+            "0.7312"
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "ref": "erased.state",
+          "equals": "rejected"
+        },
+        {
+          "ref": "erased.candidate.confidence",
+          "absent": true
+        },
+        {
+          "ref": "check",
+          "equals": true
+        }
+      ]
     }
   ]
 }

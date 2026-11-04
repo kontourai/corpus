@@ -49,6 +49,7 @@ import { assertCreateFields } from './shared/create-input.js';
 import { CreateProposals } from './shared/create-proposals.js';
 import { KnowledgeFileTransactions } from './shared/file-transactions.js';
 import { assertCompiledSource } from './shared/compiled-source.js';
+import { confidenceOnCreate, confidenceOnUpdate } from './shared/confidence.js';
 import { expiryFilter, freshnessPatch } from './shared/freshness.js';
 import { includesHistory, isHistorical } from './shared/lifecycle.js';
 import { parseMarkdown, serializeMarkdown } from './shared/frontmatter.js';
@@ -372,6 +373,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
     // Validate freshness fields before any write (malformed → never reaches disk).
     const fresh = freshnessPatch(input);
+    const confidence = confidenceOnCreate(input, 'create');
 
     const explicitLinks = input.links ?? [];
     const wikilinks = extractWikilinks(input.body);
@@ -391,6 +393,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       created_at: now,
       updated_at: now,
       ...fresh,
+      ...confidence,
       provenance: {
         agent: input.provenance.agent,
         ...(input.provenance.session_id
@@ -454,6 +457,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       'aliases',
       'expires_at',
       'ttl_seconds',
+      'confidence',
     ] as const;
     const suppliedFields = fields as Record<string, unknown>;
     const supplied = mutableKeys.filter((k) => suppliedFields[k] !== undefined);
@@ -470,6 +474,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     }
 
     const fresh = freshnessPatch(fields);
+    const confidence = confidenceOnUpdate(fields);
     const now = new Date(this.services.clock()).toISOString();
 
     // Slug aliases are append-only: supplied aliases UNION with existing ones so a
@@ -517,6 +522,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       ...(fields.tags !== undefined ? { tags: fields.tags } : {}),
       ...(mergedAliases.length ? { aliases: mergedAliases } : {}),
       ...fresh,
+      ...(typeof confidence === 'number' ? { confidence } : {}),
       links: newLinks,
       updated_at: now,
       mutation_log: [
@@ -530,6 +536,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
         },
       ],
     };
+    if (confidence === null) delete updated.confidence;
 
     const graph = this.loadGraph();
     removeLinksFromGraph(graph, id);
