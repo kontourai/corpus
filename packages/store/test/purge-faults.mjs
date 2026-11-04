@@ -211,7 +211,7 @@ const controls = [
   // Review of #64, round 2: cleanup custody, a still-linked missing record, nested evidence, bounded record ids.
   { id: 'recovery-removes-journal-before-prune', file: store + 'src/shared/file-transactions.ts', mutate: (s) => swap(s, "if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);\n    this.removeJournal();", "this.removeJournal();\n    if (applied && ERASURE_OPERATIONS.has(journal.operation)) this.pruneEmptyDirectories(journal);"),
     args: focused('test/purge-proposal.test.ts', '-t', 'folder cleanup is finished'), reason: /expected false to be true|to be true/ },
-  { id: 'default-proposal-purge-linked-missing-record', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (dependent) {', 'if (false) {'),
+  { id: 'default-proposal-purge-linked-missing-record', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'if (dependent) {', 'if (dependent !== undefined && Date.now() < 0) {'),
     args: focused('test/purge-proposal.test.ts', '-t', 'is refused, and erased once it is restored'), reason: /instead of rejecting/ },
   { id: 'default-proposal-purge-source-dependent-missed', file: store + 'src/default-store.ts', mutate: (s) => swap(s, 'supportIds(other).includes(recordId) || ', ''),
     args: focused('test/purge-proposal.test.ts', '-t', 'only through source_ids'), reason: /instead of rejecting/ },
