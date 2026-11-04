@@ -2,7 +2,7 @@
 
 The owner-dispatched [workspace publish workflow](../README.md#publishing-the-store-workspaces)
 publishes matching Store and Conformance versions. The current workspace version
-is `0.1.0-next.1`.
+is `0.1.0-next.2`.
 The packed TypeScript consumer now pins `@types/node@24.19.2` alongside
 `typescript@5.9.3`, with install scripts disabled. It optionally exports the
 exact tested Store and Conformance tarballs plus their SHA-256 hashes for the
