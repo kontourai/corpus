@@ -16,6 +16,7 @@
   },
   "exports": {
     ".": "./src/index.mjs",
+    "./content": "./src/content.mjs",
     "./schemas/decision-record.schema.json": "./schemas/decision-record.schema.json",
     "./package.json": "./package.json"
   },

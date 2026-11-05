@@ -42,6 +42,15 @@ Commands:
             --base <git-ref>    also refuse files added under decisions.adr.dir since <git-ref>
   decisions index   Write the decisions index file, and nothing else
             --root <dir>        repository root (default: .)
+  content impact   Map changed files to related content, including GitHub file URLs
+            --manifest <file>   relationship/review manifest (default: corpus-content.json)
+            --root <dir>        repository root (default: .)
+            --base <git-ref>    committed changes from the merge base
+            --changed-file <path>  explicit changed file; repeat instead of --base
+  content check    Check reviewed input/output bytes, resolving GitHub refs once per run
+            --manifest <file>   review manifest (default: corpus-content.json)
+            --root <dir>        repository root (default: .)
+            --checkout <owner/repo=dir>  optional local working bytes; repeat for more repos
   init    Scaffold a v2 corpus.json from README.md and docs/**/*.md; never overwrites a
           corpus.json, and refuses while a retired v1 docs-kit.json is present
             --root <dir>        repository root (default: .)
@@ -62,6 +71,8 @@ const COMMAND_OPTIONS = {
   init: { root: { type: 'string' } },
   'decisions check': { root: { type: 'string' }, base: { type: 'string' } },
   'decisions index': { root: { type: 'string' } },
+  'content impact': { root: { type: 'string' }, manifest: { type: 'string' }, base: { type: 'string' }, 'changed-file': { type: 'string', multiple: true } },
+  'content check': { root: { type: 'string' }, manifest: { type: 'string' }, checkout: { type: 'string', multiple: true } },
 };
 const DECISIONS_SUBCOMMANDS = ['check', 'index'];
 
@@ -116,15 +127,16 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   const jsonCheck = command === 'check' && rest.includes('--json');
   const checkRun = { base: null, advisory: false, only: null };
   try {
-    if (command === 'decisions') {
+    if (command === 'decisions' || command === 'content') {
       const [sub, ...subArgs] = rest;
       if (sub === '-h' || sub === '--help') {
         say(HELP);
         return EXIT_OK;
       }
-      if (!DECISIONS_SUBCOMMANDS.includes(sub))
-        throw new UsageError(`decisions needs a subcommand: ${DECISIONS_SUBCOMMANDS.join(' or ')}${sub === undefined ? '' : ` (got "${sub}")`}`);
-      command = `decisions ${sub}`;
+      const choices = command === 'content' ? ['check', 'impact'] : DECISIONS_SUBCOMMANDS;
+      if (!choices.includes(sub))
+        throw new UsageError(`${command} needs a subcommand: ${choices.join(' or ')}${sub === undefined ? '' : ` (got "${sub}")`}`);
+      command = `${command} ${sub}`;
       rest = subArgs;
     }
     if (!Object.hasOwn(COMMAND_OPTIONS, command)) throw new UsageError(`unknown command "${command}"\n\n${HELP}`);
@@ -138,6 +150,13 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
     const root = path.resolve(values.root ?? '.');
 
     switch (command) {
+      case 'content check':
+      case 'content impact': {
+        const { runContent } = await import('./content.mjs');
+        const result = await runContent({ root, manifest: values.manifest, mode: command.split(' ')[1], base: values.base, changed: values['changed-file'], checkouts: values.checkout });
+        say(JSON.stringify(result, null, 2));
+        return result.exitCode;
+      }
       case 'check': {
         const { runChecks, formatCheckReport, parseOnly, checkReportJson } = await import('./check.mjs');
         checkRun.base = values.base ?? null;

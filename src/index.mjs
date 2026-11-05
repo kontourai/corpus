@@ -9,3 +9,4 @@ export { analyzeMarkdown, githubSlug, extractSection } from './markdown.mjs';
 export { createDocsServer, hubSource, repoSource, workspaceSource, staticSource, bundleFileSource, bundleShapeError, searchBundles } from './mcp.mjs';
 export { renderHub } from './hub.mjs';
 export { EXIT_OK, EXIT_GATE, EXIT_USAGE } from './errors.mjs';
+export { readContentManifest, contentImpact, checkContentReviews } from './content.mjs';
