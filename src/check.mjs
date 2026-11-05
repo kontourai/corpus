@@ -1,4 +1,5 @@
 import { checkBuiltOn } from './built-on.mjs';
+import { reviewedContentDocuments } from './content-freshness.mjs';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { EXIT_GATE, EXIT_OK, EXIT_USAGE, UsageError } from './errors.mjs';
@@ -245,10 +246,15 @@ export function checkFreshness(root, manifest, base) {
   const changedSet = new Set(changed);
   const failures = [];
   const stale = [];
+  const coveredDocuments = manifest.documents.map((document) => ({
+    source: document.source,
+    covered: changed.filter(globMatcher(document.covers)),
+  }));
+  const reviewed = reviewedContentDocuments(root, base, coveredDocuments, changed);
   for (const document of manifest.documents) {
     if (document.covers.length === 0) continue;
     const covered = changed.filter(globMatcher(document.covers));
-    if (covered.length === 0 || changedSet.has(document.source)) continue;
+    if (covered.length === 0 || changedSet.has(document.source) || reviewed.has(document.source)) continue;
     const sample = covered.slice(0, 5).join(', ') + (covered.length > 5 ? `, +${covered.length - 5} more` : '');
     failures.push(`${document.source} is stale: covered files changed since ${base} (${sample}) but the document did not`);
     stale.push({ source: document.source, kind: STALE_KIND.freshness, changed: covered });

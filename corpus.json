@@ -9,7 +9,7 @@
     {
       "source": "docs/related-content.md",
       "section": "Reference",
-      "covers": ["src/content.mjs"]
+      "covers": ["src/content.mjs", "src/content-freshness.mjs", "src/check.mjs", "src/git.mjs"]
     },
     {
       "source": "docs/bundle-format.md",

@@ -107,6 +107,19 @@ export function changedFiles(root, base) {
   return diffNames(root, base);
 }
 
+/** Read a repo-relative file at the merge base, distinguishing absence from Git failure. */
+export function readFileAtMergeBase(root, base, file) {
+  verifyBase(root, base);
+  try {
+    const mergeBase = git(root, ['merge-base', base, 'HEAD']).trim();
+    const repoFile = `${repoPrefix(root)}${file}`;
+    if (!git(root, ['ls-tree', '--full-tree', '-z', mergeBase, '--', repoFile])) return null;
+    return git(root, ['show', `${mergeBase}:${repoFile}`]);
+  } catch (error) {
+    throw new UsageError(`cannot read ${file} at the merge base: ${gitError(error)}`);
+  }
+}
+
 /**
  * Files added between the merge base of `base` and HEAD, relative to `root`.
  * Without rename detection, a file renamed into place counts as added.

@@ -113,6 +113,25 @@ when it selects targets, and `2` when its configuration or diff is unavailable.
 
 ## Keep it running
 
+### Review an unchanged covering document
+
+`corpus check --base <ref>` accepts a local review in `corpus-content.json` as
+an alternative to editing a covering document's prose. The review must be new
+or changed in the same branch range. Its local `inputs` must include every
+changed file matched by that document's `covers`, and its local `outputs` must
+include the document. Every recorded input and output hash must match the
+current bytes. The note explains why the document remains accurate and records
+the review's limits. A review already on the base, an unrelated review edit,
+stale hashes, incomplete inputs, or remote-only references cannot clear freshness.
+
+This path is offline and shares the existing content-review manifest. It is not
+an approval signature or a semantic proof. It cannot acknowledge deleted inputs:
+update the owning explanation when removing a covered source. Existing
+`covers` and same-range prose updates remain supported. A false review statement
+is still a code-review concern; automatic checks cannot decide whether prose is true.
+
+### Scheduled checks
+
 Run `content check` in the website's pull-request and deployment checks, and on
 a daily schedule: product changes can land without any website commit. On
 failure, inspect changed claims and callers, update or justify the public copy,
