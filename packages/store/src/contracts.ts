@@ -263,7 +263,7 @@ export interface ProposalPurgePreview extends ProposalPurgeResult {
 
 /** Options of the two erasure verbs. */
 export interface PurgeOptions {
-  /** A `revision` from `previewPurge` or `previewPurgeProposal`. If the store differs, nothing is written and `STALE_REVISION` is thrown. */
+  /** A `revision` from `previewPurge` or `previewPurgeProposal`. If the store has changed since that preview, nothing is written and `STALE_REVISION` is thrown. */
   expectedRevision?: string;
 }
 
@@ -327,7 +327,7 @@ export type KnowledgeStoreErrorCode =
   | 'SELF_APPROVAL'
   | 'REQUEST_KEY_CONFLICT'
   /**
-   * `purge` or `purgeProposal` was given an `expectedRevision` that no longer names the store:
+   * `purge` or `purgeProposal` was given an `expectedRevision` that no longer matches the store:
    * a record, a proposal or a request key changed after the preview. Nothing was written.
    * Preview again and confirm the new effects.
    */
@@ -480,7 +480,7 @@ export interface KnowledgeStorePurger {
    * runs (same cascade, survivors, referrers and proposal handling), so the lists equal the
    * `PurgeResult` of a `purge` that follows with nothing changed between. Ids only, no content.
    * Unknown ids are `NOT_FOUND`, and a store `purge` would refuse (for example a vault with
-   * migration artifacts) is refused here too. `revision` pins the preview; pass it to `purge` as
+   * migration artifacts) is refused here too. `revision` identifies the store as previewed; pass it to `purge` as
    * `expectedRevision`.
    */
   previewPurge(ids: string[]): Promise<PurgePreview>;

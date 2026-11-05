@@ -411,13 +411,22 @@ export class CreateProposals {
 
   /**
    * Every file in the proposals directory, in name order, as text. For the store revision: raw
-   * bytes, nothing parsed, so a corrupt proposal still has a revision.
+   * bytes, nothing parsed, so a corrupt proposal still has a revision. A file too large to read
+   * is listed by name alone, so a neighbour like that does not stop a host from previewing or
+   * erasing another proposal (the erasure reads only the proposal it names).
    */
   revisionParts(): { name: string; text: string | null }[] {
     return this.files
       .listFileNames(this.directory)
       .sort()
-      .map((name) => ({ name, text: this.files.readText(join(this.directory, name), MAX_PROPOSAL_BYTES) }));
+      .map((name) => {
+        try {
+          return { name, text: this.files.readText(join(this.directory, name), MAX_PROPOSAL_BYTES) };
+        } catch (error) {
+          if (!(error instanceof KnowledgeStoreCorruptionError)) throw error;
+          return { name: `${name}\0unreadable`, text: null };
+        }
+      });
   }
 
   /** The rationale `rejectCreate` stores, validated. */

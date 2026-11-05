@@ -4,6 +4,8 @@
 //   npm run proof:purge --workspace=@kontourai/corpus-store -- [output-directory] [control ids...]
 // `--check-targets` (no tree or build needed) only checks that every control still finds its text to change,
 // so a refactor that moves code cannot leave a control that aborts the whole run.
+// `--check-compiles` goes further: it applies each control in turn, typechecks the package and restores the file,
+// because a control whose injected source no longer compiles never reaches the test it names.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -13,10 +15,12 @@ import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const checkTargets = process.argv[2] === '--check-targets';
+const checkCompiles = process.argv[2] === '--check-compiles';
+const inspectOnly = checkTargets || checkCompiles;
 const output = resolve(process.argv[2] ?? join(tmpdir(), 'corpus-purge-faults'));
-if (!checkTargets) mkdirSync(output, { recursive: true });
+if (!inspectOnly) mkdirSync(output, { recursive: true });
 const git = (...args) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
-if (!checkTargets) assert.equal(git('status', '--porcelain').stdout.trim(), '', 'Commit a clean baseline before mutation');
+if (!inspectOnly) assert.equal(git('status', '--porcelain').stdout.trim(), '', 'Commit a clean baseline before mutation');
 const revision = git('rev-parse', 'HEAD').stdout.trim();
 const store = 'packages/store/';
 const purge = store + 'src/shared/purge.ts';
@@ -39,7 +43,7 @@ const controls = [
   // A supporter the purge does not reach is not real support, so b falls although x is alive.
   { id: 'unreached-supporter-ignored', file: purge, mutate: (s) => swap(s, '|| !affected.has(id) ||', '||'),
     args: conformance('purge-survivor-with-live-cycle'), reason: /(result\.survivors|b_after)/ },
-  { id: 'survivor-log-skipped', file: purge, mutate: (s) => swap(s, "auditEntry(op, at, evidence, { purged_ids: purgedIds }),", ''),
+  { id: 'survivor-log-skipped', file: purge, mutate: (s) => swap(s, "      compact\n        ? { op, at, agent: evidence.agent, evidence: { purged_ids: purgedIds, compact: true } }\n        : auditEntry(op, at, evidence, { purged_ids: purgedIds }),\n", ''),
     args: conformance('purge-survivor-keeps-support', 'purge-source-ids-support'), reason: /(mutation_log|survivor)/ },
   { id: 'tombstone-keeps-body', file: purge, mutate: (s) => swap(s, "    body: '',\n    category: PURGED_CATEGORY,", '    body: record.body,\n    category: PURGED_CATEGORY,'),
     args: conformance('purge-tombstone-shape', 'purge-store-bytes'), reason: /(record\.body|is still on disk)/ },
@@ -162,7 +166,7 @@ const controls = [
     args: focused('test/purge-proposal.test.ts', '-t', 'it is refused without allowPurge'), reason: /instead of rejecting/ },
   { id: 'proposal-purge-evidence-unchecked', file: purge, mutate: (s) => swap(s, "validatePurgeEvidence('purgeProposal', snapshot);", ''),
     args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
-  { id: 'proposal-purge-unknown-id-ignored', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);', 'if (!proposal) return { proposalId, alreadyErased: true };\n    assertErasable(proposal);'),
+  { id: 'proposal-purge-unknown-id-ignored', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, 'if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);', 'if (!proposal) return { proposal: { id: proposalId } as KitCreateProposal, alreadyErased: true };\n    assertErasable(proposal);'),
     args: conformance('purge-proposal-erase-input-validation'), reason: /purgeProposal must reject/ },
   { id: 'proposal-purge-not-idempotent', file: store + 'src/shared/create-proposals.ts', mutate: (s) => swap(s, '    if (proposal.erasure) return { proposal, alreadyErased: true };\n', ''),
     args: conformance('purge-proposal-erase-pending-no-source'), reason: /again\.alreadyErased/ },
@@ -230,6 +234,22 @@ const controls = [
     args: focused('test/purge-proposal.test.ts', '-t', 'a retry after erasing'), reason: /retired/ },
 ];
 
+if (checkCompiles) {
+  const broken = [];
+  for (const control of controls) {
+    const file = join(repo, control.file);
+    const original = readFileSync(file, 'utf8');
+    try {
+      writeFileSync(file, control.mutate(original));
+      const typecheck = spawnSync('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'], { cwd: join(repo, store), encoding: 'utf8' });
+      if (typecheck.status !== 0) broken.push(`${control.id}: ${String(typecheck.stdout).split('\n').find((line) => /error TS/.test(line)) ?? 'does not compile'}`);
+    } catch (error) { broken.push(`${control.id}: ${String(error.message).split('\n')[0]}`); }
+    finally { writeFileSync(file, original); }
+  }
+  console.log(`${controls.length} controls, ${broken.length} do not compile`);
+  for (const line of broken) console.log(`  ${line}`);
+  process.exit(broken.length ? 1 : 0);
+}
 if (checkTargets) {
   const stale = controls.flatMap((control) => {
     try { return control.mutate(readFileSync(join(repo, control.file), 'utf8')) === readFileSync(join(repo, control.file), 'utf8') ? [`${control.id}: changes nothing`] : []; }

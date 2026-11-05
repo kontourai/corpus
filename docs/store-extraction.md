@@ -388,17 +388,24 @@ preview vectors), 208 passing and 1 expected failure (`purge-journal-in-flight`)
 `planOne` / `commitOne` split proposal erasure the same way. `purge`,
 `purgeProposal` and the two previews all go through those plans, and the
 preview's lists and the committed result come from one function
-(`purgeResultOf`), so they cannot be built two ways. The revision
-(`shared/revision.ts`) is a keyed digest of the raw bytes of the record notes and
-the proposals directory. `test/purge-preview.test.ts` runs every case on both
-profiles in a store where every purge category is non-empty, and the eighteen
-`purge-preview-*` vectors bring the store vectors to 209 per profile.
-`npm run proof:preview` injects 26 faults (a preview that drops a list, writes,
-leaks titles or needs `allowPurge`; a revision that ignores records, note bytes,
-proposals or its key; an erasure that skips the check, a wrong error code, an
-empty `expectedRevision`, a preview that skips the migration-artifact and
-read-only refusals) and requires each to be caught. The existing `proof:purge`
-controls were re-anchored to the split code and re-run. See the
+(`purgeResultOf`), so they cannot be built two ways. The vault plan also loads
+the graph and alias indexes, which commit rewrites, so a corrupt one refuses the
+preview too. The revision (`shared/revision.ts`) is a keyed digest of the raw
+bytes of the record notes and the proposals directory, keyed by the root
+binding; an unbound root is refused. `test/purge-preview.test.ts` runs every
+case on both profiles in a store where every purge category is non-empty
+(including a writer queued ahead of the erasure, an unbound root, an oversized
+neighbour and, in a vault, corrupt indexes), and the eighteen `purge-preview-*`
+vectors bring the store vectors to 209 per profile. `npm run proof:preview`
+injects 34 faults (a preview that drops a list, writes, leaks titles or needs
+`allowPurge`; a revision that ignores records, note bytes, proposals or its key,
+or accepts an unbound root; an erasure that skips the check or runs it outside
+the lock; a wrong error code; an empty `expectedRevision`; a preview that skips
+the migration-artifact, read-only or index refusals) and requires each to be
+caught. The existing `proof:purge` controls were re-anchored to the split code
+and re-run, and `proof:purge -- --check-compiles` now typechecks every control's
+injected source, which found and fixed two controls that no longer reached their
+tests. See the
 [store README](../packages/store/README.md#decision-purge-preview-and-revision-69).
 
 ### A compiled record must link a raw source

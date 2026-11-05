@@ -446,7 +446,7 @@ export function validateExpectedRevision(op: string, options: unknown): string |
   const expected: unknown = (options as { expectedRevision?: unknown }).expectedRevision;
   if (expected === undefined) return undefined;
   if (typeof expected !== 'string' || expected === '') {
-    throw new MissingEvidenceError(`${op}: expectedRevision must be a revision returned by a preview`);
+    throw new MissingEvidenceError(`${op}: expectedRevision must be a non-empty string from previewPurge or previewPurgeProposal`);
   }
   return expected;
 }

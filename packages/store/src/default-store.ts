@@ -1109,7 +1109,9 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
   /** The store as `expectedRevision` names it: see `shared/revision.ts`. */
   private revisionLocked(): string {
-    const revision = new StoreRevision(this.binding ?? '');
+    // The key is the root's identity marker. A root without one would get a token anyone could check a guess against.
+    if (!this.binding) throw new RootBindingMismatchError();
+    const revision = new StoreRevision(this.binding);
     for (const id of this.listIds().sort()) revision.add('record', id, this.files.readText(this.recordPath(id)));
     for (const part of this.proposals.revisionParts()) revision.add('proposal', part.name, part.text);
     return revision.value();

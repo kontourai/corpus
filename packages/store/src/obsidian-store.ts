@@ -2110,7 +2110,9 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   /** The store as `expectedRevision` names it: see `shared/revision.ts`. */
   private revisionLocked(): string {
-    const revision = new StoreRevision(this.binding ?? '');
+    // The key is the root's identity marker. A root without one would get a token anyone could check a guess against.
+    if (!this.binding) throw new RootBindingMismatchError();
+    const revision = new StoreRevision(this.binding);
     const pathIndex = this.loadPathIndex();
     for (const [id, entry] of Object.entries(pathIndex.by_id).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       // The id, where the note lives and whether it is archived all belong to the revision, with its bytes.
@@ -2186,6 +2188,10 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   private planPurgeLocked(requested: string[]): PurgeExecution {
     this.assertNoMigrationArtifacts('purge');
     const pathIndex = this.loadPathIndex();
+    // Commit rewrites both derived indexes and refuses a corrupt one, so a preview must too: otherwise
+    // it would show effects that the confirmed purge then cannot carry out. Neither is written here.
+    this.loadGraph();
+    this.loadAliasIndex();
     const records = new Map<string, KitRecord>();
     for (const id of Object.keys(pathIndex.by_id)) {
       const record = this.readRecord(id, pathIndex);

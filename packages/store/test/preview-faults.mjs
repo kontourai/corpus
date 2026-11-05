@@ -90,7 +90,7 @@ add('default-revision-ignores-note-bytes', D, "revision.add('record', id, this.f
   'STALE_REVISION when a record is updated', NOT_STALE_UNIT, ['purge-preview-stale-record-write'], STALE_VECTOR);
 add('vault-revision-ignores-note-bytes', V, "text = this.files.readText(this.getAbsPath(id, pathIndex)!);", "text = '';",
   'STALE_REVISION when a record is updated', NOT_STALE_UNIT, ['purge-preview-stale-record-write'], STALE_VECTOR);
-add('revision-ignores-proposals', 'src/shared/create-proposals.ts', "      .sort()\n      .map((name) => ({ name,", "      .sort()\n      .filter(() => false)\n      .map((name) => ({ name,",
+add('revision-ignores-proposals', 'src/shared/create-proposals.ts', "      .sort()\n      .map((name) => {", "      .sort()\n      .filter(() => false)\n      .map((name) => {",
   'STALE_REVISION when a proposal is staged', NOT_STALE_UNIT, ['purge-preview-stale-proposal-write', 'purge-preview-stale-request-key'], STALE_VECTOR);
 add('revision-unkeyed', 'src/shared/revision.ts', "createHmac('sha256', key)", "createHmac('sha256', '')",
   'the same records in a different store have a different revision', /expected 'rev1:[a-f0-9]+…?' not to be 'rev1:/, [], /./);
@@ -100,13 +100,36 @@ add('empty-revision-accepted', 'src/shared/purge.ts', "typeof expected !== 'stri
   'a revision that no store has is stale, and a malformed one is a usage error', /expected 'STALE_REVISION' to be 'MISSING_EVIDENCE'/, ['purge-preview-input-validation'], /strictly equal/);
 add('preview-accepts-empty-ids', 'src/shared/purge.ts', "ids.length === 0 || ", "",
   'the preview refuses what the purge refuses', /expected .* to be 'MISSING_EVIDENCE'|expected undefined/, ['purge-preview-input-validation'], /previewPurge must reject|must reject/);
-add('vault-preview-ignores-migration-artifacts', V, "    this.assertNoMigrationArtifacts('purge');\n    const pathIndex = this.loadPathIndex();\n    const records",
-  "    const pathIndex = this.loadPathIndex();\n    const records", 'a vault holding migration artifacts refuses the preview', /expected undefined to be 'READ_ONLY'/, [], /./);
+add('vault-preview-ignores-migration-artifacts', V, "    this.assertNoMigrationArtifacts('purge');\n    const pathIndex = this.loadPathIndex();\n    // Commit rewrites",
+  "    const pathIndex = this.loadPathIndex();\n    // Commit rewrites", 'a vault holding migration artifacts refuses the preview', /expected undefined to be 'READ_ONLY'/, [], /./);
 add('vault-preview-ignores-read-only-format', V, "      this.assertWritableFormat('previewPurge');\n", '',
   'a vault that opens read-only refuses the preview', /expected .* to be 'READ_ONLY'|expected undefined/, [], /./);
 add('proposal-plan-reads-neighbours', 'src/shared/create-proposals.ts', "    const proposal = this.get(proposalId);\n    if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);\n    if (proposal.erasure) return { proposal, alreadyErased: true };",
   "    this.list();\n    const proposal = this.get(proposalId);\n    if (!proposal) throw new KnowledgeRecordNotFoundError(proposalId);\n    assertErasable(proposal);\n    if (proposal.erasure) return { proposal, alreadyErased: true };",
   'a corrupt proposal stops a record preview', /KnowledgeStoreCorruptionError|is corrupt|not valid JSON/, [], /./);
+
+// Review of #70 (Sol): a token with no key, a preview that skips the refusals the commit makes, an unreadable neighbour,
+// and a revision compared before the lock is taken (a write queued ahead of the erasure would then slip through).
+for (const [tag, file] of [['default', D], ['vault', V]]) {
+  add(`${tag}-revision-unbound-empty-key`, file, "    if (!this.binding) throw new RootBindingMismatchError();\n    const revision = new StoreRevision(this.binding);\n",
+    "    const revision = new StoreRevision(this.binding ?? '');\n", 'a root without an identity marker cannot be previewed', /expected undefined to be 'ROOT_BINDING_MISMATCH'/, [], /./);
+}
+add('vault-plan-skips-index-validation', V, "    this.loadGraph();\n    this.loadAliasIndex();\n    const records = new Map<string, KitRecord>();", "    const records = new Map<string, KitRecord>();",
+  'stops the preview as it stops the purge', /promise resolved/, [], /./);
+add('revision-parts-throws-on-unreadable', 'src/shared/create-proposals.ts', "          if (!(error instanceof KnowledgeStoreCorruptionError)) throw error;\n          return { name:", "          throw error;\n          return { name:",
+  'too large to read does not stop a pending proposal', /KnowledgeStoreCorruptionError|is corrupt|exceeds/, [], /./);
+add('default-purge-checks-revision-outside-lock', D, "    return this.files.mutate('purge', () => {\n      this.assertRevision('purge', expected);\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
+  "    await this.files.read(() => this.assertRevision('purge', expected));\n    return this.files.mutate('purge', () => {\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
+  'a write queued ahead of the erasure makes it stale', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+add('vault-purge-checks-revision-outside-lock', V, "    return this.mutate('purge', () => {\n      this.assertRevision('purge', expected);\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
+  "    await this.files.read(() => this.assertRevision('purge', expected));\n    return this.mutate('purge', () => {\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
+  'a write queued ahead of the erasure makes it stale', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+add('default-purge-proposal-checks-revision-outside-lock', D, "    return this.files.mutate(\n      'purgeProposal',\n      () => {\n        this.assertRevision('purgeProposal', expected);\n",
+  "    await this.files.read(() => this.assertRevision('purgeProposal', expected));\n    return this.files.mutate(\n      'purgeProposal',\n      () => {\n",
+  'the same for purgeProposal', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+add('vault-purge-proposal-checks-revision-outside-lock', V, "    return this.mutate(\n      'purgeProposal',\n      () => {\n        this.assertRevision('purgeProposal', expected);\n",
+  "    await this.files.read(() => this.assertRevision('purgeProposal', expected));\n    return this.mutate(\n      'purgeProposal',\n      () => {\n",
+  'the same for purgeProposal', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
 
 if (process.argv.includes('--check-targets')) {
   for (const [name, file, before] of cases) assert.ok(readFileSync(join(root, 'packages/store', file), 'utf8').includes(before), `missing anchor: ${name}`);

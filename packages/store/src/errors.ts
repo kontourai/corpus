@@ -49,7 +49,7 @@ export class RequestKeyConflictError extends Error {
 }
 
 /**
- * `purge` or `purgeProposal` was given an `expectedRevision` and the store has moved since the
+ * `purge` or `purgeProposal` was given an `expectedRevision` and the store has changed since the
  * preview that returned it. Nothing was written. Preview again, show the new effects, and confirm.
  * The message names no record, proposal or content.
  */

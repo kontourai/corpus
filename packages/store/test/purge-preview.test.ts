@@ -5,12 +5,13 @@
  * Every parity test compares the preview with what the committed erasure then returned, on both
  * profiles, in a store where every category is non-empty.
  */
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
+  initializeRootBinding,
   KitDefaultStoreAdapter,
   KitObsidianStoreAdapter,
   standaloneFileMutationLock,
@@ -420,6 +421,75 @@ describe.each(['default', 'vault'] as const)('purge preview — %s profile', (pr
     });
   });
 
+  describe('limits and refusals the preview shares with the erasure', () => {
+    test('a root without an identity marker cannot be previewed or revision-checked until it is initialized', async () => {
+      // A revision is keyed by the root's identity marker. An existing directory has none, and a token without a
+      // key could be checked against a guess at the store's content, so these calls fail closed like binding checks.
+      const legacy = mkdtempSync(join(tmpdir(), 'corpus-purge-preview-legacy-'));
+      try {
+        const legacyRoot = join(legacy, 'store');
+        mkdirSync(legacyRoot);
+        const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
+        const options = { storeRoot: legacyRoot, coordinationDirectory: join(legacy, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowPurge: true };
+        const unbound = new Constructor(options) as unknown as Store;
+        await unbound.create(raw('src-a'));
+        await unbound.create(compiled('sole', ['src-a']));
+        const before = everything(legacyRoot);
+        expect(await code(unbound.previewPurge(['src-a']))).toBe('ROOT_BINDING_MISMATCH');
+        expect(await code(unbound.previewPurgeProposal('anything'))).toBe('ROOT_BINDING_MISMATCH');
+        expect(await code(unbound.purge(['src-a'], evidence, { expectedRevision: `rev1:${'0'.repeat(64)}` }))).toBe('ROOT_BINDING_MISMATCH');
+        expect(everything(legacyRoot)).toBe(before);
+        // Without expectedRevision the erasure is what it was.
+        await expect(unbound.purge(['sole'], evidence)).resolves.toMatchObject({ purged: ['sole'] });
+        // Initializing the root is the host's explicit step; then the preview works.
+        await initializeRootBinding(options);
+        const bound = new Constructor(options) as unknown as Store;
+        const preview = await bound.previewPurge(['src-a']);
+        await expect(bound.purge(['src-a'], evidence, { expectedRevision: preview.revision })).resolves.toMatchObject({ purged: ['src-a'] });
+      } finally {
+        rmSync(legacy, { recursive: true, force: true });
+      }
+    });
+
+    test('a file in the proposals directory too large to read does not stop a pending proposal from being previewed or erased', async () => {
+      const big = join(root, '.corpus-proposals', 'oversized.json');
+      writeFileSync(big, '');
+      truncateSync(big, 16 * 1024 * 1024 + 1);
+      const preview = await store.previewPurgeProposal(ids.pending!);
+      expect(preview.state).toBe('pending');
+      await expect(store.purgeProposal(ids.pending!, evidence, { expectedRevision: preview.revision })).resolves.toMatchObject({ alreadyErased: false });
+      // The erasure that has to read every proposal still refuses it, and so does its preview.
+      await expect(store.previewPurge(['src-a'])).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      await expect(store.purge(['src-a'], evidence)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+    });
+
+    test('a write queued ahead of the erasure makes it stale: the revision is checked inside the lock', async () => {
+      // Both calls are made before either runs. The update takes the lock first (the lock serves callers in order),
+      // so a revision compared before waiting for the lock would still match and the purge would go ahead.
+      const preview = await store.previewPurge(['src-a']);
+      const [write, purge] = await Promise.allSettled([
+        store.update('ref', { body: 'ZEBRA-BODY ref, changed while queued' }, { agent: 'editor' }),
+        store.purge(['src-a'], evidence, { expectedRevision: preview.revision }),
+      ]);
+      expect(write.status).toBe('fulfilled');
+      expect(purge.status).toBe('rejected');
+      expect((purge as PromiseRejectedResult).reason.code).toBe('STALE_REVISION');
+      expect((await store.get('src-a'))?.status).toBe('active');
+    });
+
+    test('the same for purgeProposal', async () => {
+      const preview = await store.previewPurgeProposal(ids.pending!);
+      const [write, purge] = await Promise.allSettled([
+        store.update('ref', { body: 'ZEBRA-BODY ref, changed while queued' }, { agent: 'editor' }),
+        store.purgeProposal(ids.pending!, evidence, { expectedRevision: preview.revision }),
+      ]);
+      expect(write.status).toBe('fulfilled');
+      expect(purge.status).toBe('rejected');
+      expect((purge as PromiseRejectedResult).reason.code).toBe('STALE_REVISION');
+      expect((await store.getProposal(ids.pending!))?.erasure).toBeUndefined();
+    });
+  });
+
   if (profile === 'vault') {
     test('a vault holding migration artifacts refuses the preview as it refuses the purge', async () => {
       mkdirSync(join(root, '.corpus-store-migration'), { recursive: true });
@@ -429,6 +499,15 @@ describe.each(['default', 'vault'] as const)('purge preview — %s profile', (pr
       expect(await code(store.purge(['src-a'], evidence))).toBe('READ_ONLY');
       expect(await code(store.previewPurgeProposal(ids.pending!))).toBe('READ_ONLY');
       expect(await code(store.purgeProposal(ids.pending!, evidence))).toBe('READ_ONLY');
+      expect(everything(root)).toBe(before);
+    });
+
+    test.each([['graph-index.json', 'graph index'], ['alias-index.json', 'alias index']])('a corrupt %s stops the preview as it stops the purge, and writes nothing', async (file) => {
+      writeFileSync(join(root, file), '{ not json');
+      const before = everything(root);
+      await expect(store.previewPurge(['src-a'])).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
+      await expect(store.previewPurgeProposal(ids.pending!)).resolves.toMatchObject({ state: 'pending' });
+      await expect(store.purge(['src-a'], evidence)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
       expect(everything(root)).toBe(before);
     });
 
