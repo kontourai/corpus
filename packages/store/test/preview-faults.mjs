@@ -120,16 +120,16 @@ add('revision-parts-throws-on-unreadable', 'src/shared/create-proposals.ts', "  
   'too large to read does not stop a pending proposal', /KnowledgeStoreCorruptionError|is corrupt|exceeds/, [], /./);
 add('default-purge-checks-revision-outside-lock', D, "    return this.files.mutate('purge', () => {\n      this.assertRevision('purge', expected);\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
   "    await this.files.read(() => this.assertRevision('purge', expected));\n    return this.files.mutate('purge', () => {\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
-  'a write queued ahead of the erasure makes it stale', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+  'one critical section: each takes the store lock once', /expected 2 to be 1/, [], /./);
 add('vault-purge-checks-revision-outside-lock', V, "    return this.mutate('purge', () => {\n      this.assertRevision('purge', expected);\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
   "    await this.files.read(() => this.assertRevision('purge', expected));\n    return this.mutate('purge', () => {\n      return this.purgeLocked(requested, evidence);\n    }, { erasure: true });",
-  'a write queued ahead of the erasure makes it stale', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+  'one critical section: each takes the store lock once', /expected 2 to be 1/, [], /./);
 add('default-purge-proposal-checks-revision-outside-lock', D, "    return this.files.mutate(\n      'purgeProposal',\n      () => {\n        this.assertRevision('purgeProposal', expected);\n",
   "    await this.files.read(() => this.assertRevision('purgeProposal', expected));\n    return this.files.mutate(\n      'purgeProposal',\n      () => {\n",
-  'the same for purgeProposal', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+  'one critical section: each takes the store lock once', /expected 2 to be 1/, [], /./);
 add('vault-purge-proposal-checks-revision-outside-lock', V, "    return this.mutate(\n      'purgeProposal',\n      () => {\n        this.assertRevision('purgeProposal', expected);\n",
   "    await this.files.read(() => this.assertRevision('purgeProposal', expected));\n    return this.mutate(\n      'purgeProposal',\n      () => {\n",
-  'the same for purgeProposal', /expected 'fulfilled' to be 'rejected'|expected 'rejected'/, [], /./);
+  'one critical section: each takes the store lock once', /expected 2 to be 1/, [], /./);
 
 if (process.argv.includes('--check-targets')) {
   for (const [name, file, before] of cases) assert.ok(readFileSync(join(root, 'packages/store', file), 'utf8').includes(before), `missing anchor: ${name}`);

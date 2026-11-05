@@ -463,6 +463,21 @@ describe.each(['default', 'vault'] as const)('purge preview — %s profile', (pr
       await expect(store.purge(['src-a'], evidence)).rejects.toMatchObject({ name: 'KnowledgeStoreCorruptionError' });
     });
 
+    test('the check and the erasure are one critical section: each takes the store lock once', async () => {
+      // A revision compared in a lock of its own leaves a gap before the erasure takes the lock again, and a write
+      // can land in it. The lock is a host seam, so count how often the store asks for it.
+      let locks = 0;
+      const counted = open({ lock: (path: string) => { locks++; return standaloneFileMutationLock(path); } });
+      const proposalPreview = await counted.previewPurgeProposal(ids.pending!);
+      locks = 0;
+      await counted.purgeProposal(ids.pending!, evidence, { expectedRevision: proposalPreview.revision });
+      expect(locks).toBe(1);
+      const preview = await counted.previewPurge(['src-a']);
+      locks = 0;
+      await counted.purge(['src-a'], evidence, { expectedRevision: preview.revision });
+      expect(locks).toBe(1);
+    });
+
     test('a write queued ahead of the erasure makes it stale: the revision is checked inside the lock', async () => {
       // Both calls are made before either runs. The update takes the lock first (the lock serves callers in order),
       // so a revision compared before waiting for the lock would still match and the purge would go ahead.
