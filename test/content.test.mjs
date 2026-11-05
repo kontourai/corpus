@@ -65,6 +65,7 @@ for (const kind of ['empty', 'missing', 'escape', 'duplicate', 'unknown', 'remot
 
 test('impact routes explicit and committed changes to GitHub targets without network or prose edits', async (t) => {
   const f = fixture(t);
+  f.manifest.relationships[0].targets.push('https://example.invalid/privacy/');
   f.save();
   const explicit = await runCli(['content', 'impact', '--root', f.root, '--changed-file', 'src/new.ts', '--changed-file', 'unrelated.txt']);
   assert.equal(explicit.status, 0, explicit.output);

@@ -39,6 +39,14 @@ function nonemptyArray(value, label) {
   if (!Array.isArray(value) || !value.length) fail(`${label} must be a nonempty array`);
 }
 
+function contentTarget(value) {
+  let url;
+  try { url = new URL(value); } catch { fail(`invalid content target: ${value}`); }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search)
+    fail(`content targets must be HTTPS URLs without credentials or query: ${value}`);
+  if (url.hostname === 'github.com') githubContentReference(value);
+}
+
 function files(entries, label) {
   nonemptyArray(entries, label);
   const identities = new Set();
@@ -72,7 +80,7 @@ export function readContentManifest(root, manifest = 'corpus-content.json') {
     nonemptyArray(relation.covers, 'covers');
     if (relation.covers.some((glob) => repoGlobError(glob))) fail(`${relation.id}: invalid covers glob`);
     nonemptyArray(relation.targets, 'targets');
-    for (const url of relation.targets) githubContentReference(url);
+    for (const url of relation.targets) contentTarget(url);
   }
   ids.clear();
   for (const review of raw.reviews ?? []) {

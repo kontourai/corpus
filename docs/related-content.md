@@ -3,7 +3,7 @@
 `corpus content impact` answers “I changed these files; which other content
 needs review?” It extends the idea behind a document's `covers` to public
 websites, privacy policies and other files in separate repositories. Targets
-are GitHub file URLs, so their identity does not depend on a contributor's
+are GitHub file URLs or public HTTPS page URLs, so their identity does not depend on a contributor's
 checkout layout. This command does not fetch the targets or require a prose edit.
 
 `corpus content check` checks the input and output bytes recorded by an explicit
@@ -41,6 +41,8 @@ corpus content impact --base origin/main
 `--base` uses the merge-base diff to HEAD, including both sides of a rename;
 it does not include uncommitted edits. Use one selection method per invocation.
 Output is JSON with target URLs and the source files that selected each target.
+Use a public page URL when a site's source repository is private and its name
+should not appear in a public product manifest. Targets are never fetched.
 An embedding tool can use `readContentManifest` and `contentImpact` from the
 public `@kontourai/corpus/content` export with the same validation and matching.
 Relationships are advisory and incomplete: a missing relationship is not proof
