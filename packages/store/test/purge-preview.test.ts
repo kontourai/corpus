@@ -320,7 +320,8 @@ describe.each(['default', 'vault'] as const)('purge preview — %s profile', (pr
 
     /** Each is a write that changes what a confirmed purge would do, or might. */
     const writes: [string, (s: Store) => Promise<unknown>][] = [
-      ['a record is updated', (s) => s.update('ref', { title: 'changed' }, { agent: 'editor' })],
+      // A body edit keeps the note where it is (a vault names a note by its title), so only its bytes change.
+      ['a record is updated', (s) => s.update('ref', { body: 'ZEBRA-BODY ref, changed' }, { agent: 'editor' })],
       ['a record is created', (s) => s.create(raw('src-c'))],
       ['a record is linked', (s) => s.link('ref', [{ target_id: 'src-b', kind: 'related' }], { agent: 'editor' })],
       ['a record is retired', (s) => s.retire('ref', 'retired', { agent: 'editor', rationale: 'old' })],
