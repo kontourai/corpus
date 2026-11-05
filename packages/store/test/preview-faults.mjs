@@ -93,7 +93,7 @@ add('vault-revision-ignores-note-bytes', V, "text = this.files.readText(this.get
 add('revision-ignores-proposals', 'src/shared/create-proposals.ts', "      .sort()\n      .map((name) => ({ name,", "      .sort()\n      .filter(() => false)\n      .map((name) => ({ name,",
   'STALE_REVISION when a proposal is staged', NOT_STALE_UNIT, ['purge-preview-stale-proposal-write', 'purge-preview-stale-request-key'], STALE_VECTOR);
 add('revision-unkeyed', 'src/shared/revision.ts', "createHmac('sha256', key)", "createHmac('sha256', '')",
-  'the same records in a different store have a different revision', /expected 'rev1:[a-f0-9]+' not to be/, [], /./);
+  'the same records in a different store have a different revision', /expected 'rev1:[a-f0-9]+…?' not to be 'rev1:/, [], /./);
 add('stale-error-code', 'src/errors.ts', "readonly code: KnowledgeStoreErrorCode = 'STALE_REVISION';", "readonly code: KnowledgeStoreErrorCode = 'MISSING_EVIDENCE';",
   'STALE_REVISION when a record is updated', /expected 'MISSING_EVIDENCE' to be 'STALE_REVISION'/, ['purge-preview-stale-record-write'], /strictly equal/);
 add('empty-revision-accepted', 'src/shared/purge.ts', "typeof expected !== 'string' || expected === ''", "typeof expected !== 'string'",
