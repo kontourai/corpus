@@ -48,6 +48,19 @@ export class RequestKeyConflictError extends Error {
   constructor(retired = false) { super(retired ? 'proposeCreate: request key is retired after content scrub' : 'proposeCreate: request key already used with different input'); this.name = 'RequestKeyConflictError'; }
 }
 
+/**
+ * `purge` or `purgeProposal` was given an `expectedRevision` and the store has changed since the
+ * preview that returned it. Nothing was written. Preview again, show the new effects, and confirm.
+ * The message names no record, proposal or content.
+ */
+export class StaleRevisionError extends Error {
+  readonly code: KnowledgeStoreErrorCode = 'STALE_REVISION';
+  constructor(op: string) {
+    super(`${op}: the store changed since the preview; preview again and confirm the new effects`);
+    this.name = 'StaleRevisionError';
+  }
+}
+
 export class RootBindingMismatchError extends Error {
   readonly code = 'ROOT_BINDING_MISMATCH' as const;
   constructor() { super('adapter is not bound to the authorized root'); this.name = 'RootBindingMismatchError'; }
@@ -129,6 +142,7 @@ export function isKnowledgeStoreError(error: unknown): error is Error {
     error instanceof RecordPurgedError ||
     error instanceof SelfApprovalError ||
     error instanceof RequestKeyConflictError ||
+    error instanceof StaleRevisionError ||
     error instanceof RootBindingMismatchError ||
     error instanceof ReadOnlyStoreError ||
     error instanceof KnowledgeStoreConflictError ||

@@ -86,6 +86,8 @@ export interface KitRecord {
   updated_at: string; // ISO-8601
   expires_at?: string; // ISO-8601 (Addendum J — optional record-carried expiry)
   ttl_seconds?: number; // Addendum J — relative expiry in seconds from created_at
+  /** The writer's confidence in the record, from 0 to 1 inclusive. Any record type may carry it. Purge drops it. */
+  confidence?: number;
   status?: KitRecordStatus;
   mutation_log?: KitMutationLogEntry[];
 }
@@ -105,6 +107,13 @@ export interface CreateInput {
   provenance: KitProvenance;
   expires_at?: string;
   ttl_seconds?: number;
+  /**
+   * From 0 to 1 inclusive. A value outside the range, NaN, an infinity or a non-number is
+   * refused with `MISSING_EVIDENCE`, never clamped. In a proposal candidate it is part of
+   * the request-key digest, so a retry under the same request key that changes, adds or drops it is
+   * `REQUEST_KEY_CONFLICT`.
+   */
+  confidence?: number;
 }
 
 export interface UpdateFields {
@@ -117,6 +126,8 @@ export interface UpdateFields {
   /** `null`/`""` clears the field (Addendum J.2). */
   expires_at?: string | null;
   ttl_seconds?: number | null;
+  /** From 0 to 1 inclusive, validated as on create. `null` clears it. */
+  confidence?: number | null;
 }
 
 export interface UpdateEvidence {
@@ -224,6 +235,38 @@ export interface ProposalPurgeResult {
   record?: PurgeResult;
 }
 
+/**
+ * What `purge` would do, from `previewPurge`: the lists of a `PurgeResult` (ids only, never
+ * content), computed by the code `purge` runs, and the `revision` to confirm it with.
+ */
+export interface PurgePreview extends PurgeResult {
+  /**
+   * An opaque token for the store as previewed. Pass it as `expectedRevision` to `purge`, which
+   * refuses with `STALE_REVISION` if any record, proposal or request key has changed since.
+   */
+  revision: string;
+}
+
+/**
+ * What `purgeProposal` would do, from `previewPurgeProposal`: the fields of a
+ * `ProposalPurgeResult` (`record` is the plan for the record an applied proposal created), plus
+ * what a host needs to show it.
+ */
+export interface ProposalPurgePreview extends ProposalPurgeResult {
+  /** As for `PurgePreview.revision`; pass it as `expectedRevision` to `purgeProposal`. */
+  revision: string;
+  /** The proposal's state now. A `pending` one is settled `rejected` by the erasure. */
+  state: CreateProposalState;
+  /** The record an `applied` proposal created, whether or not erasing it has anything to purge. */
+  recordId?: string;
+}
+
+/** Options of the two erasure verbs. */
+export interface PurgeOptions {
+  /** A `revision` from `previewPurge` or `previewPurgeProposal`. If the store has changed since that preview, nothing is written and `STALE_REVISION` is thrown. */
+  expectedRevision?: string;
+}
+
 // ── Create proposals (owner decision, 2026-11-03) ──────────────────────────
 
 /** A create proposal is `pending` until a reviewer settles it as `applied` or `rejected`. */
@@ -283,6 +326,12 @@ export type KnowledgeStoreErrorCode =
   /** `applyCreate` by the identity that proposed the proposal (owner decision, 2026-11-03). */
   | 'SELF_APPROVAL'
   | 'REQUEST_KEY_CONFLICT'
+  /**
+   * `purge` or `purgeProposal` was given an `expectedRevision` that no longer matches the store:
+   * a record, a proposal or a request key changed after the preview. Nothing was written.
+   * Preview again and confirm the new effects.
+   */
+  | 'STALE_REVISION'
   | 'ROOT_BINDING_MISMATCH'
   /**
    * The operation names a purged record (owner decision, 2026-11-02): a tombstone
@@ -404,7 +453,7 @@ export interface KnowledgeStorePurger {
    * must exist, or nothing is written. A tombstone is read-only and counts as
    * history in lists.
    */
-  purge(ids: string[], evidence: PurgeEvidence): Promise<PurgeResult>;
+  purge(ids: string[], evidence: PurgeEvidence, options?: PurgeOptions): Promise<PurgeResult>;
   /**
    * Erase one create proposal by its proposal id (owner decision, 2026-11-04), in any
    * state and whatever its sources rest on. Gated like `purge` (`READ_ONLY` without
@@ -424,7 +473,19 @@ export interface KnowledgeStorePurger {
    * already erased is a no-op (`alreadyErased`). One transaction: an interrupted
    * erasure is rolled back whole or applied whole, never half done.
    */
-  purgeProposal(proposalId: string, evidence: PurgeEvidence): Promise<ProposalPurgeResult>;
+  purgeProposal(proposalId: string, evidence: PurgeEvidence, options?: PurgeOptions): Promise<ProposalPurgeResult>;
+  /**
+   * What `purge(ids, …)` would do now, without doing it. Read-only: it writes nothing and needs
+   * no `allowPurge`, so a host can show the effects before it confirms. It runs the plan `purge`
+   * runs (same cascade, survivors, referrers and proposal handling), so the lists equal the
+   * `PurgeResult` of a `purge` that follows with nothing changed between. Ids only, no content.
+   * Unknown ids are `NOT_FOUND`, and a store `purge` would refuse (for example a vault with
+   * migration artifacts) is refused here too. `revision` identifies the store as previewed; pass it to `purge` as
+   * `expectedRevision`.
+   */
+  previewPurge(ids: string[]): Promise<PurgePreview>;
+  /** What `purgeProposal(proposalId, …)` would do now, read-only and with the same guarantees as `previewPurge`. */
+  previewPurgeProposal(proposalId: string): Promise<ProposalPurgePreview>;
 }
 
 /**

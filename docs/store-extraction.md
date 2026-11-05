@@ -2,7 +2,7 @@
 
 The owner-dispatched [workspace publish workflow](../README.md#publishing-the-store-workspaces)
 publishes matching Store and Conformance versions. The current workspace version
-is `0.1.0-next.2`.
+is `0.1.0-next.3`.
 The packed TypeScript consumer now pins `@types/node@24.19.2` alongside
 `typescript@5.9.3`, with install scripts disabled. It optionally exports the
 exact tested Store and Conformance tarballs plus their SHA-256 hashes for the
@@ -363,6 +363,50 @@ list.
 
 EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, 122 passing and
 1 expected failure, with no unexpected result, for both default and vault.
+
+### Record confidence
+
+`shared/confidence.ts` validates the optional `confidence` (a number from 0 to 1)
+for both profiles at `create`, `proposeCreate` and `update`, and
+`assertKitRecord` validates it again on read. `test/confidence.test.ts` runs
+every case on both profiles, and `npm run proof:confidence` injects 28 faults
+(bounds, clamping, NaN, type, null, inherited values, a revoked proxy, the candidate keys, the request digest, the
+update keys and clear, the YAML number type, read validation, the reserved
+dimension, the tombstone and the proposal stub), requires the named test and
+vectors to fail for the right reason, and restores each. The eleven
+`confidence-*` vectors join the store vectors (then 191 per profile); see the
+[store README](../packages/store/README.md#decision-record-confidence-68) for the rules.
+
+EXECUTED on macOS, Node 24.22.1: 209 store vectors per profile (with the purge
+preview vectors), 208 passing and 1 expected failure (`purge-journal-in-flight`), for both default and vault;
+`npm run proof:confidence` caught all 28 faults.
+
+### Purge preview and revision
+
+`planPurgeLocked` (both adapters) decides a record purge without writing, and
+`commitPurgeLocked` writes it; `CreateProposals.planErase` / `commitErase` and
+`planOne` / `commitOne` split proposal erasure the same way. `purge`,
+`purgeProposal` and the two previews all go through those plans, and the
+preview's lists and the committed result come from one function
+(`purgeResultOf`), so they cannot be built two ways. The vault plan also loads
+the graph and alias indexes, which commit rewrites, so a corrupt one refuses the
+preview too. The revision (`shared/revision.ts`) is a keyed digest of the raw
+bytes of the record notes and the proposals directory, keyed by the root
+binding; an unbound root is refused. `test/purge-preview.test.ts` runs every
+case on both profiles in a store where every purge category is non-empty
+(including a writer queued ahead of the erasure, an unbound root, an oversized
+neighbour and, in a vault, corrupt indexes), and the eighteen `purge-preview-*`
+vectors bring the store vectors to 209 per profile. `npm run proof:preview`
+injects 34 faults (a preview that drops a list, writes, leaks titles or needs
+`allowPurge`; a revision that ignores records, note bytes, proposals or its key,
+or accepts an unbound root; an erasure that skips the check or runs it outside
+the lock; a wrong error code; an empty `expectedRevision`; a preview that skips
+the migration-artifact, read-only or index refusals) and requires each to be
+caught. The existing `proof:purge` controls were re-anchored to the split code
+and re-run, and `proof:purge -- --check-compiles` now typechecks every control's
+injected source, which found and fixed two controls that no longer reached their
+tests. See the
+[store README](../packages/store/README.md#decision-purge-preview-and-revision-69).
 
 ### A compiled record must link a raw source
 

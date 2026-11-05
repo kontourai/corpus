@@ -11,6 +11,7 @@ import type {
   KitRecordType,
 } from '../contracts.js';
 import { validSourceRefs } from './source-refs.js';
+import { isConfidence } from './confidence.js';
 import { isRecord } from '../is-record.js';
 import { KnowledgeStoreCorruptionError } from '../errors.js';
 
@@ -139,6 +140,9 @@ export function assertKitRecord(
     (!Number.isFinite(record.ttl_seconds) || Number(record.ttl_seconds) < 0)
   ) {
     invalid('ttl_seconds must be non-negative');
+  }
+  if (record.confidence !== undefined && !isConfidence(record.confidence)) {
+    invalid('confidence must be a number from 0 to 1');
   }
   return { ...record, body } as unknown as KitRecord;
 }

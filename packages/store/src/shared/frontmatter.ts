@@ -33,7 +33,7 @@ function fieldType(path: Path, meta: unknown): 'string' | 'number' | 'container'
   const [root, index, key, evidenceKey, item, linkKey] = path;
   if (path.length === 1) {
     if (ROOT_STRINGS.has(String(root))) return 'string';
-    if (root === 'ttl_seconds') return 'number';
+    if (root === 'ttl_seconds' || root === 'confidence') return 'number';
     if (['tags', 'aliases', 'links', 'provenance', 'mutation_log'].includes(String(root))) return 'container';
   }
   if (['tags', 'aliases'].includes(String(root)) && path.length === 2) return 'string';

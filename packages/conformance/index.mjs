@@ -27,9 +27,19 @@ function reference(values, ref) {
   }, values[name]);
 }
 
+/** The numbers JSON cannot write. `{"$number": "NaN"}` resolves to the number itself, anywhere an argument or expected value is. */
+const NUMBER_TOKENS = Object.freeze({ NaN: Number.NaN, Infinity: Number.POSITIVE_INFINITY, '-Infinity': Number.NEGATIVE_INFINITY, '-0': -0 });
+
 function resolve(value, values) {
   if (typeof value === 'string' && value.startsWith('$')) return reference(values, value.slice(1));
   if (Array.isArray(value)) return value.map((item) => resolve(item, values));
+  if (value && typeof value === 'object' && Object.hasOwn(value, '$number')) {
+    // Read once, so a getter cannot pass validation with one value and resolve with another.
+    const token = value.$number;
+    // A string is required: `Object.hasOwn` would coerce an array like ["NaN"] to the key "NaN".
+    assert.ok(Object.keys(value).length === 1 && typeof token === 'string' && Object.hasOwn(NUMBER_TOKENS, token), `malformed $number token: ${JSON.stringify(value)}`);
+    return NUMBER_TOKENS[token];
+  }
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolve(item, values)]));
   return value;
 }

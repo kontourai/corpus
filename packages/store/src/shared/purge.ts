@@ -407,13 +407,48 @@ function validatePurgeEvidence(op: string, evidence: PurgeEvidence): void {
   }
 }
 
+/** The ids check `purge` and `previewPurge` share, so a preview refuses what the purge would. */
+function validatePurgeIds(op: string, ids: unknown): string[] {
+  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
+    throw new MissingEvidenceError(`${op}: ids must be a non-empty array of record ids`);
+  }
+  return ids as string[];
+}
+
 /** Input checks shared by both adapters; they run before any read or write. */
 export function validatePurgeInput(ids: unknown, evidence: PurgeEvidence): string[] {
   validatePurgeEvidence('purge', evidence);
-  if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== 'string' || !id)) {
-    throw new MissingEvidenceError('purge: ids must be a non-empty array of record ids');
+  return validatePurgeIds('purge', ids);
+}
+
+/** `previewPurge`'s input check: the ids `purge` takes, without the evidence it needs only to write. */
+export function validatePreviewPurgeInput(ids: unknown): string[] {
+  return validatePurgeIds('previewPurge', ids);
+}
+
+/** `previewPurgeProposal`'s input check: the proposal id `purgeProposal` takes. */
+export function validatePreviewProposalInput(proposalId: unknown): string {
+  if (typeof proposalId !== 'string' || proposalId === '') {
+    throw new MissingEvidenceError('previewPurgeProposal: proposalId must be a non-empty string');
   }
-  return ids as string[];
+  return proposalId;
+}
+
+/**
+ * The `expectedRevision` of `purge` and `purgeProposal`: absent, or the non-empty text a preview
+ * returned. Read once, so what is checked is what is compared even for an accessor.
+ */
+export function validateExpectedRevision(op: string, options: unknown): string | undefined {
+  if (options === undefined) return undefined;
+  if (options === null || typeof options !== 'object') {
+    throw new MissingEvidenceError(`${op}: options must be an object`);
+  }
+  const expected: unknown = (options as { expectedRevision?: unknown }).expectedRevision;
+  if (expected === undefined) return undefined;
+  if (typeof expected !== 'string' || expected === '') {
+    throw new MissingEvidenceError(`${op}: expectedRevision must be a non-empty string from previewPurge or previewPurgeProposal`);
+  }
+  return expected;
 }
 
 /**

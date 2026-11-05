@@ -9,7 +9,7 @@ The extraction preserved Station semantics at
 `2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`; its only codec change preserves text
 scalars from old Knowledge Kit writers. Later changes implement the owner's
 decisions one at a time; see [Owner decisions](#owner-decisions). Version
-`0.1.0-next.2` is intended for the `next` npm dist-tag through the
+`0.1.0-next.3` is intended for the `next` npm dist-tag through the
 [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
 
 ## Owner decisions
@@ -444,9 +444,9 @@ host responsibilities. `provenance.agent` records attribution, not authority.
 ## Codec and format
 
 The reader preserves Station's known string fields and reads its numeric fields
-(`ttl_seconds`, supersede evidence `superseded_count`) as numbers only when the
-source scalar is unquoted. Quoted numeric TTL remains corruption, matching
-Station. Unknown fields use core-schema types when conversion is lossless: `3`,
+(`ttl_seconds`, `confidence`, supersede evidence `superseded_count`) as numbers
+only when the source scalar is unquoted. Quoted numeric TTL remains corruption,
+matching Station. A quoted `confidence` (`confidence: "0.5"`) is also corruption. Unknown fields use core-schema types when conversion is lossless: `3`,
 `true` and `null` become number, boolean and null; `1.10` and a bare `-` remain
 text. Unknown quoted strings stay strings.
 
@@ -533,7 +533,7 @@ They stay out of returned records. Names must be unique identifiers and may not
 replace record fields. Omit the option to preserve ordinary unknown frontmatter.
 
 - `@kontourai/corpus-store`: constructors, record/evidence/interface types
-  (including `KnowledgeStorePurger`, `PurgeEvidence` and `PurgeResult`), service
+  (including `KnowledgeStorePurger`, `PurgeEvidence`, `PurgeResult`, `PurgePreview`, `ProposalPurgePreview` and `PurgeOptions`), service
   option types (including `allowPurge`), reindex result type and standalone lock.
 - `@kontourai/corpus-store/errors`: the unchanged domain and persistence error
   constructors/classifier. Persistence errors do not gain new codes here.
@@ -613,6 +613,45 @@ normalize except for the approved top-level lossy plain tokens.
 The delivery orchestrator, under owner direction (owner may override), decided in [#45](https://github.com/kontourai/corpus/issues/45) that `proposeCreate(candidate, proposerId, evidence, { requestKey })` optionally deduplicates retries. Matching input returns the original proposal ID in pending, applied or rejected state; different input fails with `REQUEST_KEY_CONFLICT` without writing. The key identity and input digest share the proposal transaction. In this delivery lane on 2026-11-03, the owner chose “Refuse all retries after purge” so erasure removes the content digest and every later use of that key is refused with `REQUEST_KEY_CONFLICT`, regardless of input; the retained key identity prevents reuse. This supersedes the issue decision’s matching-retry rule after purge. To apply the same privacy rule to content-changing partial scrubs, the implementation also sets `request_key_retired: true` and removes the digest when a partial scrub changes the candidate or evidence. A partial scrub can leave a pending proposal applicable, so a caller recovering a lost receipt should not blindly retry with a new key: compute the SHA-256 hex digest of the original UTF-8 key, find its `request_key_hash` in `listProposals()`, and inspect that proposal’s state. Real purge integration and retry ordering are covered by conformance vectors; key lookup precedes the purge source guard. Completed full and partial scrubs remove the prior content digest; the separate in-flight purge journal limitation above still applies. A caller that loses a response retries with the same key. Omitting the key retains the original behavior. Keys must be well-formed Unicode strings, not empty or whitespace-only, and at most 1024 UTF-8 bytes.
 
 Request keys are scoped to the whole store, not the proposer: callers sharing a store should namespace their keys and use opaque keys that do not encode content. The stored key hash is unsalted and can reveal a guessable key. The input digest detects mismatched stored content but is not authentication: a writer able to alter the file can recompute it. Keyed requests scan retained proposals under the mutation lock, so lookup cost grows with proposal count. A corrupt proposal causes keyed requests to fail closed because the store cannot establish whether the key is unused. Digest version 1 identifies the candidate projection and canonicalization; future changes must preserve retry comparison for stored versions.
+
+### Decision: record confidence ([#68](https://github.com/kontourai/corpus/issues/68))
+
+A record can carry `confidence`: how sure the writer was, as a number from 0 (not sure) to 1 (certain). Pass it when you create or propose a record, for example `store.create({ ...input, confidence: 0.75 })`, and change it later with `update`. It is saved in the note's frontmatter as `confidence: 0.75`. The store checks that the number is in range and keeps it as given. It does not sort, filter, rank or lower records by confidence; what the number means is up to the writer. Any record type can carry it.
+
+- **Refused, never clamped.** `create`, `proposeCreate` and `update` refuse a value below 0 or above 1, `NaN`, an infinity, and anything that is not a number (text, a boolean, an array, an object, a bigint) with `MISSING_EVIDENCE` (the store's input-validation error code), and nothing is written. `0` and `1` are accepted, and `0` is a value, not an absence. `-0` is stored as `0`. `null` is not a number, so it is refused on create and in a candidate; on `update` it clears the field (as for `ttl_seconds`), and `undefined` means "not supplied". The error names the field and the range, and shows the value when it is a number, or its type when it is not. A proposal is checked when it is staged, so `applyCreate` cannot be the first to refuse a confidence.
+- **Exact.** The number you read back is exactly the number you wrote, including very small values such as `1e-7` and long ones such as `0.30000000000000004`.
+- **Read as well as written.** A note whose `confidence` is not a number in range (above 1, text, `.nan`, a quoted number) is corruption when read, as for `ttl_seconds`. Before this change `confidence` was an unknown field that a note could hold as any text; a hand-written note that holds `confidence: high` is now unreadable until it is fixed. A vault `dimensions` entry named `confidence` is now refused at construction, because it would overwrite the field.
+- **Update.** `update(id, { confidence })` sets, changes or (with `null`) clears it, and other updates keep it. The mutation log names the field in `evidence.fields`, never the number.
+- **Request keys.** `confidence` is part of the candidate, so it is part of the request digest. A retry with the same candidate and the same confidence returns the original proposal id, in any state, including after `applyCreate`. A retry that changes the confidence, adds it, or drops it is a different request and fails with `REQUEST_KEY_CONFLICT` without writing. Returning the original id instead would hand the caller a record whose confidence is not the one it just sent.
+- **Purge.** Purging a record erases its `confidence` along with its title, body, tags and expiry; the tombstone left behind has no `confidence`. The same happens to records removed by a cascade and to a proposal erased with `purgeProposal`. A record the cascade leaves in place, because other sources still support it, keeps its `confidence` and its other content, except link labels that name an erased source. The update log keeps the field *name* `confidence` but never the number. The in-flight purge journal limitation above applies to this field as to every other.
+
+### Decision: purge preview and revision ([#69](https://github.com/kontourai/corpus/issues/69))
+
+A purge is permanent, so show the person what it will remove before they confirm. `previewPurge(ids)` and `previewPurgeProposal(proposalId)` return exactly what the erasure would return, without doing it: the records erased (`purged`), the records that fall with them because they rested only on those (`cascaded`), the records that keep other support (`survivors`), the records that only link to them (`referrers`), the proposals rejected, scrubbed or blocked, and, for a proposal, the record it created. They return ids and states, never content, change nothing, and work on any adapter, even one built without `allowPurge`. When the person confirms, pass the preview's `revision` to `purge` as `expectedRevision`: if anything changed since, the purge throws `STALE_REVISION` and writes nothing, so they never approve one list and get another.
+
+```ts
+const preview = await store.previewPurge(['rec-1']);          // read-only
+// show preview.purged, .cascaded, .survivors, .referrers, .proposalsRejected ... to the person
+try {
+  await store.purge(['rec-1'], { agent, rationale }, { expectedRevision: preview.revision });
+} catch (error) {
+  if ((error as { code?: string }).code !== 'STALE_REVISION') throw error;
+  // The store changed after the preview. Preview again, show the new lists, and ask again.
+}
+```
+
+`previewPurgeProposal(proposalId)` and `purgeProposal(proposalId, evidence, { expectedRevision })` work the same way for a create proposal.
+
+**If you implement `KnowledgeStorePurger` yourself** (hosts that use the bundled adapters need do nothing), this is a breaking change in this `next` prerelease: add `previewPurge(ids)` and `previewPurgeProposal(proposalId)`, and make `purge` and `purgeProposal` accept `{ expectedRevision }` and throw `STALE_REVISION`, writing nothing, when it no longer matches the store. The `purge-preview-*` conformance vectors check all of it.
+
+- **One plan, not two.** `purge` and the previews run the same planning code, and one function builds both the preview and the committed result, so the lists cannot differ unless the store changed between the two calls. The tests compare them for a cascade, a support cycle, shared support, referrers, pending, rejected and applied proposals, records that are already tombstones, and an erased proposal. Splitting purge into plan and commit changed one thing: when two different things are broken at once (a corrupt proposal and a corrupt index, or an invalid clock, say), which one is reported first can differ from before. Each is still refused with the error it always was.
+- **What you get.** `PurgePreview` is a `PurgeResult` plus `revision`. `ProposalPurgePreview` is a `ProposalPurgeResult` plus `revision`, the proposal's `state` now (a `pending` one is settled `rejected` by the erasure), and `recordId`, the record an applied proposal created. Its `record` holds the plan for erasing that record, with its cascade.
+- **Read-only.** A preview writes no record, proposal or index. Like every read of the store, it first finishes a transaction that an earlier crash left half done. It refuses what the erasure would refuse: an unknown id is `NOT_FOUND`; a vault that holds migration artifacts or opens read-only is `READ_ONLY`; a vault with a corrupt graph or alias index, or any store with a corrupt proposal, stops a record preview just as it stops `purge` (a pending or rejected proposal's own preview parses only that proposal, as its erasure does). The previews are declared on `KnowledgeStorePurger`, not on the ordinary adapter type, so code typed against the ordinary adapter does not see them. That is a type boundary only: the methods exist on every adapter object, and they reveal only ids that `get` and `listProposals` already return.
+- **No content.** A preview that succeeds holds ids, states and the revision, and the `STALE_REVISION` message names no record or proposal. When a note or proposal is malformed, the error names that file, as it does for every other read of the store; in a vault the path includes the note's category and title. (A proposal too large to read is reported without its name.)
+- **The revision** is an opaque token for the whole store as the preview saw it: a keyed digest of the raw bytes of every record note and every file in the proposals directory. It changes on any write to a record or a proposal, on the first use of a request key, on a key retired by a scrub, and on an edit made outside the store to a note or a readable proposal (a person editing a vault by hand). It does not change when a request-key retry matches an existing proposal, because that writes nothing and does not change the plan. Record notes and proposals are not parsed, so a corrupt one does not stop the revision (a vault does read its `path-index.json`, so a corrupt index does), and nothing is stored: the store keeps no counter. A file in the proposals directory that is too large to read is listed by name only, so changes to its content do not move the revision; they cannot affect any plan. The key is the root's binding (its path and identity marker), so a token cannot be checked against a guess at the content without the marker, and two stores with identical notes get different tokens. A root with no identity marker (an existing directory that was never initialized) has no key: its previews and `expectedRevision` fail with `ROOT_BINDING_MISMATCH` until the host runs `initializeRootBinding`, while `purge` without `expectedRevision` works as before.
+- **STALE_REVISION.** With `expectedRevision`, `purge` and `purgeProposal` compare it with the store's revision under the same lock, before anything is written. A mismatch throws `StaleRevisionError` (`code: 'STALE_REVISION'`) and writes nothing; preview again, show the new lists, and pass the new revision. A malformed `expectedRevision` (empty, or not a string) or non-object options are `MISSING_EVIDENCE`. Without it, both verbs behave as before.
+- **What it is not.** The revision covers the whole store, not only the records affected, so an unrelated write also makes a preview stale; the cost is one more preview. It is not a lock: other writes can still happen between the preview and the erasure, and the revision only makes the erasure refuse if one did. It is not an authorization, so the host still decides who may erase. Use a revision once, for the confirmation it was shown with; any later write makes it stale anyway. It does not cover the derived graph and alias indexes: one that is corrupt when the erasure commits is refused as corruption, not as stale. A vault checks both when it plans, so its preview refuses first; the default profile rebuilds a corrupt index while committing, so its preview cannot see a rebuild that will fail (for example, hand-edited conflicting aliases beside a corrupt alias index).
+- **Cost.** A preview and a revision check read every record and proposal file, as `purge` already does.
 
 ### Owner decision: structured source references (2026-11-03)
 
