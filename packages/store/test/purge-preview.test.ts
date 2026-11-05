@@ -117,7 +117,8 @@ describe.each(['default', 'vault'] as const)('purge preview — %s profile', (pr
     root = join(base, 'store');
     store = open();
     await seed();
-  });
+    // The seed is dozens of sequential writes, which a loaded machine can stretch past the 10 s default.
+  }, 60_000);
   afterEach(() => rmSync(base, { recursive: true, force: true }));
 
   describe('parity with the committed result', () => {
