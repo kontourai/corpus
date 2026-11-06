@@ -320,13 +320,15 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       if (phase === 'committed') {
         const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
         expect(journal.entries.every((entry: { before: unknown }) => entry.before === null)).toBe(true);
-        expect(readFileSync(journalPath, 'utf8')).not.toContain(retainedInput);
+        for (const entry of journal.entries as { before: string | null; after: string | null }[]) {
+          for (const image of [entry.before, entry.after]) if (image !== null) expect(Buffer.from(image, 'base64').toString('utf8')).not.toContain(retainedInput);
+        }
       }
       const reopened = new Constructor(options);
       const recovered = await reopened.get('source');
       expect(existsSync(journalPath)).toBe(false);
       if (phase === 'first-publish') {
-        expect(recovered?.status).not.toBe('purged');
+        expect(recovered).toEqual(source.record);
         expect(JSON.parse(readFileSync(receiptFile, 'utf8')).input).toBe(retainedInput);
       } else {
         expect(recovered?.status).toBe('purged');
