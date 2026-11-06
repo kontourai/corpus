@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,6 +85,28 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
 
+  test('purge preview revision covers and validates retained receipts', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-preview-'));
+    try {
+      const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true };
+      const store = new Constructor(options);
+      for (const id of ['target', 'source']) await store.create({ id, type: 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      const proposal = await store.proposeCreate({ id: 'candidate', type: 'raw', title: 'Candidate', body: 'body', category: 'test', provenance: { agent: 'creator' } }, 'proposer', { agent: 'creator', proposal: 'review' });
+      const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
+      const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'preview', agent: 'reviewer' };
+      const receipt = await store.applyReviewedConfidence(request);
+      const preview = await store.previewPurgeProposal(proposal);
+      const receiptFile = join(options.storeRoot, '.corpus-reviewed-confidence', `${receipt.receiptId}.json`);
+      const changed = JSON.parse(readFileSync(receiptFile, 'utf8')); changed.appliedAt = '2001-01-01T00:00:00.000Z';
+      writeFileSync(receiptFile, JSON.stringify(changed) + '\n');
+      await expect(store.purgeProposal(proposal, { agent: 'eraser', rationale: 'request' }, { expectedRevision: preview.revision })).rejects.toMatchObject({ code: 'STALE_REVISION' });
+      writeFileSync(receiptFile, '{');
+      await expect(store.previewPurgeProposal(proposal)).rejects.toThrow(/reviewed confidence receipt is corrupt/);
+      expect((await store.getProposal(proposal))?.state).toBe('pending');
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
   test.each(['target', 'evidence'])('missing proposal-created %s still retires its receipt', async (role) => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-proposal-'));
     try {
@@ -123,7 +145,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
     try {
       const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true };
       const store = new KitObsidianStoreAdapter(options);
-      for (const id of ['target', 'source']) await store.create({ id, type: 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      for (const id of ['target', 'source']) await store.create({ id, type: id === 'target' ? 'concept' : 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
       const indexPath = join(options.storeRoot, 'path-index.json');
       const index = JSON.parse(readFileSync(indexPath, 'utf8'));
       const targetPath = join(options.storeRoot, index.by_id.target.path);
@@ -133,6 +155,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       writeFileSync(targetPath, original.slice(0, boundary) + 'x'.repeat(padding) + original.slice(boundary));
       const before = readFileSync(targetPath); const graph = readFileSync(join(options.storeRoot, 'graph-index.json')); const indexBefore = readFileSync(indexPath);
       const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
+      expect(target.record.body.length).toBeGreaterThanOrEqual(padding);
       const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
       const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'limit', agent: 'reviewer' };
       await expect(store.applyReviewedConfidence(request)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
@@ -253,7 +276,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
 
-  test.each(['prepared', 'committed'])('recovers %s crash and an identical retry yields one durable effect', async (phase) => {
+  test.each(['prepared', 'first-publish', 'final-publish', 'committed'])('recovers %s crash and an identical retry yields one durable effect', async (phase) => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-crash-'));
     try {
       const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true };
@@ -265,11 +288,51 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, phase, JSON.stringify(request)], { encoding: 'utf8' });
       expect(child.status, child.stderr).toBe(23);
       const reopened = new Constructor(options);
+      const recovered = await reopened.get('target');
+      const shouldBeApplied = phase === 'final-publish' || phase === 'committed';
+      expect(recovered?.confidence).toBe(shouldBeApplied ? 0.7 : 0.3);
+      expect(recovered?.mutation_log?.filter((entry) => entry.op === 'update')).toHaveLength(shouldBeApplied ? 1 : 0);
+      const receiptDirectory = join(options.storeRoot, '.corpus-reviewed-confidence');
+      expect(existsSync(receiptDirectory) ? readdirSync(receiptDirectory).filter((name) => name.endsWith('.json')).length : 0).toBe(shouldBeApplied ? 1 : 0);
       const receipt = await reopened.applyReviewedConfidence(request);
       expect(await new Constructor(options).applyReviewedConfidence(request)).toEqual(receipt);
       const record = await reopened.get('target');
       expect(record?.confidence).toBe(0.7);
       expect(record?.mutation_log?.filter((entry) => entry.op === 'update')).toHaveLength(1);
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
+  test.each(['first-publish', 'final-publish', 'committed'])('recovers %s interruption while erasing receipt evidence', async (phase) => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-purge-crash-'));
+    try {
+      const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true };
+      const store = new Constructor(options);
+      for (const id of ['target', 'source']) await store.create({ id, type: 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
+      const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'purge-crash', agent: 'reviewer' };
+      const receipt = await store.applyReviewedConfidence(request);
+      const receiptFile = join(options.storeRoot, '.corpus-reviewed-confidence', `${receipt.receiptId}.json`);
+      const retainedInput = JSON.parse(readFileSync(receiptFile, 'utf8')).input;
+      const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, `purge-${phase}`, JSON.stringify(request)], { encoding: 'utf8' });
+      expect(child.status, child.stderr).toBe(23);
+      const journalPath = join(options.storeRoot, '.station-knowledge-transaction.json');
+      if (phase === 'committed') {
+        const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+        expect(journal.entries.every((entry: { before: unknown }) => entry.before === null)).toBe(true);
+        expect(readFileSync(journalPath, 'utf8')).not.toContain(retainedInput);
+      }
+      const reopened = new Constructor(options);
+      const recovered = await reopened.get('source');
+      expect(existsSync(journalPath)).toBe(false);
+      if (phase === 'first-publish') {
+        expect(recovered?.status).not.toBe('purged');
+        expect(JSON.parse(readFileSync(receiptFile, 'utf8')).input).toBe(retainedInput);
+      } else {
+        expect(recovered?.status).toBe('purged');
+        expect(readFileSync(receiptFile, 'utf8')).not.toContain(retainedInput);
+        expect(JSON.parse(readFileSync(receiptFile, 'utf8'))).toEqual({ version: 1, key: receipt.receiptId, retired: true });
+      }
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
 });
