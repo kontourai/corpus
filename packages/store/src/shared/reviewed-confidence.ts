@@ -35,7 +35,7 @@ function copyReviewedRequest(value: ReviewedConfidenceRequest): ReviewedConfiden
   const evidence = value.evidence;
   const evidenceLength = Array.isArray(evidence) ? evidence.length : -1;
   const score = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1;
-  const text = (x: unknown, max: number): x is string => typeof x === 'string' && x.trim().length > 0 && Buffer.byteLength(x) <= max && x.isWellFormed();
+  const text = (x: unknown, max: number): x is string => typeof x === 'string' && x.trim().length > 0 && Buffer.byteLength(x) <= max && Buffer.from(x, 'utf8').toString('utf8') === x;
   if (typeof rootBinding !== 'string' || !HEX.test(rootBinding) || !isSafePathSegment(recordId) || recordId.length > 200 ||
       typeof revision !== 'string' || !REVISION.test(revision) || !(oldConfidence === null || score(oldConfidence)) || !score(newConfidence) ||
       typeof candidateDigest !== 'string' || !DIGEST.test(candidateDigest) || typeof authorizationDigest !== 'string' || !DIGEST.test(authorizationDigest) ||

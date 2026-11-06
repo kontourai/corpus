@@ -46,6 +46,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const source = await store.reviewedConfidenceSnapshot('source');
       const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
       const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'one', agent: 'reviewer' };
+      await expect(store.applyReviewedConfidence({ ...request, requestKey: '\ud800' })).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
       await expect(store.applyReviewedConfidence({ ...request, newConfidence: 0.8 })).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
       expect((await store.reviewedConfidenceSnapshot('target')).revision).toBe(target.revision);
       const receipt = await store.applyReviewedConfidence(request);
