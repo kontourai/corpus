@@ -73,8 +73,10 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     const before = everything(root);
     await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: expect.stringContaining('purgeProposal') });
     await expect(store.previewPurge([id])).rejects.toMatchObject({ code: 'NOT_FOUND', message: expect.stringContaining('purgeProposal') });
-    const diagnostic = await store.purge([id], evidence).catch((error: Error) => error);
-    expect(String(diagnostic)).not.toMatch(/NEEDLE-CAND|Secret candidate|corpus-purge-proposals/);
+    for (const operation of [() => store.purge([id], evidence), () => store.previewPurge([id])]) {
+      const diagnostic = await operation().catch((error: Error) => error);
+      expect(String(diagnostic)).not.toMatch(/NEEDLE-CAND|Secret Candidate Title|corpus-purge-proposals/);
+    }
     expect(everything(root)).toBe(before);
     const prefix = id.slice(0, -1);
     await expect(store.purge([prefix], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: `Record not found: ${prefix}` });
