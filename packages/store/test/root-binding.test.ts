@@ -9,6 +9,22 @@ import { KnowledgeFileTransactions, scaffoldNewRootIdentity } from '../src/share
 import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '../src/index.js';
 
 describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAdapter]] as const)('root binding %s', (_profile, Constructor) => {
+  test.skipIf(process.getuid === undefined)('reports a non-private coordinationDirectory without masking root binding failures', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-coordination-'));
+    try {
+      const root = join(base, 'store'); mkdirSync(root);
+      const coordinationDirectory = join(base, 'coordination'); mkdirSync(coordinationDirectory); chmodSync(coordinationDirectory, 0o755);
+      const options = { storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock };
+      expect(() => new Constructor(options)).toThrow(/coordinationDirectory.*private/);
+      await expect(initializeRootBinding(options)).rejects.toThrow(/coordinationDirectory.*private/);
+      const error = await initializeRootBinding(options).catch((cause: Error) => cause);
+      expect(String(error)).not.toContain(base);
+      chmodSync(coordinationDirectory, 0o700);
+      await initializeRootBinding(options);
+      expect(() => assertAdapterBoundTo(new Constructor(options), root)).not.toThrow();
+      await expect(initializeRootBinding({ ...options, storeRoot: join(base, 'missing') })).rejects.toMatchObject({ code: 'ROOT_BINDING_MISMATCH' });
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
   test('existing unmarked roots require explicit initialization', async () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-root-legacy-'));
     try {

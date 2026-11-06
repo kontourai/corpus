@@ -117,6 +117,11 @@ export class CreateProposals {
     return text === null ? null : parseProposal(text, path, id);
   }
 
+  /** A diagnostic must not replace the original missing-record error if lookup fails. */
+  isIdentifiable(id: string): boolean {
+    try { return this.get(id) !== null; } catch { return false; }
+  }
+
   list(options: CreateProposalListOptions = {}): KitCreateProposal[] {
     const wanted = parseStates(options);
     const proposals: KitCreateProposal[] = [];

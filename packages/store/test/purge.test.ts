@@ -73,7 +73,7 @@ describe.each(['default', 'vault'] as const)('purge — %s profile', (profile) =
     const before = files(root);
     for (const options of [{ allowPurge: undefined }, { allowPurge: false }]) {
       const closed = open(profile, root, options);
-      await expect(closed.purge(['guarded'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY' });
+      await expect(closed.purge(['guarded'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.stringContaining('allowPurge: true') });
     }
     expect(files(root)).toEqual(before);
     expect((await store.get('guarded'))?.status).toBe('active');
@@ -640,7 +640,7 @@ describe('purge — vault layout', () => {
     const kit = join(base, 'kit');
     cpSync(fileURLToPath(new URL('./fixtures/kit-v1/kit-vault', import.meta.url)), kit, { recursive: true });
     const adapter = open('vault', kit);
-    await expect(adapter.purge(['kit-raw-0001'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY' });
+    await expect(adapter.purge(['kit-raw-0001'], evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.stringContaining('corpus-store migrate') });
     expect((await adapter.get('kit-raw-0001'))?.status).not.toBe('purged');
   });
 });

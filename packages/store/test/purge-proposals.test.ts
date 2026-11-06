@@ -68,6 +68,18 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     ...extra,
   });
 
+  test('a proposal id passed to record purge gives a specific diagnostic after authorization', async () => {
+    const id = await store.proposeCreate(candidate([]), 'proposer-1', proposal());
+    await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: expect.stringContaining('purgeProposal') });
+    await expect(store.purge(['unknown-id'], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Record not found: unknown-id' });
+    await expect(store.purge(['unknown-id', id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Record not found: unknown-id' });
+    const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
+    const closed = new Constructor({ storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+    await expect(closed.purge([id], evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.not.stringContaining('purgeProposal') });
+    writeFileSync(join(root, '.corpus-proposals', `${id}.json`), '{');
+    await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: `Record not found: ${id}` });
+  });
+
   test('a pending proposal that rests only on a purged record is rejected with the purge rationale, erased, and can never apply', async () => {
     await raw('src');
     const id = await store.proposeCreate(candidate(['src'], { tags: ['secret-tag'] }), 'proposer-1', proposal('Secret proposal text NEEDLE-EVID'));

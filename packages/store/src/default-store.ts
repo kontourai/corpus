@@ -1126,7 +1126,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
   private planPurgeLocked(requested: string[]): PurgeExecution {
     const records = new Map(this.allRecords().map((record) => [record.id, record]));
     for (const id of requested) {
-      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
+      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id, this.proposals.isIdentifiable(id));
     }
     const plan = planPurge(requested, records);
     return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };
