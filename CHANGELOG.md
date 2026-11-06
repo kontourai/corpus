@@ -8,7 +8,7 @@
 
 ## Unreleased — Corpus
 
-- Clarify store erasure results and retained reasons. A record purge identifies an exact readable proposal id under `NOT_FOUND`, and root initialization reports an invalid `coordinationDirectory` without disguising it as a root-binding mismatch.
+- Clarify store erasure results and retained reasons. A record purge identifies an exact readable proposal id under `NOT_FOUND`, and root initialization reports a non-private `coordinationDirectory` without disguising it as a root-binding mismatch.
 
 - Add explicit JSON Pointer value bindings for shared content metadata, with canonical object ordering and distinct missing/null handling. Whole-file `covers` reviews cannot use partial values to clear freshness.
 

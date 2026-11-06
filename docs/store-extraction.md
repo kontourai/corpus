@@ -384,8 +384,9 @@ preview vectors), 208 passing and 1 expected failure (`purge-journal-in-flight`)
 ### Purge preview and revision
 
 Record purge and preview report a `NOT_FOUND` hint for an exact, readable proposal
-id; unreadable or unknown proposals retain the ordinary missing-record error.
-The host still authorizes erasure before the adapter examines a purge target.
+id. A failed diagnostic lookup retains the ordinary missing-record error; earlier
+revision, storage, format and integrity checks retain their own errors. The host
+still authorizes erasure before the adapter examines a purge target.
 A non-private `coordinationDirectory` reports its own corruption error during
 root initialization; invalid root identity still reports `ROOT_BINDING_MISMATCH`.
 The focused purge-proposal and root-binding tests cover both adapters.
