@@ -427,6 +427,7 @@ interface PurgeExecution {
   proposals: ProposalErasePlan;
   reviewedReceipts: string[];
 }
+type ProposalRecordStep = { purge: PurgeExecution } | { reviewedReceipts: string[] };
 
 export interface KitObsidianStoreOptions extends StoreOptions {
   /** Subfolder name for raw/compiled (source-level) records under each category. Default "sources". */
@@ -1594,7 +1595,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     addLinksToGraph(graph, id, newLinks);
     this.saveGraph(graph);
 
-    this.writeRecord(updated, pathIndex);
+    this.writeRecord(updated, pathIndex, captured ? { enforceNoteBound: 'applyReviewedConfidence' } : undefined);
     this.savePathIndex(pathIndex);
 
     if (aliasIndex) this.saveAliasIndex(aliasIndex);
@@ -2338,7 +2339,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
           this.planPurgeProposalLocked(input.proposalId),
           input.evidence,
           () => new Date(this.services.clock()).toISOString(),
-          (step) => this.commitPurgeLocked(step, input.evidence),
+          (step) => {
+            if ('purge' in step) return this.commitPurgeLocked(step.purge, input.evidence);
+            this.reviewedReceipts.retire(step.reviewedReceipts);
+            return undefined;
+          },
         );
       },
       { erasure: true },
@@ -2355,7 +2360,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       return {
         proposalId: plan.proposal.id,
         alreadyErased: plan.alreadyErased,
-        ...(plan.record ? { record: this.purgeResultOf(plan.record) } : {}),
+        ...(plan.record && 'purge' in plan.record ? { record: this.purgeResultOf(plan.record.purge) } : {}),
         revision,
         state: plan.proposal.state,
         ...(plan.proposal.record_id !== undefined ? { recordId: plan.proposal.record_id } : {}),
@@ -2368,12 +2373,14 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     // proposal file can be confirmed against a guess at its content. Erasing it would leave that
     // digest behind, so the host deletes the artifacts first, as for `purge`.
     this.assertNoMigrationArtifacts('purgeProposal');
-    return this.proposals.planOne<PurgeExecution>(proposalId, (recordId) => {
+    return this.proposals.planOne<ProposalRecordStep>(proposalId, (recordId) => {
       // A tombstone needs no second purge. A record the path index lists but whose note is missing
       // is a corrupt vault, which `readRecord` refuses; nothing is written.
       const pathIndex = this.loadPathIndex();
       const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
-      return record && !isPurged(record) ? this.planPurgeLocked([recordId]) : undefined;
+      return record && !isPurged(record)
+        ? { purge: this.planPurgeLocked([recordId]) }
+        : { reviewedReceipts: this.reviewedReceipts.planRetire(new Set([recordId])) };
     });
   }
 

@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, reviewedConfidenceCandidateDigest, standaloneFileMutationLock } from '../src/index.js';
+import { VAULT_NOTE_MAX_BYTES } from '../src/obsidian-store.js';
 
 test('candidate digest has a literal portable encoding', () => {
   expect(reviewedConfidenceCandidateDigest({ rootBinding: '0'.repeat(64), recordId: 'target', revision: `record-rev1:${'1'.repeat(64)}`, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: `record-rev1:${'2'.repeat(64)}` }] })).toBe('sha256:bd8fca6aaf5d78aa8e6881bf8e69903039ddc146783ebea8402e7a07cdbd81af');
@@ -84,6 +85,64 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
     } finally { rmSync(base, { recursive: true, force: true }); }
   });
 
+  test.each(['target', 'evidence'])('missing proposal-created %s still retires its receipt', async (role) => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-proposal-'));
+    try {
+      const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true };
+      const store = new Constructor(options);
+      await store.create({ id: 'other', type: 'raw', title: 'Other', body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      const proposal = await store.proposeCreate({ id: 'created', type: 'raw', title: 'Created', body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } }, 'proposer', { agent: 'creator', proposal: 'review' });
+      await store.applyCreate(proposal, 'reviewer');
+      const targetId = role === 'target' ? 'created' : 'other';
+      const sourceId = role === 'target' ? 'other' : 'created';
+      const target = await store.reviewedConfidenceSnapshot(targetId); const source = await store.reviewedConfidenceSnapshot(sourceId);
+      const candidate = { rootBinding: target.rootBinding, recordId: targetId, revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: sourceId, revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'missing-created', agent: 'reviewer' };
+      const receipt = await store.applyReviewedConfidence(request);
+      const receiptFile = join(options.storeRoot, '.corpus-reviewed-confidence', `${receipt.receiptId}.json`);
+      const retainedInput = JSON.parse(readFileSync(receiptFile, 'utf8')).input;
+      let path = join(options.storeRoot, 'records', 'created.md');
+      if (profile === 'vault') {
+        const indexPath = join(options.storeRoot, 'path-index.json');
+        const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+        path = join(options.storeRoot, index.by_id.created.path);
+        delete index.by_path[index.by_id.created.path]; delete index.by_id.created;
+        writeFileSync(indexPath, JSON.stringify(index, null, 2) + '\n');
+      }
+      rmSync(path);
+      await store.purgeProposal(proposal, { agent: 'eraser', rationale: 'request' });
+      const retired = readFileSync(receiptFile, 'utf8');
+      expect(retired).not.toContain(retainedInput);
+      expect(JSON.parse(retired)).toEqual({ version: 1, key: receipt.receiptId, retired: true });
+      await expect(new Constructor(options).applyReviewedConfidence(request)).rejects.toBeDefined();
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
+  if (profile === 'vault') test('a reviewed update that would exceed the vault note limit refuses atomically', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-vault-limit-'));
+    try {
+      const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true };
+      const store = new KitObsidianStoreAdapter(options);
+      for (const id of ['target', 'source']) await store.create({ id, type: 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      const indexPath = join(options.storeRoot, 'path-index.json');
+      const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+      const targetPath = join(options.storeRoot, index.by_id.target.path);
+      const original = readFileSync(targetPath, 'utf8');
+      const boundary = original.indexOf('\n---\n') + 5;
+      const padding = VAULT_NOTE_MAX_BYTES - 32 - Buffer.byteLength(original);
+      writeFileSync(targetPath, original.slice(0, boundary) + 'x'.repeat(padding) + original.slice(boundary));
+      const before = readFileSync(targetPath); const graph = readFileSync(join(options.storeRoot, 'graph-index.json')); const indexBefore = readFileSync(indexPath);
+      const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
+      const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'limit', agent: 'reviewer' };
+      await expect(store.applyReviewedConfidence(request)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
+      expect(readFileSync(targetPath)).toEqual(before);
+      expect(readFileSync(join(options.storeRoot, 'graph-index.json'))).toEqual(graph);
+      expect(readFileSync(indexPath)).toEqual(indexBefore);
+      expect(existsSync(join(options.storeRoot, '.corpus-reviewed-confidence'))).toBe(false);
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
   test('stale target, missing or changed evidence, and wrong root refuse without an update', async () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-stale-'));
     try {
@@ -108,6 +167,33 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       expect((await store.reviewedConfidenceSnapshot('target')).revision).toBe(before.revision);
       expect(before.record.confidence).toBe(0.3);
     } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
+  test('copies the reviewed request before a queued lock can be released', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-queued-'));
+    let release!: () => void;
+    try {
+      let armed = false; let entered!: () => void;
+      const atLock = new Promise<void>((resolve) => { entered = resolve; });
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      const lock = async (path: string) => {
+        const unlock = await standaloneFileMutationLock(path);
+        if (armed) { armed = false; entered(); await held; }
+        return unlock;
+      };
+      const store = new Constructor({ storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock, allowReviewedConfidence: true });
+      for (const id of ['target', 'source']) await store.create({ id, type: 'raw', title: id, body: 'body', category: 'test', confidence: 0.3, provenance: { agent: 'creator' } });
+      const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
+      const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'queued', agent: 'reviewer' };
+      armed = true;
+      const applying = store.applyReviewedConfidence(request);
+      await atLock;
+      request.newConfidence = 0.9; request.evidence[0].id = 'other';
+      release();
+      await applying;
+      expect((await store.get('target'))?.confidence).toBe(0.7);
+    } finally { release?.(); rmSync(base, { recursive: true, force: true }); }
   });
 
   test('concurrent different updates from one revision cannot both commit', async () => {
@@ -146,10 +232,10 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
         const ready = new Promise<void>((resolve, reject) => {
           child.once('error', reject);
           child.stdout.on('data', (chunk) => { stdout += String(chunk); if (stdout.includes('ready\n')) resolve(); });
-          child.once('exit', (code) => { if (!stdout.includes('ready\n')) reject(new Error(`racer exited before ready: ${code} ${stderr}`)); });
+          child.once('close', (code) => { if (!stdout.includes('ready\n')) reject(new Error(`racer exited before ready: ${code} ${stderr}`)); });
         });
         child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-        const done = new Promise<string>((resolve, reject) => { child.once('error', reject); child.once('exit', (code) => code === 0 ? resolve(stdout) : reject(new Error(`racer failed: ${code} ${stderr}`))); });
+        const done = new Promise<string>((resolve, reject) => { child.once('error', reject); child.once('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(`racer failed: ${code} ${stderr}`))); });
         void done.catch(() => {});
         return { child, ready, done };
       });

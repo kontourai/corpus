@@ -118,7 +118,7 @@ interface PurgeExecution {
 }
 
 /** The record step of `purgeProposal`: purge the record, or just rebuild indexes when its file is gone. */
-type RecordStep = { purge: PurgeExecution } | { rebuild: true };
+type RecordStep = { purge: PurgeExecution } | { rebuild: boolean; reviewedReceipts: string[] };
 
 export type { ReindexResult };
 
@@ -1237,9 +1237,10 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
           () => new Date(this.services.clock()).toISOString(),
           (step) => {
             if ('rebuild' in step) {
-              // The record's file is gone, so its alias and graph entries (a slug, link labels) have
-              // no record to be purged with. Rebuild them from the records that remain.
-              this.rebuildIndexes();
+              // A missing file needs its indexes rebuilt; a tombstone does not. Both
+              // paths retire receipts that still name the proposal-created record.
+              if (step.rebuild) this.rebuildIndexes();
+              this.reviewedReceipts.retire(step.reviewedReceipts);
               return undefined;
             }
             return this.commitPurgeLocked(step.purge, input.evidence);
@@ -1285,10 +1286,12 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
             `create proposal ${proposalId}: its record ${recordId} is missing but record ${dependent.id} still refers to it; restore the record or remove the reference, then erase the proposal`,
           );
         }
-        return { rebuild: true };
+        return { rebuild: true, reviewedReceipts: this.reviewedReceipts.planRetire(new Set([recordId])) };
       }
       // A tombstone needs no second purge.
-      return isPurged(record) ? undefined : { purge: this.planPurgeLocked([recordId]) };
+      return isPurged(record)
+        ? { rebuild: false, reviewedReceipts: this.reviewedReceipts.planRetire(new Set([recordId])) }
+        : { purge: this.planPurgeLocked([recordId]) };
     });
   }
 
