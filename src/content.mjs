@@ -11,6 +11,29 @@ const COMMIT = /^[a-f0-9]{40}$/;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const fail = (message) => { throw new UsageError(`content: NOT_VERIFIED: ${message}`); };
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const validPointer = (value) => typeof value === 'string' && (value === '' || value.startsWith('/')) && !/~(?:[^01]|$)/.test(value);
+function ordered(value) {
+  if (typeof value === 'number' && (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)))) fail('selected JSON number is outside the finite safe range');
+  if (Array.isArray(value)) return value.map(ordered);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, ordered(value[key])]));
+  return value;
+}
+
+/** Whole-file bytes, or canonical JSON for one explicitly selected value. */
+export function contentDigest(bytes, pointer) {
+  if (pointer === undefined) return hash(bytes);
+  if (!validPointer(pointer)) fail('invalid JSON Pointer');
+  let value;
+  try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+  catch { fail('selected content is not valid UTF-8 JSON'); }
+  for (const encoded of pointer === '' ? [] : pointer.slice(1).split('/')) {
+    const key = encoded.replaceAll('~1', '/').replaceAll('~0', '~');
+    if (value === null || typeof value !== 'object' || !Object.hasOwn(value, key) ||
+      (Array.isArray(value) && !/^(?:0|[1-9][0-9]*)$/.test(key))) fail(`JSON Pointer does not resolve: ${pointer}`);
+    value = value[key];
+  }
+  return hash(JSON.stringify(ordered(value)));
+}
 
 function keys(value, allowed, required, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -51,13 +74,14 @@ function files(entries, label) {
   nonemptyArray(entries, label);
   const identities = new Set();
   for (const entry of entries) {
-    keys(entry, ['path', 'url', 'sha256', 'revision'], ['sha256'], label);
+    keys(entry, ['path', 'url', 'sha256', 'revision', 'pointer'], ['sha256'], label);
     if (Boolean(entry.path) === Boolean(entry.url) || !SHA.test(entry.sha256)) fail(`${label}: expected one path or URL and a SHA-256`);
     if (entry.url) {
       githubContentReference(entry.url);
       if (!COMMIT.test(entry.revision)) fail(`${label}: remote files need the reviewed full commit revision`);
     } else if (repoPathError(entry.path) || entry.path.startsWith('.git/') || entry.revision !== undefined) fail(`${label}: invalid local file`);
-    const identity = entry.path ?? entry.url;
+    if (entry.pointer !== undefined && !validPointer(entry.pointer)) fail(`${label}: invalid JSON Pointer`);
+    const identity = JSON.stringify([entry.path ?? entry.url, entry.pointer ?? null]);
     if (identities.has(identity)) fail(`${label}: duplicate file ${identity}`);
     identities.add(identity);
   }
@@ -171,14 +195,14 @@ export async function checkContentReviews(root, manifest, checkouts = []) {
   for (const review of manifest.reviews) {
     for (const [kind, entries] of [['input', review.inputs], ['output', review.outputs]]) {
       for (const entry of entries) {
-        if (hash(await read(entry)) !== entry.sha256) failures.push(`${review.id}: changed ${kind}: ${entry.url ?? entry.path}`);
+        if (contentDigest(await read(entry), entry.pointer) !== entry.sha256) failures.push(`${review.id}: changed ${kind}: ${entry.url ?? entry.path}${entry.pointer === undefined ? '' : `#${entry.pointer}`}`);
       }
     }
   }
   return {
     schemaVersion: 1, command: 'content check', verdict: failures.length ? 'fail' : 'pass',
     exitCode: failures.length ? 1 : 0, failures, observedRevisions,
-    limits: 'Freshness of declared bytes only; not semantic correctness, complete dependency coverage, legal classification, release availability or deployment. Re-review claims before changing hashes.',
+    limits: 'Freshness of declared file bytes or selected JSON values only; not semantic correctness, complete dependency coverage, legal classification, release availability or deployment. Re-review claims before changing hashes.',
   };
 }
 

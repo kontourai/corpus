@@ -8,6 +8,8 @@
 
 ## Unreleased — Corpus
 
+- Add explicit JSON Pointer value bindings for shared content metadata, with canonical object ordering and distinct missing/null handling. Whole-file `covers` reviews cannot use partial values to clear freshness.
+
 - Accept new local input/output byte reviews as explicit no-prose-change evidence for covering documentation. Old, unrelated, incomplete or stale reviews cannot clear freshness; remote reviews stay outside the offline docs gate.
 
 - Add `corpus content impact` and `corpus content check` for portable GitHub content relationships and explicit input/output byte reviews, with optional checkout mappings, coherent remote revisions, and distinct changed/unavailable outcomes. Existing docs freshness and manifests stay compatible.
