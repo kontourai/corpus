@@ -474,6 +474,51 @@ Vault layout: category-routed notes, `people/`, archives, `path-index.json`,
 `graph-index.json`, `alias-index.json`, and collision-safe body sentinels.
 Graph and alias indexes can be rebuilt; vault path mappings remain authoritative.
 
+## Reviewed confidence updates
+
+`reviewedConfidenceSnapshot(exactId)` returns the record, its root binding and a
+`record-rev1:` revision read together under the store lock. The revision identifies
+the exact stored bytes of that record and root, not the whole store. A byte change
+changes the revision; returning to exactly the same bytes returns the same revision.
+The root binding is an identity, not an authorization secret. Moving or replacing
+the bound root changes the binding and invalidates prior revisions.
+
+The host constructs a candidate with `rootBinding`, `recordId`, `revision`,
+`oldConfidence` (`null` means absent), `newConfidence`, and a non-empty, sorted
+array of unique evidence `{ id, revision }` pairs. IDs are exact and the target
+cannot be its own evidence. Call `reviewedConfidenceCandidateDigest(candidate)`
+to bind those fields. After authenticating and authorizing an independent human,
+the host verifies that the decision names that exact candidate, rejects self-review,
+and calls `applyReviewedConfidence` with the candidate, its `candidateDigest`, an
+opaque `authorizationDigest`, a `requestKey`, and the acting `agent`. Neither the
+digest nor an actor string proves the reviewer is human. The host must repeat its
+authorization before every call, including retries. Enable the operation explicitly
+with `allowReviewedConfidence: true` only for that host path; without it the adapter
+refuses with `READ_ONLY` before reading the request or store.
+
+Under the existing mutation lock, apply checks the bound root and each exact target
+and evidence record. Historical records are refused; evidence revisions must still
+match. A first application also checks the target revision and old confidence, then
+writes the score and its receipt in one transaction. A matching retry returns the
+original receipt without writing the score again, even if a later write changed the
+target; the receipt records a past operation and does not say the current score is
+still in place. Reusing a target-scoped key for a different request is
+`REQUEST_KEY_CONFLICT`. A stale revision is `STALE_REVISION`; missing records are
+`NOT_FOUND`. A changed or erased evidence record prevents replay. A record purge
+retires receipt content for that target or any evidence record it erases; later use
+of that key is refused. The key identity remains to prevent reuse. The agent and
+request key must not contain content to be erased. As for other erasures, a prepared
+in-flight journal can temporarily retain before-images until recovery completes.
+
+Candidate and authorization digests must be lower-case `sha256:` values. Corpus
+checks its candidate digest against the score and evidence fields; the host owns the
+meaning and verification of the opaque authorization digest. The helper hashes the
+UTF-8 JSON serialization of the array `['corpus-reviewed-confidence-candidate-v1',
+rootBinding, recordId, revision, oldConfidence, newConfidence, [[id, revision], ...]]`
+using JavaScript `JSON.stringify` number and string encoding. Inputs are bounded:
+apply IDs at most 200 characters, at most 256 evidence records, and agent and request key
+at most 1024 UTF-8 bytes. Digests and revisions are identifiers, not permission.
+
 ## Vault index and migration
 
 `path-index.json` is the canonical vault path index. The vault adapter selects

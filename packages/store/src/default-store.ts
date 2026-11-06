@@ -1,4 +1,6 @@
-import { captureRootBinding } from './root-binding.js';
+import { assertAdapterBoundTo, captureRootBinding } from './root-binding.js';
+import { recordRevision } from './shared/record-revision.js';
+import { applyReviewedLocked, reviewedRequest, ReviewedConfidenceReceipts } from './shared/reviewed-confidence.js';
 import { scaffoldNewRootIdentity } from './shared/file-transactions.js';
 import { RootBindingMismatchError } from './errors.js';
 /**
@@ -24,6 +26,9 @@ import type {
   KnowledgeStoreAdapter,
   KnowledgeStoreCreateProposals,
   KnowledgeStorePurger,
+  KnowledgeStoreReviewedConfidence,
+  ReviewedConfidenceRequest,
+  ReviewedConfidenceReceipt,
   LinkEvidence,
   ListOptions,
   ProposalPurgePreview,
@@ -109,6 +114,7 @@ interface PurgeExecution {
   records: ReadonlyMap<string, KitRecord>;
   plan: PurgePlan;
   proposals: ProposalErasePlan;
+  reviewedReceipts: string[];
 }
 
 /** The record step of `purgeProposal`: purge the record, or just rebuild indexes when its file is gone. */
@@ -118,7 +124,7 @@ export type { ReindexResult };
 
 export interface KitDefaultStoreOptions extends StoreOptions {}
 
-export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
+export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -127,6 +133,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
   private readonly aliasPath: string;
   private readonly files: KnowledgeFileTransactions;
   private readonly proposals: CreateProposals;
+  private readonly reviewedReceipts: ReviewedConfidenceReceipts;
 
   constructor(options: KitDefaultStoreOptions) {
     if (!options?.storeRoot) throw new Error('storeRoot is required');
@@ -144,6 +151,8 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
+    this.reviewedReceipts = new ReviewedConfidenceReceipts(this.files, this.root);
+    Object.defineProperty(this, 'reviewedReceipts', { enumerable: false });
   }
 
   rootBinding(): string { if (!this.binding) throw new RootBindingMismatchError(); return this.binding; }
@@ -165,9 +174,9 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       .map((f) => f.slice(0, -3));
   }
 
-  private readRecord(id: string): KitRecord | null {
+  private readRecord(id: string, captured?: Buffer): KitRecord | null {
     const path = this.recordPath(id);
-    const text = this.files.readText(path);
+    const text = captured === undefined ? this.files.readText(path) : captured.toString('utf8');
     if (text === null) return null;
     try {
       const { meta, body } = parseMarkdown(text);
@@ -442,6 +451,36 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
 
   // ── update (§6.2) ──────────────────────────────────────────────────────
 
+  /** Read one exact record and its byte revision under the same lock. */
+  async reviewedConfidenceSnapshot(id: string): Promise<import('./contracts.js').ReviewedConfidenceSnapshot> {
+    return this.files.read(() => {
+      const { historical: _historical, ...snapshot } = this.reviewedConfidenceSnapshotLocked(id);
+      return snapshot;
+    });
+  }
+
+  private reviewedConfidenceSnapshotLocked(id: string): import('./contracts.js').ReviewedConfidenceSnapshot & { historical: boolean } {
+      if (!isSafePathSegment(id)) throw new KnowledgeRecordNotFoundError(id);
+      assertAdapterBoundTo(this, this.root);
+      if (this.files.readBytes(join(this.root, '.corpus-root-id'), 64) === null) throw new RootBindingMismatchError();
+      assertAdapterBoundTo(this, this.root);
+      const bytes = this.files.readBytes(this.recordPath(id));
+      if (bytes === null) throw new KnowledgeRecordNotFoundError(id);
+      const record = this.readRecord(id, bytes);
+      if (!record) throw new KnowledgeRecordNotFoundError(id);
+      const rootBinding = this.rootBinding();
+      return { rootBinding, record, revision: recordRevision(rootBinding, id, bytes), historical: isHistorical(record) };
+  }
+
+  async applyReviewedConfidence(input: ReviewedConfidenceRequest): Promise<ReviewedConfidenceReceipt> {
+    if (this.services.allowReviewedConfidence !== true) throw new ReadOnlyStoreError('applyReviewedConfidence', 'reviewed confidence updates are disabled; the host enables them after authorization.');
+    const request = reviewedRequest(input);
+    return this.files.mutate('applyReviewedConfidence', () => applyReviewedLocked(request, this.reviewedReceipts,
+      (id) => this.reviewedConfidenceSnapshotLocked(id),
+      (id, score, agent, captured) => this.updateLocked(id, { confidence: score }, { agent }, captured),
+      () => new Date(this.services.clock()).toISOString()));
+  }
+
   async update(
     id: string,
     fields: UpdateFields,
@@ -456,6 +495,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     id: string,
     fields: UpdateFields,
     evidence: UpdateEvidence,
+    captured?: KitRecord,
   ): void {
     if (!evidence?.agent) {
       throw new MissingEvidenceError(
@@ -463,7 +503,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       );
     }
 
-    const record = this.readRecord(id);
+    const record = captured ?? this.readRecord(id);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
     assertNotPurged('update', record);
 
@@ -1114,6 +1154,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     const revision = new StoreRevision(this.binding);
     for (const id of this.listIds().sort()) revision.add('record', id, this.files.readText(this.recordPath(id)));
     for (const part of this.proposals.revisionParts()) revision.add('proposal', part.name, part.text);
+    for (const part of this.reviewedReceipts.revisionParts()) revision.add('reviewed-confidence', part.name, part.text);
     return revision.value();
   }
 
@@ -1129,7 +1170,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
       if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id, this.proposals.isIdentifiable(id));
     }
     const plan = planPurge(requested, records);
-    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };
+    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased), reviewedReceipts: this.reviewedReceipts.planRetire(plan.allErased) };
   }
 
   /** The lists of a `PurgeResult`: ids only. The one place a plan becomes a result, for preview and commit. */
@@ -1175,6 +1216,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
     this.proposals.commitErase(execution.proposals, evidence, now);
+    this.reviewedReceipts.retire(execution.reviewedReceipts);
     return this.purgeResultOf(execution);
   }
 

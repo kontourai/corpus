@@ -45,7 +45,7 @@ export class SelfApprovalError extends Error {
 
 export class RequestKeyConflictError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'REQUEST_KEY_CONFLICT';
-  constructor(retired = false) { super(retired ? 'proposeCreate: request key is retired after content scrub' : 'proposeCreate: request key already used with different input'); this.name = 'RequestKeyConflictError'; }
+  constructor(retired = false, op = 'proposeCreate') { super(retired ? `${op}: request key is retired after content scrub` : `${op}: request key already used with different input`); this.name = 'RequestKeyConflictError'; }
 }
 
 /**
@@ -55,8 +55,8 @@ export class RequestKeyConflictError extends Error {
  */
 export class StaleRevisionError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'STALE_REVISION';
-  constructor(op: string) {
-    super(`${op}: the store changed since the preview; preview again and confirm the new effects`);
+  constructor(op: string, reason = 'the store changed since the preview; preview again and confirm the new effects') {
+    super(`${op}: ${reason}`);
     this.name = 'StaleRevisionError';
   }
 }
