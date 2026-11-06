@@ -160,7 +160,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
       const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'limit', agent: 'reviewer' };
       await expect(store.applyReviewedConfidence(request)).rejects.toMatchObject({ code: 'MISSING_EVIDENCE' });
-      expect(readFileSync(targetPath)).toEqual(before);
+      expect(readFileSync(targetPath).equals(before)).toBe(true);
       expect(readFileSync(join(options.storeRoot, 'graph-index.json'))).toEqual(graph);
       expect(readFileSync(indexPath)).toEqual(indexBefore);
       expect(existsSync(join(options.storeRoot, '.corpus-reviewed-confidence'))).toBe(false);
