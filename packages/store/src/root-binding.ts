@@ -1,6 +1,6 @@
 import { constants, closeSync, fstatSync, openSync, readFileSync, realpathSync, lstatSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { KnowledgeFileTransactions, scaffoldNewRootIdentity, settleScaffoldMarker } from './shared/file-transactions.js';
+import { CoordinationDirectoryError, KnowledgeFileTransactions, scaffoldNewRootIdentity, settleScaffoldMarker } from './shared/file-transactions.js';
 import type { StoreOptions } from './services.js';
 import { join } from 'node:path';
 import type { KnowledgeStoreAdapter, RootBoundAdapter } from './contracts.js';
@@ -30,6 +30,7 @@ export async function initializeRootBinding(options: StoreOptions): Promise<void
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new RootBindingMismatchError();
     files = new KnowledgeFileTransactions(options.storeRoot, {}, options);
   } catch (error) {
+    if (error instanceof CoordinationDirectoryError) throw error;
     if (error instanceof RootBindingMismatchError || error instanceof KnowledgeStoreCorruptionError || (error as NodeJS.ErrnoException).code === 'ENOENT') throw new RootBindingMismatchError();
     throw error;
   }

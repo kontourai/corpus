@@ -179,11 +179,13 @@ export interface RetireEvidence {
  */
 export interface PurgeEvidence {
   agent: string;
+  /** Retained in audit evidence. Never put erased text here. */
   rationale: string;
+  /** Retained in audit evidence. Never put erased text here. */
   note?: string;
 }
 
-/** What one `purge` call changed. Every list holds record ids, never content. */
+/** What one `purge` call changed. Lists hold record or proposal ids, never content. */
 export interface PurgeResult {
   /** The requested ids that this call tombstoned. */
   purged: string[];
@@ -214,7 +216,8 @@ export interface PurgeResult {
   proposalsScrubbed: string[];
   /**
    * Pending create proposals with some erased support and some left. They stay pending
-   * but `applyCreate` refuses them with `PURGED`; a reviewer should reject them.
+   * but `applyCreate` refuses them with `PURGED`. Rejecting leaves their text stored;
+   * use `purgeProposal` if that text must be erased.
    */
   proposalsBlocked: string[];
 }

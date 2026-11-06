@@ -17,8 +17,8 @@ export class MissingEvidenceError extends Error {
 export class KnowledgeRecordNotFoundError extends Error {
   readonly code: KnowledgeStoreErrorCode = 'NOT_FOUND';
 
-  constructor(id: string) {
-    super(`Record not found: ${id}`);
+  constructor(id: string, isProposal = false) {
+    super(isProposal ? `Record not found: ${id}; this id names a proposal. Use purgeProposal to erase it.` : `Record not found: ${id}`);
     this.name = 'KnowledgeRecordNotFoundError';
   }
 }

@@ -36,6 +36,12 @@ import {
 } from './observation-file.js';
 
 const JOURNAL_VERSION = 1;
+/** A bad coordination directory is distinct from a bad store root. */
+export class CoordinationDirectoryError extends KnowledgeStoreCorruptionError {
+  constructor() {
+    super('coordinationDirectory must be a real private directory; where user ownership and Unix permissions are available, it must be owned by the current user and inaccessible to others (for example, mode 0700).');
+  }
+}
 /** Operations that run with `{ erasure: true }` and so prune the folders they empty. */
 const ERASURE_OPERATIONS: ReadonlySet<string> = new Set(['purge', 'purgeProposal']);
 const JOURNAL_FILE = '.station-knowledge-transaction.json';
@@ -277,9 +283,7 @@ export class KnowledgeFileTransactions {
           (coordinationInfo.uid !== process.getuid() ||
             (coordinationInfo.mode & 0o077) !== 0))
       ) {
-        throw new KnowledgeStoreCorruptionError(
-          'Knowledge lock coordination root is not private to this user',
-        );
+        throw new CoordinationDirectoryError();
       }
       const lockIdentity = knowledgeLockIdentity(
         this.rootRealpath,

@@ -54,7 +54,8 @@ silent behavior.
   count. Only creation is checked: existing compiled records without a source
   stay readable, listable and updatable.
 
-- **Purge erases records, and nothing else deletes them.** *(2026-11-02; this
+- **Erase a record with `purge`; erase a proposal with `purgeProposal`.**
+  *(2026-11-02; this
   reverses the earlier rule that no operation deletes a record.)* `purge(ids,
   {agent, rationale, note?})` is an explicit, audited, privileged operation, and
   supersede stays the default for ordinary change. The owner's conditions: it is
@@ -65,9 +66,10 @@ silent behavior.
     type, `KnowledgeStorePurger`, and an adapter refuses it with `READ_ONLY`
     before any I/O unless the host built it with `allowPurge: true`, which a host
     sets only after its own authorization. `agent` and `rationale` are required.
-    Both are kept in the log, so neither may carry the erased content.
+    The agent, rationale and note are retained as audit evidence: never put erased text in them.
   - **Targets.** Exact record ids only, never aliases or prefixes. Every id must
-    exist (`NOT_FOUND`) or nothing is written. Purging a tombstone again is a
+    exist (`NOT_FOUND`) or nothing is written. An identifiable proposal id gets
+    a `purgeProposal` hint under the same code. Purging a tombstone again is a
     no-op that reports it in `alreadyPurged`.
   - **Tombstone.** Each target and each cascaded record is rewritten in place
     with `status: purged`. It keeps `id`, `type`, `created_at`, provenance
@@ -85,7 +87,10 @@ silent behavior.
     none. Surface#351 calls this retention state `deleted`; the stored
     `status: purged` is the same fact, and the id, provenance and `purged` entry
     are the erasure trace it asks for.
-  - **Cascade.** A record's support is `provenance.source_ids` plus the targets of
+  - **Cascade.** Erasing a source also erases affected records that have no other
+    remaining support. Records with other support stay; review them for leftover text.
+    `cascaded` lists records erased with the requested records; `survivors` lists
+    records kept because they have other support. A record's support is `provenance.source_ids` plus the targets of
     its `source` links. `related`, `proposes` and `supersedes` links are
     references, not support. A record is *affected* when a chain of support
     reaches a requested id. An affected record is tombstoned unless it still has
@@ -160,7 +165,8 @@ silent behavior.
     `erasure` (`at`, `agent`, `rationale`, `note`). A pending proposal with support
     left stays pending and is listed as `proposalsBlocked`: `applyCreate` refuses it
     with `PURGED` because its candidate still cites an erased record, and a reviewer
-    should reject it. `proposeCreate` refuses such a candidate up front, and also a candidate whose
+    can reject it to prevent application, but rejection leaves its text stored. Use
+    `purgeProposal` if that text must be erased. `proposeCreate` refuses such a candidate up front, and also a candidate whose
     provenance (`agent`, `session_id`, `note`, `source_ids`) or links hold anything but text,
     or a link has an empty `target_id` or `kind` (the reader refuses such a record;
     [#56](https://github.com/kontourai/corpus/issues/56) tracks `create` itself)
@@ -425,7 +431,10 @@ The lock function has Station's `FileMutationLock` shape:
 `(lockPath: string) => release | Promise<release>`, where release returns void or
 Promise<void>. Station keeps its own implementation. All three of `lock`, `coordinationDirectory` and `coordinationIdentity` are required. Opening without them, or with an identity factory that does not return a recheck, throws before filesystem I/O. Every cooperating writer
 must inject the same lock protocol and coordination directory. Pass the final
-private directory, not a host home path. The package preserves the hashed
+private directory, not a host home path. Where Unix ownership and permissions are
+available, it must be owned by the current user and inaccessible to other users;
+mode `0700` provides the required access. Windows does not use this Unix mode check.
+The package preserves the hashed
 realpath/device/inode `.lock` name and `.station-knowledge-transaction.json` v1
 journal, including recovery and publication ordering.
 

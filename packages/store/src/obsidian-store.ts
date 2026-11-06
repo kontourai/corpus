@@ -2198,7 +2198,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       if (record) records.set(id, record);
     }
     for (const id of requested) {
-      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id);
+      if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id, this.proposals.isIdentifiable(id));
     }
     const plan = planPurge(requested, records);
     return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };

@@ -68,6 +68,37 @@ describe.each(['default', 'vault'] as const)('purge and create proposals — %s 
     ...extra,
   });
 
+  test('a proposal id passed to record purge gives a specific diagnostic after authorization', async () => {
+    const id = await store.proposeCreate(candidate([]), 'proposer-1', proposal());
+    const before = everything(root);
+    await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: expect.stringContaining('purgeProposal') });
+    await expect(store.previewPurge([id])).rejects.toMatchObject({ code: 'NOT_FOUND', message: expect.stringContaining('purgeProposal') });
+    for (const operation of [() => store.purge([id], evidence), () => store.previewPurge([id])]) {
+      const diagnostic = await operation().catch((error: Error) => error);
+      expect(String(diagnostic)).not.toMatch(/NEEDLE-CAND|Secret Candidate Title|corpus-purge-proposals/);
+    }
+    expect(everything(root)).toBe(before);
+    const prefix = id.slice(0, -1);
+    await expect(store.purge([prefix], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: `Record not found: ${prefix}` });
+    await expect(store.purge(['unknown-id'], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Record not found: unknown-id' });
+    await expect(store.purge(['unknown-id', id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'Record not found: unknown-id' });
+    const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
+    const closed = new Constructor({ storeRoot: root, coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+    await expect(closed.purge([id], evidence)).rejects.toMatchObject({ code: 'READ_ONLY', message: expect.not.stringContaining('purgeProposal') });
+    const revision = (await store.previewPurgeProposal(id)).revision;
+    await raw('revision-change');
+    await expect(store.purge([id], evidence, { expectedRevision: revision })).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    writeFileSync(join(root, '.corpus-proposals', `${id}.json`), '{');
+    await expect(store.purge([id], evidence)).rejects.toMatchObject({ code: 'NOT_FOUND', message: `Record not found: ${id}` });
+  });
+
+  test('a record takes precedence over a proposal with the same exact id', async () => {
+    const id = await store.proposeCreate(candidate([]), 'proposer-1', proposal());
+    await raw(id);
+    await expect(store.purge([id], evidence)).resolves.toMatchObject({ purged: [id] });
+    expect((await store.get(id))?.status).toBe('purged');
+  });
+
   test('a pending proposal that rests only on a purged record is rejected with the purge rationale, erased, and can never apply', async () => {
     await raw('src');
     const id = await store.proposeCreate(candidate(['src'], { tags: ['secret-tag'] }), 'proposer-1', proposal('Secret proposal text NEEDLE-EVID'));
