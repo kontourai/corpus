@@ -113,6 +113,28 @@ when it selects targets, and `2` when its configuration or diff is unavailable.
 
 ## Keep it running
 
+### Scope a JSON review to its owning value
+
+A file reference can add `"pointer": "/products/station"` to bind only that
+JSON value. This is useful when one metadata file contains several products:
+another product's release should not invalidate an unchanged Station review.
+Pointers follow RFC 6901 (`~0` for `~`, `~1` for `/`). An empty pointer selects
+the whole parsed JSON value. Missing values, malformed pointers and invalid
+UTF-8 JSON are unavailable, not a matching null or a passing check.
+Selected numbers must be finite, and integers must be within JavaScript's
+safe range; use JSON strings for larger identifiers or exact decimal records.
+
+The digest is SHA-256 of `JSON.stringify` after recursively sorting object keys;
+array order is preserved. Formatting and object-key order therefore do not
+affect the value digest. Without `pointer`, the existing raw-byte digest stays
+unchanged. `contentDigest(bytes, pointer)` from `@kontourai/corpus/content`
+computes the same digest for a review; it does not record or approve one.
+
+Several different pointers in one file may appear in a review. This precision
+applies to `content check`; the offline `covers` freshness gate still requires
+whole-file input and document bindings, so a partial value cannot approve
+unreviewed changes elsewhere in a covered file.
+
 ### Review an unchanged covering document
 
 `corpus check --base <ref>` accepts a local review in `corpus-content.json` as

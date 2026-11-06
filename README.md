@@ -15,6 +15,9 @@
 - **A docs bundle for agents.** `build` also writes `docs-bundle.json`, and `corpus mcp` serves every product's bundle from one MCP server.
 - **Related content across repositories.** `corpus content impact` maps changed files to GitHub content targets; `corpus content check` detects drift in explicitly reviewed product inputs and website outputs. Local source-bound reviews can also justify unchanged covering prose in `corpus check --base`. See [related content](docs/related-content.md).
 
+Content reviews can select a JSON Pointer within a shared metadata file, so an
+unrelated product version change does not invalidate another product's review.
+
 The docs CLI is plain ESM JavaScript for Node 22 or newer, with no build step. Corpus Store builds TypeScript only within `packages/store`. Install it from npm as an exact-pinned dev dependency, so your lockfile covers Corpus and every package it depends on:
 
 ```sh
