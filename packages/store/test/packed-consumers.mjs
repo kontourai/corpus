@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,9 +18,14 @@ function pack(cwd) {
 }
 try {
   const store = pack(packageRoot);
+  const storeHash = sha256(store);
+  console.log(JSON.stringify({ artifact: store, sha256: storeHash }));
   const conformance = pack(join(repo, 'packages/conformance'));
-  const verified = [store, conformance].map((file) => ({ file, hash: sha256(file) }));
+  const conformanceHash = sha256(conformance);
+  console.log(JSON.stringify({ artifact: conformance, sha256: conformanceHash }));
+  const verified = [{ file: store, hash: storeHash }, { file: conformance, hash: conformanceHash }];
   const docs = pack(repo);
+  console.log(JSON.stringify({ artifact: docs, sha256: sha256(docs) }));
   const js = join(temporary, 'js-consumer');
   const ts = join(temporary, 'ts-consumer');
   const docsConsumer = join(temporary, 'docs-consumer');
@@ -163,4 +168,7 @@ void read; void MissingEvidenceError; void observeExactKnowledgeRecordFile;
     writeFileSync(join(artifacts, 'SHA256SUMS'), sums.join('\n') + '\n');
   }
   console.log(JSON.stringify({ node: process.version, storeSha256: verified[0].hash, conformanceSha256: verified[1].hash, js: 'PASS', ts: 'PASS', docsPackedBuildFree: 'PASS' }));
-} finally { rmSync(temporary, { recursive: true, force: true }); }
+} finally {
+  // Retain the entire consumer root even if a nested child has not settled.
+  console.error(`Packed-consumer artifacts retained at ${temporary}; audit ownership and processes before removal.`);
+}
