@@ -21739,6 +21739,413 @@
           "equals": "active"
         }
       ]
+    },
+    {
+      "id": "reviewed-confidence-literal-digest",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "literal-digest"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "actual",
+          "equals": "sha256:bd8fca6aaf5d78aa8e6881bf8e69903039ddc146783ebea8402e7a07cdbd81af"
+        },
+        {
+          "ref": "independent",
+          "equals": "sha256:bd8fca6aaf5d78aa8e6881bf8e69903039ddc146783ebea8402e7a07cdbd81af"
+        }
+      ],
+      "regression": "Reviewed confidence must bind and revalidate evidence, retain replay safely, and fail closed.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-replay",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "replay"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "sameReceipt",
+          "equals": true
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        },
+        {
+          "ref": "conflict",
+          "equals": "REQUEST_KEY_CONFLICT"
+        }
+      ],
+      "regression": "Reviewed confidence must bind and revalidate evidence, retain replay safely, and fail closed.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-stale-evidence",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "stale-evidence"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "STALE_REVISION"
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        }
+      ],
+      "regression": "Reviewed confidence must bind and revalidate evidence, retain replay safely, and fail closed.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-erased-evidence",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "erased-evidence"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "REQUEST_KEY_CONFLICT"
+        },
+        {
+          "ref": "retired",
+          "equals": true
+        },
+        {
+          "ref": "keys",
+          "equals": [
+            "key",
+            "retired",
+            "version"
+          ]
+        }
+      ],
+      "regression": "Reviewed confidence must bind and revalidate evidence, retain replay safely, and fail closed.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-default-deny",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "default-deny"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "READ_ONLY"
+        },
+        {
+          "ref": "score",
+          "equals": 0.3
+        }
+      ],
+      "regression": "Reviewed confidence must bind and revalidate evidence, retain replay safely, and fail closed.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-missing-evidence",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "missing-evidence"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "NOT_FOUND"
+        },
+        {
+          "ref": "score",
+          "equals": 0.3
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-erased-target",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "erased-target"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "MISSING_EVIDENCE"
+        },
+        {
+          "ref": "retired",
+          "equals": true
+        },
+        {
+          "ref": "keys",
+          "equals": [
+            "key",
+            "retired",
+            "version"
+          ]
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-race",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "race"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "applied",
+          "equals": 1
+        },
+        {
+          "ref": "stale",
+          "equals": 1
+        },
+        {
+          "ref": "updates",
+          "equals": 1
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-crash-prepared",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "crash",
+          "phase": "prepared"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "before",
+          "equals": 0.3
+        },
+        {
+          "ref": "countBefore",
+          "equals": 0
+        },
+        {
+          "ref": "receiptsBefore",
+          "equals": 0
+        },
+        {
+          "ref": "sameReceipt",
+          "equals": true
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        },
+        {
+          "ref": "updates",
+          "equals": 1
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-crash-first-publish",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "crash",
+          "phase": "first-publish"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "before",
+          "equals": 0.3
+        },
+        {
+          "ref": "countBefore",
+          "equals": 0
+        },
+        {
+          "ref": "receiptsBefore",
+          "equals": 0
+        },
+        {
+          "ref": "sameReceipt",
+          "equals": true
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        },
+        {
+          "ref": "updates",
+          "equals": 1
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-crash-final-publish",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "crash",
+          "phase": "final-publish"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "before",
+          "equals": 0.7
+        },
+        {
+          "ref": "countBefore",
+          "equals": 1
+        },
+        {
+          "ref": "receiptsBefore",
+          "equals": 1
+        },
+        {
+          "ref": "sameReceipt",
+          "equals": true
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        },
+        {
+          "ref": "updates",
+          "equals": 1
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-crash-committed",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "crash",
+          "phase": "committed"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "before",
+          "equals": 0.7
+        },
+        {
+          "ref": "countBefore",
+          "equals": 1
+        },
+        {
+          "ref": "receiptsBefore",
+          "equals": 1
+        },
+        {
+          "ref": "sameReceipt",
+          "equals": true
+        },
+        {
+          "ref": "score",
+          "equals": 0.7
+        },
+        {
+          "ref": "updates",
+          "equals": 1
+        }
+      ],
+      "regression": "Reviewed confidence must preserve conditional updates and durable retry across processes.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-stale-target",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "stale-target"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "STALE_REVISION"
+        },
+        {
+          "ref": "score",
+          "equals": 0.3
+        }
+      ],
+      "regression": "Reviewed confidence refuses stale or unauthorized baselines without changing the score.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-wrong-root",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "wrong-root"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "ROOT_BINDING_MISMATCH"
+        },
+        {
+          "ref": "score",
+          "equals": 0.3
+        }
+      ],
+      "regression": "Reviewed confidence refuses stale or unauthorized baselines without changing the score.",
+      "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-retired-evidence",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "retired-evidence"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "STALE_REVISION"
+        },
+        {
+          "ref": "score",
+          "equals": 0.3
+        }
+      ],
+      "regression": "Reviewed confidence refuses stale or unauthorized baselines without changing the score.",
+      "production_seam": true
     }
   ]
 }

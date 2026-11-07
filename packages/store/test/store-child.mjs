@@ -3,7 +3,20 @@ const [profile, root, coordinationDirectory, mode, value] = process.argv.slice(2
 const adapter = createStore(profile, root, coordinationDirectory);
 if (mode === 'create') await adapter.create(input(value));
 else if (mode === 'update') await adapter.update('shared-record', { tags: [value] }, { agent: value });
-else if (mode === 'crash') {
+else if (mode === 'reviewed-race') {
+  process.stdout.write('ready\n');
+  await new Promise((resolve) => process.stdin.once('data', resolve));
+  try { await adapter.applyReviewedConfidence(JSON.parse(value)); process.stdout.write('applied\n'); }
+  catch (error) { process.stdout.write(`error:${error?.code ?? 'unexpected'}\n`); }
+} else if (mode === 'reviewed-crash') {
+  const { phase, request } = JSON.parse(value);
+  let publications = 0; let entries = 0;
+  adapter.files.hooks.afterJournalWrite = (journal) => { entries = journal.entries.length; if (phase === 'prepared' && journal.phase === 'prepared') process.exit(23); };
+  adapter.files.hooks.afterFilePublish = () => { publications++; if ((phase === 'first-publish' && publications === 1) || (phase === 'final-publish' && publications === entries)) process.exit(23); };
+  adapter.files.hooks.afterCommitMarker = () => { if (phase === 'committed') process.exit(23); };
+  await adapter.applyReviewedConfidence(request);
+  throw new Error('Reviewed confidence crash injection did not run');
+} else if (mode === 'crash') {
   // Ported transaction crash seam, kept internal; never exposed as public /storage.
   let publications = 0;
   let entries = 0;

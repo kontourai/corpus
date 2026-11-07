@@ -32,7 +32,7 @@ try {
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, conformance], js));
   writeFileSync(join(js, 'probe.mjs'), `
 import assert from 'node:assert/strict';
-import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock } from '@kontourai/corpus-store';
+import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, standaloneFileMutationLock, reviewedConfidenceCandidateDigest } from '@kontourai/corpus-store';
 import { KnowledgeStoreCorruptionError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 const metadata = await import('@kontourai/corpus-store/package.json', { with: { type: 'json' } });
@@ -41,9 +41,21 @@ assert.equal(typeof KnowledgeStoreCorruptionError, 'function');
 assert.equal(typeof observeExactKnowledgeRecordFile, 'function');
 assert.equal(typeof standaloneFileMutationLock, 'function');
 for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
- const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+ const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true });
  const id = await adapter.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  assert.equal((await adapter.get(id)).body, 'Consumer body');
+ for (const item of ['review-target', 'review-source']) await adapter.create({ id: item, type: 'raw', title: item, body: 'body', category: 'testing', confidence: 0.3, provenance: { agent: 'consumer' } });
+ const target = await adapter.reviewedConfidenceSnapshot('review-target');
+ const source = await adapter.reviewedConfidenceSnapshot('review-source');
+ const candidate = { rootBinding: target.rootBinding, recordId: 'review-target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'review-source', revision: source.revision }] };
+ const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: 'sha256:' + 'a'.repeat(64), requestKey: 'packed', agent: 'reviewer' };
+ const receipt = await adapter.applyReviewedConfidence(request);
+ assert.deepEqual(await adapter.applyReviewedConfidence(request), receipt);
+ assert.equal((await adapter.get('review-target')).confidence, 0.7);
+ await adapter.update('review-source', { body: 'changed' }, { agent: 'editor' });
+ await assert.rejects(adapter.applyReviewedConfidence(request), { code: 'STALE_REVISION' });
+ await adapter.purge(['review-source'], { agent: 'eraser', rationale: 'requested' });
+ await assert.rejects(adapter.applyReviewedConfidence(request), { code: 'REQUEST_KEY_CONFLICT' });
 }
 {
  const closed = new KitDefaultStoreAdapter({ storeRoot: new URL('./closed', import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
@@ -71,7 +83,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type ProposalPurgeResult, type StoreOptions, type FileMutationLock, type KitRecord } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type ProposalPurgeResult, type StoreOptions, type FileMutationLock, type KitRecord, type KnowledgeStoreReviewedConfidence, type ReviewedConfidenceSnapshot, type ReviewedConfidenceRequest, type ReviewedConfidenceReceipt, reviewedConfidenceCandidateDigest } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -79,6 +91,16 @@ import { resolve } from 'node:path';
 const lock: FileMutationLock = async (_path) => () => {};
 const options: StoreOptions = { storeRoot: resolve('typed-store'), coordinationDirectory: resolve('typed-coordination'), coordinationIdentity: () => () => {}, lock, clock: () => 0, ids: () => 'id', diagnostics: { warn() {} }, transactionObserver(_operation, _outcome) {} };
 const stores: KnowledgeStoreAdapter[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
+const reviewed: KnowledgeStoreReviewedConfidence = new KitDefaultStoreAdapter({ ...options, storeRoot: resolve('typed-reviewed'), allowReviewedConfidence: true });
+const reviewedStore = reviewed as KitDefaultStoreAdapter;
+for (const item of ['typed-target', 'typed-source']) await reviewedStore.create({ id: item, type: 'raw', title: item, body: 'body', category: 'testing', confidence: 0.3, provenance: { agent: 'consumer' } });
+const typedTarget: ReviewedConfidenceSnapshot = await reviewed.reviewedConfidenceSnapshot('typed-target');
+const typedSource: ReviewedConfidenceSnapshot = await reviewed.reviewedConfidenceSnapshot('typed-source');
+const typedCandidate = { rootBinding: typedTarget.rootBinding, recordId: 'typed-target', revision: typedTarget.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'typed-source', revision: typedSource.revision }] };
+const typedRequest: ReviewedConfidenceRequest = { ...typedCandidate, candidateDigest: reviewedConfidenceCandidateDigest(typedCandidate), authorizationDigest: 'sha256:' + 'a'.repeat(64), requestKey: 'typed', agent: 'reviewer' };
+const typedReceipt: ReviewedConfidenceReceipt = await reviewed.applyReviewedConfidence(typedRequest);
+assert.deepEqual(await reviewed.applyReviewedConfidence(typedRequest), typedReceipt);
+assert.equal((await reviewedStore.get('typed-target'))?.confidence, 0.7);
 async function read(): Promise<KitRecord | null> { return stores[0].get('id'); }
 const id = await stores[0].create({ type: 'raw', title: 'Typed consumer', body: 'Typed body', category: 'testing', provenance: { agent: 'consumer' } });
 assert.equal((await stores[0].get(id))?.body, 'Typed body');
