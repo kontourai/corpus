@@ -67,25 +67,37 @@ export async function makeHarness(profile) {
   };
   function reviewedChild(mode, value) {
     const proc = spawn(process.execPath, [fileURLToPath(new URL('./store-child.mjs', import.meta.url)), profile, root, coordinationDirectory, mode, JSON.stringify(value)], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let out = ''; let err = ''; let closed = false;
-    const done = new Promise((resolve, reject) => {
-      proc.once('error', reject);
-      proc.once('close', (status, signal) => { closed = true; resolve({ status, signal, out, err }); });
+    let out = ''; let err = ''; let closed = false; let processError; let inputError;
+    proc.on('error', (error) => { processError = error; });
+    proc.stdin.on('error', (error) => { inputError = error; });
+    proc.stdout.on('error', (error) => { err += ` stdout: ${error.message}`; });
+    proc.stderr.on('error', (error) => { err += ` stderr: ${error.message}`; });
+    // An error is evidence of failure, but only close settles child/pipe ownership.
+    const done = new Promise((resolve) => {
+      proc.once('close', (status, signal) => { closed = true; resolve({ status, signal, out, err, processError, inputError }); });
     });
-    void done.catch(() => {});
     let readyResolve;
     const ready = new Promise((resolve) => { readyResolve = resolve; });
     proc.stdout.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) readyResolve(); });
     proc.stderr.on('data', (chunk) => { err += chunk; });
+    const send = () => new Promise((resolve, reject) => {
+      if (inputError) return reject(inputError);
+      proc.stdin.end('go', (error) => error || inputError ? reject(error ?? inputError) : resolve());
+    });
     async function stop() {
       if (closed) return;
       proc.kill('SIGTERM');
       try { await deadline(done, 2000, `${mode} termination`); return; } catch { /* escalate only our own child */ }
       if (!closed) proc.kill('SIGKILL');
       try { await deadline(done, 2000, `${mode} forced termination`); }
-      catch (error) { retainFixture = true; throw error; }
+      catch {
+        retainFixture = true;
+        // Preserve the root while releasing parent-side references if close never arrives.
+        proc.stdin.destroy(); proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
+        throw new Error(`reviewed-confidence ${profile}: ${mode} child did not close; fixture retained at ${base}`);
+      }
     }
-    return { proc, ready, done, stop };
+    return { proc, ready, done, send, stop };
   }
   const specials = {
     async 'reviewed-confidence'({ operation }) {
@@ -142,9 +154,9 @@ export async function makeHarness(profile) {
         const racers = requests.map((item) => reviewedChild('reviewed-race', item));
         try {
           await deadline(Promise.all(racers.map((r) => Promise.race([r.ready, r.done.then(() => { throw new Error(`reviewed-confidence ${profile}: racer exited before ready`); })]))), 30000, 'race readiness');
-          racers.forEach((r) => r.proc.stdin.end('go'));
+          await deadline(Promise.all(racers.map((r) => r.send())), 30000, 'race start');
           const results = await deadline(Promise.all(racers.map((r) => r.done)), 30000, 'race completion');
-          for (const result of results) assert.equal(result.status, 0, `reviewed-confidence ${profile}: racer failed: ${result.err}`);
+          for (const result of results) { assert.ifError(result.processError); assert.ifError(result.inputError); assert.equal(result.status, 0, `reviewed-confidence ${profile}: racer failed: ${result.err}`); }
           return { applied: results.filter((x) => x.out.includes('applied\n')).length, stale: results.filter((x) => x.out.includes('error:STALE_REVISION\n')).length, updates: (await adapter.get('target')).mutation_log.filter((x) => x.op === 'update').length };
         } finally {
           const stopped = await Promise.allSettled(racers.map((r) => r.stop()));
@@ -158,6 +170,7 @@ export async function makeHarness(profile) {
         let outcome;
         try { outcome = await deadline(processChild.done, 30000, `crash ${phase} completion`); }
         finally { await processChild.stop(); }
+        assert.ifError(outcome.processError);
         assert.equal(outcome.status, 23, `reviewed-confidence ${profile}: crash ${phase}: ${outcome.err}`);
         const reopened = createStore(profile, root, coordinationDirectory);
         const prior = await reopened.get('target');
