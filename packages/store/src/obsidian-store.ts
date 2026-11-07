@@ -1,4 +1,6 @@
-import { captureRootBinding } from './root-binding.js';
+import { assertAdapterBoundTo, captureRootBinding } from './root-binding.js';
+import { recordRevision } from './shared/record-revision.js';
+import { applyReviewedLocked, reviewedRequest, ReviewedConfidenceReceipts, REVIEWED_CONFIDENCE_DIRECTORY } from './shared/reviewed-confidence.js';
 import { scaffoldNewRootIdentity } from './shared/file-transactions.js';
 import { RootBindingMismatchError } from './errors.js';
 /**
@@ -30,6 +32,9 @@ import type {
   KnowledgeStoreAdapter,
   KnowledgeStoreCreateProposals,
   KnowledgeStorePurger,
+  KnowledgeStoreReviewedConfidence,
+  ReviewedConfidenceRequest,
+  ReviewedConfidenceReceipt,
   LinkEvidence,
   ListOptions,
   ProposeEvidence,
@@ -46,6 +51,7 @@ import type {
   UpdateFields,
 } from './contracts.js';
 import { resolveServices, type StoreOptions, type ResolvedServices, diagnostics } from './services.js';
+import { isSafePathSegment } from './path-safety.js';
 import {
   KnowledgeRecordNotFoundError,
   KnowledgeStoreCorruptionError,
@@ -419,7 +425,9 @@ interface PurgeExecution {
   records: ReadonlyMap<string, KitRecord>;
   plan: PurgePlan;
   proposals: ProposalErasePlan;
+  reviewedReceipts: string[];
 }
+type ProposalRecordStep = { purge: PurgeExecution } | { reviewedReceipts: string[] };
 
 export interface KitObsidianStoreOptions extends StoreOptions {
   /** Subfolder name for raw/compiled (source-level) records under each category. Default "sources". */
@@ -465,7 +473,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
  */
 const TOMBSTONE_DIR = 'archive/purged';
 
-export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger {
+export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -477,6 +485,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   private readonly aliasPath: string;
   private readonly files: KnowledgeFileTransactions;
   private readonly proposals: CreateProposals;
+  private readonly reviewedReceipts: ReviewedConfidenceReceipts;
 
   constructor(options: KitObsidianStoreOptions) {
     if (!options?.storeRoot) throw new Error('storeRoot is required');
@@ -502,6 +511,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     Object.defineProperty(this, "files", { enumerable: false });
     this.proposals = new CreateProposals(this.files, this.root, this.services);
     Object.defineProperty(this, "proposals", { enumerable: false });
+    this.reviewedReceipts = new ReviewedConfidenceReceipts(this.files, this.root);
+    Object.defineProperty(this, 'reviewedReceipts', { enumerable: false });
   }
 
   rootBinding(): string { if (!this.binding) throw new RootBindingMismatchError(); return this.binding; }
@@ -542,7 +553,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     return (
       entry.kind === 'file' &&
       entry.name.endsWith('.json') &&
-      directory === join(this.root, PROPOSALS_DIRECTORY)
+      (directory === join(this.root, PROPOSALS_DIRECTORY) || directory === join(this.root, REVIEWED_CONFIDENCE_DIRECTORY))
     );
   }
 
@@ -717,10 +728,10 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     return this.resolveStorePath(entry.path);
   }
 
-  private readRecord(id: string, pathIndex: PathIndex): KitRecord | null {
+  private readRecord(id: string, pathIndex: PathIndex, captured?: Buffer): KitRecord | null {
     const absPath = this.getAbsPath(id, pathIndex);
     if (!absPath) return null;
-    const text = this.files.readText(absPath);
+    const text = captured === undefined ? this.files.readText(absPath) : captured.toString('utf8');
     if (text === null)
       throw new KnowledgeStoreCorruptionError(
         'Obsidian path index names a missing record',
@@ -1427,6 +1438,43 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
 
   // ── update (§6.2) ──────────────────────────────────────────────────────
 
+  /** Read one exact record and its byte revision under the same lock. */
+  async reviewedConfidenceSnapshot(id: string): Promise<import('./contracts.js').ReviewedConfidenceSnapshot> {
+    return this.files.read(() => {
+      const { historical: _historical, ...snapshot } = this.reviewedConfidenceSnapshotLocked(id);
+      return snapshot;
+    });
+  }
+
+  private reviewedConfidenceSnapshotLocked(id: string, capturedIndex?: PathIndex): import('./contracts.js').ReviewedConfidenceSnapshot & { historical: boolean } {
+      if (!isSafePathSegment(id)) throw new KnowledgeRecordNotFoundError(id);
+      assertAdapterBoundTo(this, this.root);
+      if (this.files.readBytes(join(this.root, '.corpus-root-id'), 64) === null) throw new RootBindingMismatchError();
+      assertAdapterBoundTo(this, this.root);
+      const pathIndex = capturedIndex ?? this.loadPathIndex();
+      if (!Object.hasOwn(pathIndex.by_id, id)) throw new KnowledgeRecordNotFoundError(id);
+      const path = this.getAbsPath(id, pathIndex);
+      if (!path) throw new KnowledgeRecordNotFoundError(id);
+      const bytes = this.files.readBytes(path, VAULT_NOTE_MAX_BYTES);
+      if (bytes === null) throw new KnowledgeRecordNotFoundError(id);
+      const record = this.readRecord(id, pathIndex, bytes);
+      if (!record) throw new KnowledgeRecordNotFoundError(id);
+      const rootBinding = this.rootBinding();
+      return { rootBinding, record, revision: recordRevision(rootBinding, id, bytes), historical: isHistorical(record, { archived: pathIndex.by_id[id].archived }) };
+  }
+
+  async applyReviewedConfidence(input: ReviewedConfidenceRequest): Promise<ReviewedConfidenceReceipt> {
+    if (this.services.allowReviewedConfidence !== true) throw new ReadOnlyStoreError('applyReviewedConfidence', 'reviewed confidence updates are disabled; the host enables them after authorization.');
+    const request = reviewedRequest(input);
+    return this.mutate('applyReviewedConfidence', () => {
+      const pathIndex = this.loadPathIndex();
+      return applyReviewedLocked(request, this.reviewedReceipts,
+        (id) => this.reviewedConfidenceSnapshotLocked(id, pathIndex),
+        (id, score, agent, captured) => this.updateLocked(id, { confidence: score }, { agent }, { record: captured, pathIndex }),
+        () => new Date(this.services.clock()).toISOString());
+    });
+  }
+
   async update(
     id: string,
     fields: UpdateFields,
@@ -1441,6 +1489,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     id: string,
     fields: UpdateFields,
     evidence: UpdateEvidence,
+    captured?: { record: KitRecord; pathIndex: PathIndex },
   ): void {
     if (!evidence?.agent) {
       throw new MissingEvidenceError(
@@ -1448,8 +1497,8 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       );
     }
 
-    const pathIndex = this.loadPathIndex();
-    const record = this.readRecord(id, pathIndex);
+    const pathIndex = captured?.pathIndex ?? this.loadPathIndex();
+    const record = captured?.record ?? this.readRecord(id, pathIndex);
     if (!record) throw new KnowledgeRecordNotFoundError(id);
     assertNotPurged('update', record);
 
@@ -1546,7 +1595,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     addLinksToGraph(graph, id, newLinks);
     this.saveGraph(graph);
 
-    this.writeRecord(updated, pathIndex);
+    this.writeRecord(updated, pathIndex, captured ? { enforceNoteBound: 'applyReviewedConfidence' } : undefined);
     this.savePathIndex(pathIndex);
 
     if (aliasIndex) this.saveAliasIndex(aliasIndex);
@@ -2121,6 +2170,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       revision.add('record', `${id}\0${entry.path}\0${entry.archived ? 'archived' : 'live'}`, text);
     }
     for (const part of this.proposals.revisionParts()) revision.add('proposal', part.name, part.text);
+    for (const part of this.reviewedReceipts.revisionParts()) revision.add('reviewed-confidence', part.name, part.text);
     return revision.value();
   }
 
@@ -2201,7 +2251,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       if (!records.has(id)) throw new KnowledgeRecordNotFoundError(id, this.proposals.isIdentifiable(id));
     }
     const plan = planPurge(requested, records);
-    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased) };
+    return { records, plan, proposals: this.proposals.planErase(plan.erased, plan.allErased), reviewedReceipts: this.reviewedReceipts.planRetire(plan.allErased) };
   }
 
   /** The lists of a `PurgeResult`: ids only. The one place a plan becomes a result, for preview and commit. */
@@ -2270,6 +2320,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     this.saveGraph(graph);
     this.saveAliasIndex(aliasIndex);
     this.proposals.commitErase(execution.proposals, evidence, now);
+    this.reviewedReceipts.retire(execution.reviewedReceipts);
     return this.purgeResultOf(execution);
   }
 
@@ -2288,7 +2339,11 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
           this.planPurgeProposalLocked(input.proposalId),
           input.evidence,
           () => new Date(this.services.clock()).toISOString(),
-          (step) => this.commitPurgeLocked(step, input.evidence),
+          (step) => {
+            if ('purge' in step) return this.commitPurgeLocked(step.purge, input.evidence);
+            this.reviewedReceipts.retire(step.reviewedReceipts);
+            return undefined;
+          },
         );
       },
       { erasure: true },
@@ -2305,7 +2360,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
       return {
         proposalId: plan.proposal.id,
         alreadyErased: plan.alreadyErased,
-        ...(plan.record ? { record: this.purgeResultOf(plan.record) } : {}),
+        ...(plan.record && 'purge' in plan.record ? { record: this.purgeResultOf(plan.record.purge) } : {}),
         revision,
         state: plan.proposal.state,
         ...(plan.proposal.record_id !== undefined ? { recordId: plan.proposal.record_id } : {}),
@@ -2318,12 +2373,14 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     // proposal file can be confirmed against a guess at its content. Erasing it would leave that
     // digest behind, so the host deletes the artifacts first, as for `purge`.
     this.assertNoMigrationArtifacts('purgeProposal');
-    return this.proposals.planOne<PurgeExecution>(proposalId, (recordId) => {
+    return this.proposals.planOne<ProposalRecordStep>(proposalId, (recordId) => {
       // A tombstone needs no second purge. A record the path index lists but whose note is missing
       // is a corrupt vault, which `readRecord` refuses; nothing is written.
       const pathIndex = this.loadPathIndex();
       const record = Object.hasOwn(pathIndex.by_id, recordId) ? this.readRecord(recordId, pathIndex) : null;
-      return record && !isPurged(record) ? this.planPurgeLocked([recordId]) : undefined;
+      return record && !isPurged(record)
+        ? { purge: this.planPurgeLocked([recordId]) }
+        : { reviewedReceipts: this.reviewedReceipts.planRetire(new Set([recordId])) };
     });
   }
 

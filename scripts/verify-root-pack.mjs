@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = process.argv[2] ? resolve(process.argv[2]) : null;
 const metadata = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'));
 const temporary = mkdtempSync(join(tmpdir(), 'corpus-root-pack-'));
+console.error(`Root packed-consumer artifacts retained at ${temporary}.`);
 const env = {
   ...gitEnv(),
   GIT_AUTHOR_NAME: 'corpus pack check',
@@ -54,6 +55,7 @@ try {
   const [packed] = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', temporary], repo));
   const tarball = join(temporary, packed.filename);
   const hash = sha256(tarball);
+  console.log(JSON.stringify({ artifact: tarball, sha256: hash }));
   assert.equal(packed.name, '@kontourai/corpus');
   assert.equal(packed.version, metadata.version);
   assert.deepEqual(packedFileProblems(packed.files.map((file) => file.path), trackedShippedFiles(repo)), []);
@@ -130,5 +132,6 @@ await assert.rejects(import('@kontourai/corpus/src/cli.mjs'), { code: 'ERR_PACKA
   }
   console.log(JSON.stringify({ node: process.version, package: `${packed.name}@${packed.version}`, files: packed.files.length, sha256: hash, exported: artifacts !== null }));
 } finally {
-  rmSync(temporary, { recursive: true, force: true });
+  // Retain the entire root even if a nested child has not settled.
+  console.error(`Root packed-consumer artifacts retained at ${temporary}; audit ownership and processes before removal.`);
 }

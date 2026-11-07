@@ -121,7 +121,7 @@ node --test test/npm-publish-guard.test.mjs test/root-release-preflight.test.mjs
 
 ## Purpose and audience
 
-Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly. Corpus owns documentation checking, publishing, and retrieval today, with [Corpus Store](packages/store/README.md) providing mutable file-backed records as a separate package. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
+Documentation stays bound to the source revision it describes, so people and agents can check, publish, retrieve, and cite it exactly. Corpus owns documentation checking, publishing, and retrieval today, with [Corpus Store](packages/store/README.md) providing mutable file-backed records as a separate package, including host-authorized reviewed confidence updates. It works for any repository or product suite, including projects outside Kontour. Docs bundles remain immutable snapshots; they do not become mutable records.
 
 This repository dogfoods `corpus.json` schema v2 with the `corpus` product identity and publishes at `/corpus/`. Its `builtOn` list is empty: the docs CLI consumes third-party libraries, but no other Kontour product through a public contract.
 

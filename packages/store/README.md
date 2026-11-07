@@ -9,7 +9,7 @@ The extraction preserved Station semantics at
 `2479f38b1ab062e2d9cd6df9f8fa2cdbeee1d136`; its only codec change preserves text
 scalars from old Knowledge Kit writers. Later changes implement the owner's
 decisions one at a time; see [Owner decisions](#owner-decisions). Version
-`0.1.0-next.3` is intended for the `next` npm dist-tag through the
+`0.1.0-next.4` is intended for the `next` npm dist-tag through the
 [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
 
 ## Owner decisions
@@ -474,6 +474,51 @@ Vault layout: category-routed notes, `people/`, archives, `path-index.json`,
 `graph-index.json`, `alias-index.json`, and collision-safe body sentinels.
 Graph and alias indexes can be rebuilt; vault path mappings remain authoritative.
 
+## Reviewed confidence updates
+
+`reviewedConfidenceSnapshot(exactId)` returns the record, its root binding and a
+`record-rev1:` revision read together under the store lock. The revision identifies
+the exact stored bytes of that record and root, not the whole store. A byte change
+changes the revision; returning to exactly the same bytes returns the same revision.
+The root binding is an identity, not an authorization secret. Moving or replacing
+the bound root changes the binding and invalidates prior revisions.
+
+The host constructs a candidate with `rootBinding`, `recordId`, `revision`,
+`oldConfidence` (`null` means absent), `newConfidence`, and a non-empty, sorted
+array of unique evidence `{ id, revision }` pairs. IDs are exact and the target
+cannot be its own evidence. Call `reviewedConfidenceCandidateDigest(candidate)`
+to bind those fields. After authenticating and authorizing an independent human,
+the host verifies that the decision names that exact candidate, rejects self-review,
+and calls `applyReviewedConfidence` with the candidate, its `candidateDigest`, an
+opaque `authorizationDigest`, a `requestKey`, and the acting `agent`. Neither the
+digest nor an actor string proves the reviewer is human. The host must repeat its
+authorization before every call, including retries. Enable the operation explicitly
+with `allowReviewedConfidence: true` only for that host path; without it the adapter
+refuses with `READ_ONLY` before reading the request or store.
+
+Under the existing mutation lock, apply checks the bound root and each exact target
+and evidence record. Historical records are refused; evidence revisions must still
+match. A first application also checks the target revision and old confidence, then
+writes the score and its receipt in one transaction. A matching retry returns the
+original receipt without writing the score again, even if a later write changed the
+target; the receipt records a past operation and does not say the current score is
+still in place. Reusing a target-scoped key for a different request is
+`REQUEST_KEY_CONFLICT`. A stale revision is `STALE_REVISION`; missing records are
+`NOT_FOUND`. A changed or erased evidence record prevents replay. A record purge
+retires receipt content for that target or any evidence record it erases; later use
+of that key is refused. The key identity remains to prevent reuse. The agent and
+request key must not contain content to be erased. As for other erasures, a prepared
+in-flight journal can temporarily retain before-images until recovery completes.
+
+Candidate and authorization digests must be lower-case `sha256:` values. Corpus
+checks its candidate digest against the score and evidence fields; the host owns the
+meaning and verification of the opaque authorization digest. The helper hashes the
+UTF-8 JSON serialization of the array `['corpus-reviewed-confidence-candidate-v1',
+rootBinding, recordId, revision, oldConfidence, newConfidence, [[id, revision], ...]]`
+using JavaScript `JSON.stringify` number and string encoding. Inputs are bounded:
+apply IDs at most 200 characters, at most 256 evidence records, and agent and request key
+at most 1024 UTF-8 bytes. Digests and revisions are identifiers, not permission.
+
 ## Vault index and migration
 
 `path-index.json` is the canonical vault path index. The vault adapter selects
@@ -655,12 +700,12 @@ try {
 
 - **One plan, not two.** `purge` and the previews run the same planning code, and one function builds both the preview and the committed result, so the lists cannot differ unless the store changed between the two calls. The tests compare them for a cascade, a support cycle, shared support, referrers, pending, rejected and applied proposals, records that are already tombstones, and an erased proposal. Splitting purge into plan and commit changed one thing: when two different things are broken at once (a corrupt proposal and a corrupt index, or an invalid clock, say), which one is reported first can differ from before. Each is still refused with the error it always was.
 - **What you get.** `PurgePreview` is a `PurgeResult` plus `revision`. `ProposalPurgePreview` is a `ProposalPurgeResult` plus `revision`, the proposal's `state` now (a `pending` one is settled `rejected` by the erasure), and `recordId`, the record an applied proposal created. Its `record` holds the plan for erasing that record, with its cascade.
-- **Read-only.** A preview writes no record, proposal or index. Like every read of the store, it first finishes a transaction that an earlier crash left half done. It refuses what the erasure would refuse: an unknown id is `NOT_FOUND`; a vault that holds migration artifacts or opens read-only is `READ_ONLY`; a vault with a corrupt graph or alias index, or any store with a corrupt proposal, stops a record preview just as it stops `purge` (a pending or rejected proposal's own preview parses only that proposal, as its erasure does). The previews are declared on `KnowledgeStorePurger`, not on the ordinary adapter type, so code typed against the ordinary adapter does not see them. That is a type boundary only: the methods exist on every adapter object, and they reveal only ids that `get` and `listProposals` already return.
+- **Read-only.** A preview writes no record, proposal or index. Like every read of the store, it first finishes a transaction that an earlier crash left half done. It refuses what the erasure would refuse: an unknown id is `NOT_FOUND`; a vault that holds migration artifacts or opens read-only is `READ_ONLY`; a vault with a corrupt graph or alias index, or any store with a corrupt proposal, stops a record preview just as it stops `purge`. A pending or rejected proposal's own plan parses only that proposal, but the preview's revision also checks every reviewed-confidence receipt; a corrupt receipt can block the preview or revision-checked erasure. The previews are declared on `KnowledgeStorePurger`, not on the ordinary adapter type, so code typed against the ordinary adapter does not see them. That is a type boundary only: the methods exist on every adapter object, and they reveal only ids that `get` and `listProposals` already return.
 - **No content.** A preview that succeeds holds ids, states and the revision, and the `STALE_REVISION` message names no record or proposal. When a note or proposal is malformed, the error names that file, as it does for every other read of the store; in a vault the path includes the note's category and title. (A proposal too large to read is reported without its name.)
-- **The revision** is an opaque token for the whole store as the preview saw it: a keyed digest of the raw bytes of every record note and every file in the proposals directory. It changes on any write to a record or a proposal, on the first use of a request key, on a key retired by a scrub, and on an edit made outside the store to a note or a readable proposal (a person editing a vault by hand). It does not change when a request-key retry matches an existing proposal, because that writes nothing and does not change the plan. Record notes and proposals are not parsed, so a corrupt one does not stop the revision (a vault does read its `path-index.json`, so a corrupt index does), and nothing is stored: the store keeps no counter. A file in the proposals directory that is too large to read is listed by name only, so changes to its content do not move the revision; they cannot affect any plan. The key is the root's binding (its path and identity marker), so a token cannot be checked against a guess at the content without the marker, and two stores with identical notes get different tokens. A root with no identity marker (an existing directory that was never initialized) has no key: its previews and `expectedRevision` fail with `ROOT_BINDING_MISMATCH` until the host runs `initializeRootBinding`, while `purge` without `expectedRevision` works as before.
+- **The revision** is an opaque token for the whole store as the preview saw it: a keyed digest of the raw bytes of every record note, every proposal file, and every reviewed-confidence receipt. It changes on any write to a record, proposal or receipt, including a receipt retired by erasure, and on an edit made outside the store to a note or a readable proposal. A matching request-key retry writes nothing and leaves it unchanged. Record notes and proposals are not parsed for the revision, but receipts are validated; a corrupt receipt refuses it. A vault also reads its `path-index.json`, so a corrupt index refuses it. The store keeps no revision counter. A proposal file too large to read is listed by name only, so changes to its content do not move the revision; they cannot affect any plan. The key is the root's binding (its path and identity marker), so a token cannot be checked against a guess at the content without the marker, and two stores with identical notes get different tokens. A root with no identity marker (an existing directory that was never initialized) has no key: its previews and `expectedRevision` fail with `ROOT_BINDING_MISMATCH` until the host runs `initializeRootBinding`, while `purge` without `expectedRevision` works as before.
 - **STALE_REVISION.** With `expectedRevision`, `purge` and `purgeProposal` compare it with the store's revision under the same lock, before anything is written. A mismatch throws `StaleRevisionError` (`code: 'STALE_REVISION'`) and writes nothing; preview again, show the new lists, and pass the new revision. A malformed `expectedRevision` (empty, or not a string) or non-object options are `MISSING_EVIDENCE`. Without it, both verbs behave as before.
 - **What it is not.** The revision covers the whole store, not only the records affected, so an unrelated write also makes a preview stale; the cost is one more preview. It is not a lock: other writes can still happen between the preview and the erasure, and the revision only makes the erasure refuse if one did. It is not an authorization, so the host still decides who may erase. Use a revision once, for the confirmation it was shown with; any later write makes it stale anyway. It does not cover the derived graph and alias indexes: one that is corrupt when the erasure commits is refused as corruption, not as stale. A vault checks both when it plans, so its preview refuses first; the default profile rebuilds a corrupt index while committing, so its preview cannot see a rebuild that will fail (for example, hand-edited conflicting aliases beside a corrupt alias index).
-- **Cost.** A preview and a revision check read every record and proposal file, as `purge` already does.
+- **Cost.** A preview and a revision check read every record, proposal and reviewed-confidence receipt. Receipt scanning grows with retained history.
 
 ### Owner decision: structured source references (2026-11-03)
 

@@ -11,7 +11,7 @@ import { assertAdapterBoundTo, initializeRootBinding, KitDefaultStoreAdapter, Ki
 export const input = (id, fields = {}) => ({ id, type: 'raw', title: id, body: 'original body', category: 'engineering', provenance: { agent: 'creator' }, ...fields });
 export function createStore(profile, root, coordinationDirectory) {
   const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
-  return new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowPurge: true });
+  return new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowPurge: true, allowReviewedConfidence: true });
 }
 export async function recordPath(profile, root, id) {
   if (profile === 'default') return join(root, 'records', `${id}.md`);
@@ -32,6 +32,7 @@ export async function makeHarness(profile) {
   const root = join(base, 'store');
   const coordinationDirectory = join(base, 'coordination', 'knowledge-file-transactions');
   const adapter = createStore(profile, root, coordinationDirectory);
+  let retainFixture = false;
   async function edit(id, mutate) {
     const path = await recordPath(profile, root, id);
     const text = await readFile(path, 'utf8');
@@ -58,7 +59,153 @@ export async function makeHarness(profile) {
     }
     return result;
   }
+  const deadline = async (promise, ms, phase) => {
+    let timer;
+    try {
+      return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`reviewed-confidence ${profile}: ${phase} timed out`)), ms); })]);
+    } finally { clearTimeout(timer); }
+  };
+  function reviewedChild(mode, value) {
+    const proc = spawn(process.execPath, [fileURLToPath(new URL('./store-child.mjs', import.meta.url)), profile, root, coordinationDirectory, mode, JSON.stringify(value)], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = ''; let err = ''; let closed = false; let processError; let inputError;
+    proc.on('error', (error) => { processError = error; });
+    const streamsAvailable = Boolean(proc.stdin && proc.stdout && proc.stderr);
+    proc.stdin?.on('error', (error) => { inputError = error; });
+    proc.stdout?.on('error', (error) => { err += ` stdout: ${error.message}`; });
+    proc.stderr?.on('error', (error) => { err += ` stderr: ${error.message}`; });
+    // An error is evidence of failure, but only close settles child/pipe ownership.
+    const done = new Promise((resolve) => {
+      proc.once('close', (status, signal) => { closed = true; resolve({ status, signal, out, err, processError, inputError }); });
+    });
+    let readyResolve;
+    const ready = new Promise((resolve) => { readyResolve = resolve; });
+    proc.stdout?.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) readyResolve(); });
+    proc.stderr?.on('data', (chunk) => { err += chunk; });
+    const send = () => new Promise((resolve, reject) => {
+      if (!proc.stdin) return reject(new Error(`reviewed-confidence ${profile}: ${mode} stdin unavailable`));
+      if (inputError) return reject(inputError);
+      proc.stdin.end('go', (error) => error || inputError ? reject(error ?? inputError) : resolve());
+    });
+    async function stop() {
+      if (closed) return;
+      proc.kill('SIGTERM');
+      try { await deadline(done, 2000, `${mode} termination`); return; } catch { /* escalate only our own child */ }
+      if (!closed) proc.kill('SIGKILL');
+      try { await deadline(done, 2000, `${mode} forced termination`); }
+      catch {
+        retainFixture = true;
+        // Preserve the root while releasing parent-side references if close never arrives.
+        proc.stdin?.destroy(); proc.stdout?.destroy(); proc.stderr?.destroy(); proc.unref();
+        throw new Error(`reviewed-confidence ${profile}: ${mode} child did not close; fixture retained at ${base}`);
+      }
+    }
+    return { proc, ready, done, send, stop, streamsAvailable };
+  }
   const specials = {
+    async 'reviewed-confidence'({ operation }) {
+      const mode = operation.mode;
+      assert.ok(['replay', 'stale-evidence', 'erased-evidence', 'default-deny', 'literal-digest', 'erased-target', 'missing-evidence', 'race', 'crash', 'stale-target', 'wrong-root', 'retired-evidence', 'wrong-old-confidence'].includes(mode), 'unknown reviewed-confidence mode');
+      const digest = (c) => `sha256:${createHash('sha256').update(JSON.stringify([
+        'corpus-reviewed-confidence-candidate-v1', c.rootBinding, c.recordId, c.revision,
+        c.oldConfidence, c.newConfidence, c.evidence.map((e) => [e.id, e.revision]),
+      ])).digest('hex')}`;
+      if (mode === 'literal-digest') {
+        const { reviewedConfidenceCandidateDigest } = await import('@kontourai/corpus-store');
+        const candidate = { rootBinding: '0'.repeat(64), recordId: 'target', revision: `record-rev1:${'1'.repeat(64)}`, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: `record-rev1:${'2'.repeat(64)}` }] };
+        return { actual: reviewedConfidenceCandidateDigest(candidate), independent: digest(candidate) };
+      }
+      await adapter.create(input('target', { confidence: 0.3 }));
+      await adapter.create(input('source', { confidence: 0.3 }));
+      const target = await adapter.reviewedConfidenceSnapshot('target');
+      const source = await adapter.reviewedConfidenceSnapshot('source');
+      const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
+      const request = { ...candidate, candidateDigest: digest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'reviewed-key', agent: 'reviewer' };
+      const code = async (fn) => { try { await fn(); return 'RESOLVED'; } catch (error) { return error.code ?? 'NO_CODE'; } };
+      if (mode === 'default-deny') {
+        const Constructor = profile === 'default' ? KitDefaultStoreAdapter : KitObsidianStoreAdapter;
+        const closed = new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
+        return { result: await code(() => closed.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
+      }
+      if (mode === 'wrong-old-confidence') {
+        const before = await readFile(await recordPath(profile, root, 'target'));
+        const wrong = { ...candidate, oldConfidence: 0.4 };
+        const result = await code(() => adapter.applyReviewedConfidence({ ...request, ...wrong, candidateDigest: digest(wrong) }));
+        const after = await readFile(await recordPath(profile, root, 'target'));
+        const receipts = await readdir(join(root, '.corpus-reviewed-confidence')).catch((error) => { if (error.code === 'ENOENT') return []; throw error; });
+        return { result, unchanged: before.equals(after), receipts: receipts.filter((name) => name.endsWith('.json')).length };
+      }
+      if (mode === 'stale-target') {
+        await adapter.update('target', { body: 'changed target' }, { agent: 'editor' });
+        return { result: await code(() => adapter.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
+      }
+      if (mode === 'wrong-root') {
+        const wrong = { ...candidate, rootBinding: '0'.repeat(64) };
+        return { result: await code(() => adapter.applyReviewedConfidence({ ...request, ...wrong, candidateDigest: digest(wrong) })), score: (await adapter.get('target')).confidence };
+      }
+      if (mode === 'retired-evidence') {
+        await adapter.retire('source', 'retired', { agent: 'editor', rationale: 'obsolete' });
+        return { result: await code(() => adapter.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
+      }
+      if (mode === 'missing-evidence') {
+        const missing = { ...candidate, evidence: [{ id: 'missing', revision: source.revision }] };
+        return { result: await code(() => adapter.applyReviewedConfidence({ ...request, ...missing, candidateDigest: digest(missing) })), score: (await adapter.get('target')).confidence };
+      }
+      if (mode === 'race') {
+        const other = { ...candidate, newConfidence: 0.8 };
+        const requests = [request, { ...request, ...other, candidateDigest: digest(other), requestKey: 'other-key' }];
+        const racers = [];
+        try {
+          for (const item of requests) {
+            const racer = reviewedChild('reviewed-race', item);
+            racers.push(racer);
+            assert.ok(racer.streamsAvailable, `reviewed-confidence ${profile}: race child streams unavailable`);
+          }
+          await deadline(Promise.all(racers.map((r) => Promise.race([r.ready, r.done.then(() => { throw new Error(`reviewed-confidence ${profile}: racer exited before ready`); })]))), 30000, 'race readiness');
+          await deadline(Promise.all(racers.map((r) => r.send())), 30000, 'race start');
+          const results = await deadline(Promise.all(racers.map((r) => r.done)), 30000, 'race completion');
+          for (const result of results) { assert.ifError(result.processError); assert.ifError(result.inputError); assert.equal(result.status, 0, `reviewed-confidence ${profile}: racer failed: ${result.err}`); }
+          return { applied: results.filter((x) => x.out.includes('applied\n')).length, stale: results.filter((x) => x.out.includes('error:STALE_REVISION\n')).length, updates: (await adapter.get('target')).mutation_log.filter((x) => x.op === 'update').length };
+        } finally {
+          const stopped = await Promise.allSettled(racers.map((r) => r.stop()));
+          const failed = stopped.find((r) => r.status === 'rejected');
+          if (failed) throw failed.reason;
+        }
+      }
+      if (mode === 'crash') {
+        const phase = operation.phase; assert.ok(['prepared', 'first-publish', 'final-publish', 'committed'].includes(phase));
+        const processChild = reviewedChild('reviewed-crash', { phase, request });
+        let outcome;
+        try {
+          assert.ok(processChild.streamsAvailable, `reviewed-confidence ${profile}: crash ${phase} child streams unavailable`);
+          outcome = await deadline(processChild.done, 30000, `crash ${phase} completion`);
+        }
+        finally { await processChild.stop(); }
+        assert.ifError(outcome.processError);
+        assert.equal(outcome.status, 23, `reviewed-confidence ${profile}: crash ${phase}: ${outcome.err}`);
+        const reopened = createStore(profile, root, coordinationDirectory);
+        const prior = await reopened.get('target');
+        const before = prior.confidence; const countBefore = prior.mutation_log.filter((x) => x.op === 'update').length;
+        const receiptFiles = await readdir(join(root, '.corpus-reviewed-confidence')).catch((error) => { if (error.code === 'ENOENT') return []; throw error; });
+        const receiptsBefore = receiptFiles.filter((name) => name.endsWith('.json')).length;
+        const receipt = await reopened.applyReviewedConfidence(request);
+        const repeated = await createStore(profile, root, coordinationDirectory).applyReviewedConfidence(request);
+        return { before, countBefore, receiptsBefore, sameReceipt: JSON.stringify(receipt) === JSON.stringify(repeated), score: (await reopened.get('target')).confidence, updates: (await reopened.get('target')).mutation_log.filter((x) => x.op === 'update').length };
+      }
+      const first = await adapter.applyReviewedConfidence(request);
+      if (mode === 'replay') {
+        const repeated = await adapter.applyReviewedConfidence(request);
+        const changed = { ...candidate, newConfidence: 0.8 };
+        return { sameReceipt: JSON.stringify(first) === JSON.stringify(repeated), score: (await adapter.get('target')).confidence,
+          conflict: await code(() => adapter.applyReviewedConfidence({ ...request, ...changed, candidateDigest: digest(changed) })) };
+      }
+      if (mode === 'stale-evidence') {
+        await adapter.update('source', { body: 'changed evidence' }, { agent: 'editor' });
+        return { result: await code(() => adapter.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
+      }
+      await adapter.purge([mode === 'erased-target' ? 'target' : 'source'], { agent: 'eraser', rationale: 'requested' });
+      const receipt = JSON.parse(await readFile(join(root, '.corpus-reviewed-confidence', `${first.receiptId}.json`), 'utf8'));
+      return { result: await code(() => adapter.applyReviewedConfidence(request)), retired: receipt.retired, keys: Object.keys(receipt).sort() };
+    },
     async 'root-binding'({ operation }) {
       assert.ok(['match', 'alias', 'mismatch', 'rescaffold', 'legacy', 'purge', 'purge-proposal'].includes(operation.mode), 'unknown root-binding mode');
       if (operation.mode === 'match') assertAdapterBoundTo(adapter, root);
@@ -445,5 +592,5 @@ export async function makeHarness(profile) {
       return { a, b };
     },
   };
-  return { adapter, specials, root, coordinationDirectory, dispose: () => rm(base, { recursive: true, force: true }) };
+  return { adapter, specials, root, coordinationDirectory, dispose: () => retainFixture ? Promise.reject(new Error(`reviewed-confidence ${profile}: child did not settle; fixture retained at ${base}`)) : rm(base, { recursive: true, force: true }) };
 }

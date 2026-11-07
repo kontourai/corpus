@@ -381,6 +381,16 @@ EXECUTED on macOS, Node 24.22.1: 209 store vectors per profile (with the purge
 preview vectors), 208 passing and 1 expected failure (`purge-journal-in-flight`), for both default and vault;
 `npm run proof:confidence` caught all 28 faults.
 
+### Reviewed confidence updates
+
+The adapters read exact record bytes and bind their revisions to the root identity.
+Under the existing transaction lock, a reviewed confidence update checks the target
+and every evidence revision, then writes the update and its replay receipt together.
+Record purge plans receipt retirement when it erases either the target or evidence.
+The host owns human authentication, decision binding and authorization. See the
+[store guide](../packages/store/README.md#reviewed-confidence-updates) for the
+contract, retention behavior and limits.
+
 ### Purge preview and revision
 
 Record purge and preview report a `NOT_FOUND` hint for an exact, readable proposal

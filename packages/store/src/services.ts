@@ -25,8 +25,10 @@ export interface StoreOptions {
    * throws `READ_ONLY` before any I/O.
    */
   allowPurge?: boolean;
+  /** Enable reviewed-confidence writes only after the host's authorization. */
+  allowReviewedConfidence?: boolean;
 }
-export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'coordinationIdentity' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver' | 'allowPurge'>;
+export type ResolvedServices = Required<Pick<StoreOptions, 'coordinationDirectory' | 'lock' | 'coordinationIdentity' | 'clock' | 'ids'>> & Pick<StoreOptions, 'diagnostics' | 'transactionObserver' | 'allowPurge' | 'allowReviewedConfidence'>;
 export const serviceScope = new AsyncLocalStorage<ResolvedServices>();
 export function resolveServices(options: Omit<StoreOptions, 'storeRoot'>): ResolvedServices {
   if (typeof options?.lock !== 'function') throw new Error('Explicit lock is required');
@@ -37,6 +39,7 @@ export function resolveServices(options: Omit<StoreOptions, 'storeRoot'>): Resol
   return {
     ...options,
     allowPurge: options.allowPurge === true,
+    allowReviewedConfidence: options.allowReviewedConfidence === true,
     coordinationIdentity: () => recheck,
     coordinationDirectory: resolve(options.coordinationDirectory),
     lock: options.lock,

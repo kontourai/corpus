@@ -135,6 +135,39 @@ export interface UpdateEvidence {
   note?: string;
 }
 
+/** A record and revision read together under the store's coordinated lock. */
+export interface ReviewedConfidenceSnapshot {
+  rootBinding: string;
+  record: KitRecord;
+  revision: string;
+}
+
+/**
+ * A host-authorized confidence change. Evidence must contain sorted, unique exact record IDs
+ * and their exact snapshot revisions. The host authenticates an independent human, checks the
+ * decision against the candidate, and authorizes every call, including retries. Corpus cannot
+ * infer that authority from these strings. Digests and agent must not contain erased text.
+ */
+export interface ReviewedConfidenceRequest {
+  rootBinding: string;
+  recordId: string;
+  revision: string;
+  oldConfidence: number | null;
+  newConfidence: number;
+  evidence: { id: string; revision: string }[];
+  candidateDigest: string;
+  authorizationDigest: string;
+  requestKey: string;
+  agent: string;
+}
+/** A historical receipt, not proof the record remains current. */
+export interface ReviewedConfidenceReceipt { receiptId: string; appliedAt: string }
+/** The host must authenticate and authorize an independent human before calling apply. */
+export interface KnowledgeStoreReviewedConfidence {
+  reviewedConfidenceSnapshot(id: string): Promise<ReviewedConfidenceSnapshot>;
+  applyReviewedConfidence(request: ReviewedConfidenceRequest): Promise<ReviewedConfidenceReceipt>;
+}
+
 export interface LinkEvidence {
   agent: string;
   note?: string;
@@ -332,7 +365,8 @@ export type KnowledgeStoreErrorCode =
   /**
    * `purge` or `purgeProposal` was given an `expectedRevision` that no longer matches the store:
    * a record, a proposal or a request key changed after the preview. Nothing was written.
-   * Preview again and confirm the new effects.
+   * Preview again and confirm the new effects. A reviewed confidence update also uses this
+   * code when its record or evidence revision changed; review a new candidate.
    */
   | 'STALE_REVISION'
   | 'ROOT_BINDING_MISMATCH'

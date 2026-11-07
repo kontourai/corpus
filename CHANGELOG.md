@@ -8,6 +8,8 @@
 
 ## Unreleased — Corpus
 
+- Add a host-authorized, exact-record reviewed-confidence snapshot and conditional update with evidence revisions and durable replay receipts. Purge retires receipts tied to erased targets or evidence. Hosts authenticate reviewers and bind decisions; the store does not infer human authority.
+
 - Clarify store erasure results and retained reasons. A record purge identifies an exact readable proposal id under `NOT_FOUND`, and root initialization reports a non-private `coordinationDirectory` without disguising it as a root-binding mismatch.
 
 - Add explicit JSON Pointer value bindings for shared content metadata, with canonical object ordering and distinct missing/null handling. Whole-file `covers` reviews cannot use partial values to clear freshness.
