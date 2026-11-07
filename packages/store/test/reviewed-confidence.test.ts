@@ -1,11 +1,59 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { KitDefaultStoreAdapter, KitObsidianStoreAdapter, reviewedConfidenceCandidateDigest, standaloneFileMutationLock } from '../src/index.js';
 import { VAULT_NOTE_MAX_BYTES } from '../src/obsidian-store.js';
+
+// Only owned fixture children are signaled; a root is retained if closure is uncertain.
+async function deadline<T>(promise: Promise<T>, ms: number, phase: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${phase} timed out`)), ms); })]); }
+  finally { if (timer) clearTimeout(timer); }
+}
+function fixtureChild(args: string[], base: string, retain: () => void) {
+  const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  let stdout = ''; let stderr = ''; let closed = false; let processError: Error | undefined; let inputError: Error | undefined;
+  child.on('error', (error) => { processError = error; });
+  child.stdin?.on('error', (error) => { inputError = error; });
+  child.stdout?.on('error', (error) => { stderr += ` stdout: ${error.message}`; });
+  child.stderr?.on('error', (error) => { stderr += ` stderr: ${error.message}`; });
+  const done = new Promise<{ code: number | null; stdout: string; stderr: string; processError?: Error; inputError?: Error }>((resolve) => {
+    child.once('close', (code) => { closed = true; resolve({ code, stdout, stderr, processError, inputError }); });
+  });
+  let onReady!: () => void;
+  const ready = new Promise<void>((resolve) => { onReady = resolve; });
+  child.stdout?.on('data', (chunk) => { stdout += String(chunk); if (stdout.includes('ready\n')) onReady(); });
+  child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+  const send = () => new Promise<void>((resolve, reject) => {
+    if (!child.stdin) return reject(new Error('fixture stdin unavailable'));
+    if (inputError) return reject(inputError);
+    child.stdin.end('go', (error?: Error | null) => error || inputError ? reject(error ?? inputError) : resolve());
+  });
+  async function stop() {
+    if (closed) return;
+    child.kill('SIGTERM');
+    try { await deadline(done, 1000, 'fixture termination'); return; } catch { /* only our child */ }
+    if (!closed) child.kill('SIGKILL');
+    try { await deadline(done, 1000, 'fixture forced termination'); }
+    catch {
+      retain(); child.stdin?.destroy(); child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
+      throw new Error(`fixture child did not close; retained at ${base}`);
+    }
+  }
+  return { child, done, ready, send, stop, streamsAvailable: Boolean(child.stdin && child.stdout && child.stderr) };
+}
+async function crashChild(args: string[], base: string, retain: () => void) {
+  const processChild = fixtureChild(args, base, retain);
+  try {
+    if (!processChild.streamsAvailable) throw new Error('crash fixture streams unavailable');
+    const result = await deadline(processChild.done, 5000, 'crash fixture completion');
+    if (result.processError) throw result.processError;
+    return result;
+  } finally { await processChild.stop(); }
+}
 
 test('candidate digest has a literal portable encoding', () => {
   expect(reviewedConfidenceCandidateDigest({ rootBinding: '0'.repeat(64), recordId: 'target', revision: `record-rev1:${'1'.repeat(64)}`, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: `record-rev1:${'2'.repeat(64)}` }] })).toBe('sha256:bd8fca6aaf5d78aa8e6881bf8e69903039ddc146783ebea8402e7a07cdbd81af');
@@ -240,6 +288,7 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
 
   test('independent processes racing one revision produce exactly one effect', async () => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-process-race-'));
+    let retain = false;
     try {
       const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true };
       const store = new Constructor(options);
@@ -250,35 +299,31 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
         return { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'b'.repeat(64)}`, requestKey: key, agent: 'reviewer' };
       };
       const fixture = fileURLToPath(new URL('./fixtures/reviewed-confidence-racer.mjs', import.meta.url));
-      const racers = [request(0.6, 'a'), request(0.8, 'b')].map((input) => {
-        const child = spawn(process.execPath, ['--import', 'tsx', fixture, profile, options.storeRoot, options.coordinationDirectory, JSON.stringify(input)], { stdio: ['pipe', 'pipe', 'pipe'] });
-        let stdout = ''; let stderr = '';
-        const ready = new Promise<void>((resolve, reject) => {
-          child.once('error', reject);
-          child.stdout.on('data', (chunk) => { stdout += String(chunk); if (stdout.includes('ready\n')) resolve(); });
-          child.once('close', (code) => { if (!stdout.includes('ready\n')) reject(new Error(`racer exited before ready: ${code} ${stderr}`)); });
-        });
-        child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-        const done = new Promise<string>((resolve, reject) => { child.once('error', reject); child.once('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(`racer failed: ${code} ${stderr}`))); });
-        void done.catch(() => {});
-        return { child, ready, done };
-      });
+      const racers: ReturnType<typeof fixtureChild>[] = [];
       try {
-        await Promise.all(racers.map((racer) => racer.ready));
-        for (const racer of racers) racer.child.stdin.end('go');
-        const output = await Promise.all(racers.map((racer) => racer.done));
-        expect(output.filter((line) => line.includes('applied\n'))).toHaveLength(1);
-        expect(output.filter((line) => line.includes('error:STALE_REVISION\n'))).toHaveLength(1);
+        for (const input of [request(0.6, 'a'), request(0.8, 'b')]) {
+          const racer = fixtureChild(['--import', 'tsx', fixture, profile, options.storeRoot, options.coordinationDirectory, JSON.stringify(input)], base, () => { retain = true; });
+          racers.push(racer);
+          if (!racer.streamsAvailable) throw new Error('racer streams unavailable');
+        }
+        await deadline(Promise.all(racers.map((racer) => Promise.race([racer.ready, racer.done.then(() => { throw new Error('racer exited before ready'); })]))), 5000, 'racer readiness');
+        await deadline(Promise.all(racers.map((racer) => racer.send())), 2000, 'racer start');
+        const results = await deadline(Promise.all(racers.map((racer) => racer.done)), 5000, 'racer completion');
+        for (const result of results) { if (result.processError) throw result.processError; if (result.inputError) throw result.inputError; expect(result.code, result.stderr).toBe(0); }
+        expect(results.filter((result) => result.stdout.includes('applied\n'))).toHaveLength(1);
+        expect(results.filter((result) => result.stdout.includes('error:STALE_REVISION\n'))).toHaveLength(1);
         expect((await store.get('target'))?.mutation_log?.filter((entry) => entry.op === 'update')).toHaveLength(1);
       } finally {
-        for (const racer of racers) if (racer.child.exitCode === null && racer.child.signalCode === null) racer.child.kill();
-        await Promise.allSettled(racers.map((racer) => racer.done));
+        const results = await Promise.allSettled(racers.map((racer) => racer.stop()));
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
       }
-    } finally { rmSync(base, { recursive: true, force: true }); }
+    } finally { if (!retain) rmSync(base, { recursive: true, force: true }); else console.error(`Fixture retained at ${base}`); }
   });
 
   test.each(['prepared', 'first-publish', 'final-publish', 'committed'])('recovers %s crash and an identical retry yields one durable effect', async (phase) => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-crash-'));
+    let retain = false;
     try {
       const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true };
       const store = new Constructor(options);
@@ -286,8 +331,8 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const target = await store.reviewedConfidenceSnapshot('target'); const source = await store.reviewedConfidenceSnapshot('source');
       const candidate = { rootBinding: target.rootBinding, recordId: 'target', revision: target.revision, oldConfidence: 0.3, newConfidence: 0.7, evidence: [{ id: 'source', revision: source.revision }] };
       const request = { ...candidate, candidateDigest: reviewedConfidenceCandidateDigest(candidate), authorizationDigest: `sha256:${'a'.repeat(64)}`, requestKey: 'crash', agent: 'reviewer' };
-      const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, phase, JSON.stringify(request)], { encoding: 'utf8' });
-      expect(child.status, child.stderr).toBe(23);
+      const child = await crashChild(['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, phase, JSON.stringify(request)], base, () => { retain = true; });
+      expect(child.code, child.stderr).toBe(23);
       const reopened = new Constructor(options);
       const recovered = await reopened.get('target');
       const shouldBeApplied = phase === 'final-publish' || phase === 'committed';
@@ -300,11 +345,12 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const record = await reopened.get('target');
       expect(record?.confidence).toBe(0.7);
       expect(record?.mutation_log?.filter((entry) => entry.op === 'update')).toHaveLength(1);
-    } finally { rmSync(base, { recursive: true, force: true }); }
+    } finally { if (!retain) rmSync(base, { recursive: true, force: true }); else console.error(`Fixture retained at ${base}`); }
   });
 
   test.each(['first-publish', 'final-publish', 'committed'])('recovers %s interruption while erasing receipt evidence', async (phase) => {
     const base = mkdtempSync(join(tmpdir(), 'corpus-reviewed-purge-crash-'));
+    let retain = false;
     try {
       const options = { storeRoot: join(base, 'store'), coordinationDirectory: join(base, 'coordination'), coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true };
       const store = new Constructor(options);
@@ -315,8 +361,8 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
       const receipt = await store.applyReviewedConfidence(request);
       const receiptFile = join(options.storeRoot, '.corpus-reviewed-confidence', `${receipt.receiptId}.json`);
       const retainedInput = JSON.parse(readFileSync(receiptFile, 'utf8')).input;
-      const child = spawnSync(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, `purge-${phase}`, JSON.stringify(request)], { encoding: 'utf8' });
-      expect(child.status, child.stderr).toBe(23);
+      const child = await crashChild(['--import', 'tsx', fileURLToPath(new URL('./fixtures/reviewed-confidence-crash.mjs', import.meta.url)), profile, options.storeRoot, options.coordinationDirectory, `purge-${phase}`, JSON.stringify(request)], base, () => { retain = true; });
+      expect(child.code, child.stderr).toBe(23);
       const journalPath = join(options.storeRoot, '.station-knowledge-transaction.json');
       if (phase === 'committed') {
         const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
@@ -336,6 +382,6 @@ describe.each([['default', KitDefaultStoreAdapter], ['vault', KitObsidianStoreAd
         expect(readFileSync(receiptFile, 'utf8')).not.toContain(retainedInput);
         expect(JSON.parse(readFileSync(receiptFile, 'utf8'))).toEqual({ version: 1, key: receipt.receiptId, retired: true });
       }
-    } finally { rmSync(base, { recursive: true, force: true }); }
+    } finally { if (!retain) rmSync(base, { recursive: true, force: true }); else console.error(`Fixture retained at ${base}`); }
   });
 });
