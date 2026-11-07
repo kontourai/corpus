@@ -32,6 +32,7 @@ export async function makeHarness(profile) {
   const root = join(base, 'store');
   const coordinationDirectory = join(base, 'coordination', 'knowledge-file-transactions');
   const adapter = createStore(profile, root, coordinationDirectory);
+  let retainFixture = false;
   async function edit(id, mutate) {
     const path = await recordPath(profile, root, id);
     const text = await readFile(path, 'utf8');
@@ -58,10 +59,38 @@ export async function makeHarness(profile) {
     }
     return result;
   }
+  const deadline = async (promise, ms, phase) => {
+    let timer;
+    try {
+      return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`reviewed-confidence ${profile}: ${phase} timed out`)), ms); })]);
+    } finally { clearTimeout(timer); }
+  };
+  function reviewedChild(mode, value) {
+    const proc = spawn(process.execPath, [fileURLToPath(new URL('./store-child.mjs', import.meta.url)), profile, root, coordinationDirectory, mode, JSON.stringify(value)], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = ''; let err = ''; let closed = false;
+    const done = new Promise((resolve, reject) => {
+      proc.once('error', reject);
+      proc.once('close', (status, signal) => { closed = true; resolve({ status, signal, out, err }); });
+    });
+    void done.catch(() => {});
+    let readyResolve;
+    const ready = new Promise((resolve) => { readyResolve = resolve; });
+    proc.stdout.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) readyResolve(); });
+    proc.stderr.on('data', (chunk) => { err += chunk; });
+    async function stop() {
+      if (closed) return;
+      proc.kill('SIGTERM');
+      try { await deadline(done, 2000, `${mode} termination`); return; } catch { /* escalate only our own child */ }
+      if (!closed) proc.kill('SIGKILL');
+      try { await deadline(done, 2000, `${mode} forced termination`); }
+      catch (error) { retainFixture = true; throw error; }
+    }
+    return { proc, ready, done, stop };
+  }
   const specials = {
     async 'reviewed-confidence'({ operation }) {
       const mode = operation.mode;
-      assert.ok(['replay', 'stale-evidence', 'erased-evidence', 'default-deny', 'literal-digest', 'erased-target', 'missing-evidence', 'race', 'crash', 'stale-target', 'wrong-root', 'retired-evidence'].includes(mode), 'unknown reviewed-confidence mode');
+      assert.ok(['replay', 'stale-evidence', 'erased-evidence', 'default-deny', 'literal-digest', 'erased-target', 'missing-evidence', 'race', 'crash', 'stale-target', 'wrong-root', 'retired-evidence', 'wrong-old-confidence'].includes(mode), 'unknown reviewed-confidence mode');
       const digest = (c) => `sha256:${createHash('sha256').update(JSON.stringify([
         'corpus-reviewed-confidence-candidate-v1', c.rootBinding, c.recordId, c.revision,
         c.oldConfidence, c.newConfidence, c.evidence.map((e) => [e.id, e.revision]),
@@ -83,6 +112,14 @@ export async function makeHarness(profile) {
         const closed = new Constructor({ storeRoot: root, coordinationDirectory, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock });
         return { result: await code(() => closed.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
       }
+      if (mode === 'wrong-old-confidence') {
+        const before = await readFile(await recordPath(profile, root, 'target'));
+        const wrong = { ...candidate, oldConfidence: 0.4 };
+        const result = await code(() => adapter.applyReviewedConfidence({ ...request, ...wrong, candidateDigest: digest(wrong) }));
+        const after = await readFile(await recordPath(profile, root, 'target'));
+        const receipts = await readdir(join(root, '.corpus-reviewed-confidence')).catch((error) => { if (error.code === 'ENOENT') return []; throw error; });
+        return { result, unchanged: before.equals(after), receipts: receipts.filter((name) => name.endsWith('.json')).length };
+      }
       if (mode === 'stale-target') {
         await adapter.update('target', { body: 'changed target' }, { agent: 'editor' });
         return { result: await code(() => adapter.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
@@ -92,7 +129,7 @@ export async function makeHarness(profile) {
         return { result: await code(() => adapter.applyReviewedConfidence({ ...request, ...wrong, candidateDigest: digest(wrong) })), score: (await adapter.get('target')).confidence };
       }
       if (mode === 'retired-evidence') {
-        await adapter.retire('source', 'retired', { agent: 'editor' });
+        await adapter.retire('source', 'retired', { agent: 'editor', rationale: 'obsolete' });
         return { result: await code(() => adapter.applyReviewedConfidence(request)), score: (await adapter.get('target')).confidence };
       }
       if (mode === 'missing-evidence') {
@@ -102,24 +139,26 @@ export async function makeHarness(profile) {
       if (mode === 'race') {
         const other = { ...candidate, newConfidence: 0.8 };
         const requests = [request, { ...request, ...other, candidateDigest: digest(other), requestKey: 'other-key' }];
-        const racers = requests.map((item) => {
-          const proc = spawn(process.execPath, [fileURLToPath(new URL('./store-child.mjs', import.meta.url)), profile, root, coordinationDirectory, 'reviewed-race', JSON.stringify(item)], { stdio: ['pipe', 'pipe', 'pipe'] });
-          let out = ''; let err = '';
-          const ready = new Promise((resolve, reject) => { proc.once('error', reject); proc.stdout.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) resolve(); }); proc.once('close', (status) => { if (!out.includes('ready\n')) reject(new Error(`racer exited before ready: ${status} ${err}`)); }); });
-          proc.stderr.on('data', (chunk) => { err += chunk; });
-          const done = new Promise((resolve, reject) => { proc.once('error', reject); proc.once('close', (status) => status === 0 ? resolve(out) : reject(new Error(`racer failed: ${status} ${err}`))); });
-          void done.catch(() => {}); return { proc, ready, done };
-        });
+        const racers = requests.map((item) => reviewedChild('reviewed-race', item));
         try {
-          await Promise.all(racers.map((r) => r.ready)); racers.forEach((r) => r.proc.stdin.end('go'));
-          const outputs = await Promise.all(racers.map((r) => r.done));
-          return { applied: outputs.filter((x) => x.includes('applied\n')).length, stale: outputs.filter((x) => x.includes('error:STALE_REVISION\n')).length, updates: (await adapter.get('target')).mutation_log.filter((x) => x.op === 'update').length };
-        } finally { for (const r of racers) if (r.proc.exitCode === null && r.proc.signalCode === null) r.proc.kill(); await Promise.allSettled(racers.map((r) => r.done)); }
+          await deadline(Promise.all(racers.map((r) => Promise.race([r.ready, r.done.then(() => { throw new Error(`reviewed-confidence ${profile}: racer exited before ready`); })]))), 30000, 'race readiness');
+          racers.forEach((r) => r.proc.stdin.end('go'));
+          const results = await deadline(Promise.all(racers.map((r) => r.done)), 30000, 'race completion');
+          for (const result of results) assert.equal(result.status, 0, `reviewed-confidence ${profile}: racer failed: ${result.err}`);
+          return { applied: results.filter((x) => x.out.includes('applied\n')).length, stale: results.filter((x) => x.out.includes('error:STALE_REVISION\n')).length, updates: (await adapter.get('target')).mutation_log.filter((x) => x.op === 'update').length };
+        } finally {
+          const stopped = await Promise.allSettled(racers.map((r) => r.stop()));
+          const failed = stopped.find((r) => r.status === 'rejected');
+          if (failed) throw failed.reason;
+        }
       }
       if (mode === 'crash') {
         const phase = operation.phase; assert.ok(['prepared', 'first-publish', 'final-publish', 'committed'].includes(phase));
-        const outcome = await child([profile, root, coordinationDirectory, 'reviewed-crash', JSON.stringify({ phase, request })]);
-        assert.equal(outcome.code, 23, outcome.stderr);
+        const processChild = reviewedChild('reviewed-crash', { phase, request });
+        let outcome;
+        try { outcome = await deadline(processChild.done, 30000, `crash ${phase} completion`); }
+        finally { await processChild.stop(); }
+        assert.equal(outcome.status, 23, `reviewed-confidence ${profile}: crash ${phase}: ${outcome.err}`);
         const reopened = createStore(profile, root, coordinationDirectory);
         const prior = await reopened.get('target');
         const before = prior.confidence; const countBefore = prior.mutation_log.filter((x) => x.op === 'update').length;
@@ -530,5 +569,5 @@ export async function makeHarness(profile) {
       return { a, b };
     },
   };
-  return { adapter, specials, root, coordinationDirectory, dispose: () => rm(base, { recursive: true, force: true }) };
+  return { adapter, specials, root, coordinationDirectory, dispose: () => retainFixture ? Promise.reject(new Error(`reviewed-confidence ${profile}: child did not settle; fixture retained at ${base}`)) : rm(base, { recursive: true, force: true }) };
 }

@@ -22146,6 +22146,31 @@
       ],
       "regression": "Reviewed confidence refuses stale or unauthorized baselines without changing the score.",
       "production_seam": true
+    },
+    {
+      "id": "reviewed-confidence-wrong-old-confidence",
+      "operations": [
+        {
+          "special": "reviewed-confidence",
+          "mode": "wrong-old-confidence"
+        }
+      ],
+      "expected": [
+        {
+          "ref": "result",
+          "equals": "STALE_REVISION"
+        },
+        {
+          "ref": "unchanged",
+          "equals": true
+        },
+        {
+          "ref": "receipts",
+          "equals": 0
+        }
+      ],
+      "regression": "A matching revision with an incorrect reviewed old score must refuse without writes.",
+      "production_seam": true
     }
   ]
 }
