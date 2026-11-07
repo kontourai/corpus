@@ -80,9 +80,10 @@ The [publish workflow](.github/workflows/publish-npm.yml) publishes only
 `@kontourai/corpus-store` and `@kontourai/corpus-conformance`. The root
 `@kontourai/corpus` package has its own workflow, described
 [above](#publishing-the-root-package). Dispatch `publish-npm.yml`
-on `main` with an exact `version` matching both workspace manifests;
-the current workspace version is `0.1.0-next.3`. Release-please does not manage these
-workspace versions yet.
+on `main` with an exact `version` matching both workspace manifests. Find the
+current versions in [`packages/store/package.json`](packages/store/package.json)
+and [`packages/conformance/package.json`](packages/conformance/package.json).
+Release-please does not manage these workspace versions yet.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
 and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
