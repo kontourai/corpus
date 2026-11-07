@@ -69,18 +69,20 @@ export async function makeHarness(profile) {
     const proc = spawn(process.execPath, [fileURLToPath(new URL('./store-child.mjs', import.meta.url)), profile, root, coordinationDirectory, mode, JSON.stringify(value)], { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = ''; let err = ''; let closed = false; let processError; let inputError;
     proc.on('error', (error) => { processError = error; });
-    proc.stdin.on('error', (error) => { inputError = error; });
-    proc.stdout.on('error', (error) => { err += ` stdout: ${error.message}`; });
-    proc.stderr.on('error', (error) => { err += ` stderr: ${error.message}`; });
+    const streamsAvailable = Boolean(proc.stdin && proc.stdout && proc.stderr);
+    proc.stdin?.on('error', (error) => { inputError = error; });
+    proc.stdout?.on('error', (error) => { err += ` stdout: ${error.message}`; });
+    proc.stderr?.on('error', (error) => { err += ` stderr: ${error.message}`; });
     // An error is evidence of failure, but only close settles child/pipe ownership.
     const done = new Promise((resolve) => {
       proc.once('close', (status, signal) => { closed = true; resolve({ status, signal, out, err, processError, inputError }); });
     });
     let readyResolve;
     const ready = new Promise((resolve) => { readyResolve = resolve; });
-    proc.stdout.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) readyResolve(); });
-    proc.stderr.on('data', (chunk) => { err += chunk; });
+    proc.stdout?.on('data', (chunk) => { out += chunk; if (out.includes('ready\n')) readyResolve(); });
+    proc.stderr?.on('data', (chunk) => { err += chunk; });
     const send = () => new Promise((resolve, reject) => {
+      if (!proc.stdin) return reject(new Error(`reviewed-confidence ${profile}: ${mode} stdin unavailable`));
       if (inputError) return reject(inputError);
       proc.stdin.end('go', (error) => error || inputError ? reject(error ?? inputError) : resolve());
     });
@@ -93,11 +95,11 @@ export async function makeHarness(profile) {
       catch {
         retainFixture = true;
         // Preserve the root while releasing parent-side references if close never arrives.
-        proc.stdin.destroy(); proc.stdout.destroy(); proc.stderr.destroy(); proc.unref();
+        proc.stdin?.destroy(); proc.stdout?.destroy(); proc.stderr?.destroy(); proc.unref();
         throw new Error(`reviewed-confidence ${profile}: ${mode} child did not close; fixture retained at ${base}`);
       }
     }
-    return { proc, ready, done, send, stop };
+    return { proc, ready, done, send, stop, streamsAvailable };
   }
   const specials = {
     async 'reviewed-confidence'({ operation }) {
@@ -151,8 +153,13 @@ export async function makeHarness(profile) {
       if (mode === 'race') {
         const other = { ...candidate, newConfidence: 0.8 };
         const requests = [request, { ...request, ...other, candidateDigest: digest(other), requestKey: 'other-key' }];
-        const racers = requests.map((item) => reviewedChild('reviewed-race', item));
+        const racers = [];
         try {
+          for (const item of requests) {
+            const racer = reviewedChild('reviewed-race', item);
+            racers.push(racer);
+            assert.ok(racer.streamsAvailable, `reviewed-confidence ${profile}: race child streams unavailable`);
+          }
           await deadline(Promise.all(racers.map((r) => Promise.race([r.ready, r.done.then(() => { throw new Error(`reviewed-confidence ${profile}: racer exited before ready`); })]))), 30000, 'race readiness');
           await deadline(Promise.all(racers.map((r) => r.send())), 30000, 'race start');
           const results = await deadline(Promise.all(racers.map((r) => r.done)), 30000, 'race completion');
@@ -168,7 +175,10 @@ export async function makeHarness(profile) {
         const phase = operation.phase; assert.ok(['prepared', 'first-publish', 'final-publish', 'committed'].includes(phase));
         const processChild = reviewedChild('reviewed-crash', { phase, request });
         let outcome;
-        try { outcome = await deadline(processChild.done, 30000, `crash ${phase} completion`); }
+        try {
+          assert.ok(processChild.streamsAvailable, `reviewed-confidence ${profile}: crash ${phase} child streams unavailable`);
+          outcome = await deadline(processChild.done, 30000, `crash ${phase} completion`);
+        }
         finally { await processChild.stop(); }
         assert.ifError(outcome.processError);
         assert.equal(outcome.status, 23, `reviewed-confidence ${profile}: crash ${phase}: ${outcome.err}`);
