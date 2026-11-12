@@ -15,6 +15,10 @@ export const REQUIRED_FILES = [
   'src/index.mjs',
   'src/cli.mjs',
   'src/site-client.js',
+  // The @kontourai/corpus/search subpath and the Corpus files it imports.
+  'src/search-entry.mjs',
+  'src/search.mjs',
+  'src/markdown.mjs',
   'schemas/decision-record.schema.json',
 ];
 

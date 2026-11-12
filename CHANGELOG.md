@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+Additive: a new package subpath. The root entry, the CLI, and the MCP server are unchanged.
+
+- **`@kontourai/corpus/search` embeds ranked search offline.** The new subpath exports `searchBundles(bundles, query, limit)`, the ranking behind the MCP `search` tool, for hosts that hold their own `docs-bundle.json` and run without file, network, or process access. The root entry reads its own files at import time (the package version and the site script), so a bundled copy failed at load with `ENOENT`; the subpath loads only `src/search.mjs` and `src/markdown.mjs`, whose direct dependencies are `node:path`, `marked`, `github-slugger`, and `htmlparser2`. `scripts/check-offline-search.mjs` guards this, and `npm test` and `npm run verify:pack` (against the installed tarball) run it. It bundles the subpath with esbuild (a new exact-pinned dev dependency), fails if the bundle still imports anything (`node:path` gets a stand-in that throws when used), loads it in a `node:vm` context with only the JavaScript built-ins (no `process`, `require`, `fetch`, timers, or `console`; `eval`, `new Function`, and WebAssembly compilation disabled), and requires a search over Station's docs bundle there to match a normal import. The sandbox only checks the paths that importing and searching run, and the import check sees only literal specifiers, so a computed `require(x)` or `import(x)` on a path search never takes is not caught. Negative controls cover a file read through `createRequire`, a re-export or import that a line-based scan would miss, a deferred timer, `process.env`, `fetch`, and a transitive dependency's `require('fs')`. See [Embedding search offline](README.md#embedding-search-offline).
+
 ## 0.8.0
 
 The first version published to npm. Breaking for repositories that still have a v1 manifest (see below), and MCP `search` scores are on a new scale. Corpus Store and Corpus Conformance changes from the same period shipped in their own prereleases and are in [packages/store/CHANGELOG.md](packages/store/CHANGELOG.md).

@@ -428,6 +428,27 @@ args = ["-y", "--package=@kontourai/corpus@<version>", "--", "corpus", "mcp"]
 
 To serve local checkouts while you write docs, add `--workspace ~/dev/github/kontourai` or `--repo .` after `mcp`.
 
+## Embedding search offline
+
+A host that ships its own docs bundle can rank results in-process, without running the MCP server:
+
+```js
+import { searchBundles } from '@kontourai/corpus/search';
+
+const results = searchBundles([bundle], 'how do I run something on a cron job', 10);
+```
+
+`bundles` is an array of parsed `docs-bundle.json` objects and `limit` defaults to 10. Results have the same shape and ranking as the MCP `search` tool (see [Search ranking](#search-ranking)). `searchBundles` is this subpath's only export.
+
+The subpath is meant for offline, credential-free hosts: on the paths importing it and searching actually run, its closure does no file, network, process, or timer access (see the guard's limits below). Its direct dependencies are `marked`, `github-slugger`, `htmlparser2` (which brings `entities`, `domhandler`, `domelementtype`, `domutils`, and `dom-serializer`), and `node:path`, which `src/markdown.mjs` imports for link helpers that search does not call; a bundler keeps that one import. The root `@kontourai/corpus` entry is different: it reads its own files when it is imported, so a bundler that inlines it fails at load time. Validating a bundle's shape (`bundleShapeError`) is still exported only from the root entry.
+
+`scripts/check-offline-search.mjs` guards this, and `npm test` and `npm run verify:pack` (against the installed tarball) run it:
+
+- It bundles the subpath and its whole closure, third-party packages included, with esbuild. It fails if the bundle still imports any module named by a literal specifier. A computed `require(x)` or `import(x)` is not recorded by the bundler, so this check cannot see it. `node:path` is replaced with a stand-in that throws when it is used.
+- It loads the bundle in a `node:vm` context that has only the JavaScript built-ins: no `process`, `require`, `fetch`, timers, `queueMicrotask`, or `console`, and with `eval`, `new Function`, and WebAssembly compilation disabled. It then searches Station's docs bundle there, and the results must match a normal import's.
+
+The import check covers every file in the closure. The sandbox covers the code that loading and that search run, so a reference to a host global such as `process` on a path the search does not take would be caught only when something runs it.
+
 ## Adopting corpus in a repo
 
 1. Add Corpus as an exact-pinned dev dependency and commit the lockfile, so CI installs the same Corpus and the same dependency tree every time. For an unreleased commit, use `https://codeload.github.com/kontourai/corpus/tar.gz/<sha>` (full sha) as the spec instead.

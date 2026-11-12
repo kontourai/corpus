@@ -1,6 +1,6 @@
 {
   "name": "@kontourai/corpus",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Source-bound documentation: check, build, locate, and MCP retrieval.",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,6 +17,7 @@
   "exports": {
     ".": "./src/index.mjs",
     "./content": "./src/content.mjs",
+    "./search": "./src/search-entry.mjs",
     "./schemas/decision-record.schema.json": "./schemas/decision-record.schema.json",
     "./package.json": "./package.json"
   },
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
+    "esbuild": "0.28.2",
     "playwright-core": "1.64.0"
   },
   "workspaces": [
