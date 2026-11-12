@@ -144,6 +144,8 @@ export function assembleBundle({ manifest, read, sha, siteUrl, root, prefix = ''
     digest: bundleDigest(asWritten.documents, asWritten.topics),
     documents,
     topics,
+    // Search vocabulary, not content: only when the manifest declares it, and not part of `digest`.
+    ...(manifest.synonyms ? { synonyms: manifest.synonyms } : {}),
   };
 }
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import picomatch from 'picomatch';
 import { UsageError } from './errors.mjs';
 import { isRepoFile, repoGlobError, repoPathError, statInRepo, toFsPath } from './paths.mjs';
+import { synonymsError } from './search.mjs';
 
 export const MANIFEST_FILE = 'corpus.json';
 /** The v1 manifest name. Corpus no longer reads it; its presence alone is a usage error. */
@@ -41,7 +42,7 @@ const PRODUCT_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 const REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9._-]+$/;
 const TOPIC_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
-const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths', 'purpose', 'builtOn', 'decisions'];
+const MANIFEST_KEYS = ['schemaVersion', 'product', 'title', 'tagline', 'repo', 'landing', 'branch', 'selectionActions', 'documents', 'topics', 'exclude', 'redirects', 'allowLocalPaths', 'purpose', 'builtOn', 'decisions', 'synonyms'];
 const MANIFEST_REQUIRED = ['schemaVersion', 'product', 'title', 'repo', 'documents', 'purpose', 'builtOn'];
 const DOCUMENT_KEYS = ['source', 'section', 'title', 'covers', 'publish'];
 const DOCUMENT_REQUIRED = ['source', 'section'];
@@ -364,6 +365,9 @@ export function validateManifest(raw, root, where = MANIFEST_FILE, { allowMissin
 
   const decisions = Object.hasOwn(raw, 'decisions') ? validateDecisionsBlock(raw.decisions, root, `${where}: decisions`, errors) : null;
 
+  const synonymsProblem = Object.hasOwn(raw, 'synonyms') ? synonymsError(raw.synonyms, `${where}: synonyms`) : null;
+  if (synonymsProblem) errors.push(synonymsProblem);
+
   return {
     manifest: {
       schemaVersion: raw.schemaVersion,
@@ -382,6 +386,7 @@ export function validateManifest(raw, root, where = MANIFEST_FILE, { allowMissin
       redirects,
       allowLocalPaths,
       decisions,
+      ...(Object.hasOwn(raw, 'synonyms') && !synonymsProblem ? { synonyms: raw.synonyms } : {}),
     },
     errors,
   };
