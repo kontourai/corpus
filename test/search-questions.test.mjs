@@ -6,7 +6,7 @@ import { FIXTURES, fixtureRepo } from './helpers.mjs';
 import { bundleFromCheckout } from '../src/bundle.mjs';
 import { bundleShapeError, searchBundles } from '../src/mcp.mjs';
 import { outline } from '../src/search.mjs';
-import { OPEN_QUESTIONS, QUESTIONS, QUESTION_BUNDLES, expectedRank } from './search-questions.mjs';
+import { FRESH_QUESTIONS, OPEN_QUESTIONS, QUESTIONS, QUESTION_BUNDLES, expectedRank } from './search-questions.mjs';
 
 // The fixtures are docs-bundle.json files exactly as `corpus build` wrote and
 // published them to https://kontourai.github.io/<product>/docs-bundle.json;
@@ -26,7 +26,7 @@ test('the question-set fixtures have the shape the current build writes', (t) =>
 
 test('every expected part exists in the fixtures', () => {
   const byProduct = new Map(bundles.map((bundle) => [bundle.product, bundle]));
-  for (const { question, expect } of [...QUESTIONS, ...OPEN_QUESTIONS])
+  for (const { question, expect } of [...QUESTIONS, ...OPEN_QUESTIONS, ...FRESH_QUESTIONS])
     for (const part of expect) {
       const bundle = byProduct.get(part.product);
       assert.ok(bundle, `${question}: no bundle ${part.product}`);
@@ -54,4 +54,14 @@ for (const { question, expect } of QUESTIONS)
 
 test('open questions are reported, not asserted', (t) => {
   for (const { question, expect } of OPEN_QUESTIONS) t.diagnostic(`open: rank ${expectedRank(searchBundles(bundles, question, 10), expect) ?? '>10'} for "${question}"`);
+});
+
+test('fresh questions are a reported benchmark, not asserted', (t) => {
+  let top3 = 0;
+  for (const { question, expect } of FRESH_QUESTIONS) {
+    const rank = expectedRank(searchBundles(bundles, question, 10), expect);
+    if (rank !== null && rank <= 3) top3++;
+    t.diagnostic(`fresh: rank ${rank ?? '>10'} for "${question}"`);
+  }
+  t.diagnostic(`fresh: ${top3}/${FRESH_QUESTIONS.length} in the top 3 (reported only)`);
 });

@@ -117,6 +117,34 @@ export const OPEN_QUESTIONS = [
   { question: 'keep a doc for agents but leave it off the website', expect: [{ product: 'corpus', kind: 'topic', id: 'manifest' }] },
 ];
 
+/**
+ * Questions an independent reviewer of #86 wrote down, each with its answer
+ * topic, after reading the topics and before running either ranking. They are
+ * reported and never asserted: QUESTIONS above were curated while the ranking
+ * was being built, so passing all of them is a regression fixture, not an
+ * unbiased measure of relevance. These are the closer thing to a blind
+ * holdout. At review, origin/main put 2 of 16 in the top 3, and #86 put 5.
+ * Leave them as written; a question rewritten to pass measures nothing.
+ */
+export const FRESH_QUESTIONS = [
+  ['corpus', 'check', 'can I catch dead links before I publish'],
+  ['corpus', 'manifest', 'how can I hide an internal guide from the public site'],
+  ['corpus', 'decisions', 'are old numbered ADRs allowed to change'],
+  ['corpus', 'mcp-server', 'can I serve documentation directly from a local checkout'],
+  ['station', 'tasks', 'how do I turn a chat into a tracked task'],
+  ['station', 'skills', 'how can I teach the assistant a repeatable procedure'],
+  ['station', 'fleet', 'can two installations share one inference server'],
+  ['station', 'tool-servers', 'how do I give an agent access to tools from an external service'],
+  ['flow', 'gate-evaluation', 'does one failed evidence item block the gate'],
+  ['flow', 'evidence-kinds', 'how can I prove a command exited successfully'],
+  ['flow', 'route-back', 'can a failed review send work back for revision'],
+  ['flow', 'runtime-roots', 'how do I undo moving my runs to the new folders'],
+  ['cli', 'delegation', 'does the router preserve stdin when launching a product'],
+  ['cli', 'descriptors', 'can a broken product descriptor fall back to the built in catalog'],
+  ['cli', 'init-consent', 'if setup fails halfway does it roll back the earlier commands'],
+  ['cli', 'compat-catalog', 'where do command descriptions come from for packages with no descriptor'],
+].map(([product, id, question]) => ({ question, expect: [{ product, kind: 'topic', id }] }));
+
 /** True when a search result is the expected part. */
 export function isExpected(result, part) {
   if (result.product !== part.product || result.kind !== part.kind) return false;
