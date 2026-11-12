@@ -474,8 +474,10 @@ The default store creates `records/` and the two indexes on the first write, not
 at construction. Constructing it over an existing root, and read-only calls such
 as `get` and the list methods on a root with no `records/`, create and change
 nothing inside the root, so a host's dry run can read an empty root safely. The
-file-transaction layer still creates its coordination directory, which the host
-chooses and should keep outside the root. A root that does not
+constructor still creates the coordination directory the host passes in; keep it
+outside the root for that guarantee. The `corpus-store` CLI's default
+coordination directory is inside the root (under its migration directory), so
+CLI runs do write there. A root that does not
 exist yet is the exception: the constructor creates the directory and its
 `.corpus-root-id` marker, because the root binding is a synchronous identity
 fixed at construction. A host whose dry run must create nothing should not
