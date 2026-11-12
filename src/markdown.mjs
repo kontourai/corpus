@@ -278,6 +278,28 @@ export function analyzeMarkdown(source, { lineOffset = 0, frontMatterTitle = nul
 }
 
 /**
+ * Lex a Markdown document and give every heading token the `slugId` that
+ * `analyzeMarkdown` gives it (the same slugger over the same walk, so nested
+ * headings count toward repeats the same way), in time linear in the
+ * document. Search uses this instead of `analyzeMarkdown`, whose link line
+ * numbers it does not need. It walks the tokens itself because
+ * `marked.walkTokens` concatenates its result array once per token, which is
+ * quadratic in the number of sibling tokens (a paragraph of many links).
+ */
+export function lexWithSlugs(source) {
+  const tokens = Lexer.lex(source, { gfm: true });
+  const slug = createSlugger();
+  const visit = (list) => {
+    for (const token of list) {
+      if (token.type === 'heading') token.slugId = slug(plainText(token.tokens).trim());
+      visit(childTokens(token));
+    }
+  };
+  visit(tokens);
+  return tokens;
+}
+
+/**
  * Text of the first raw-HTML `<h1>` with text in a top-level HTML block, as a
  * browser would show it (tags dropped, entities decoded, whitespace
  * collapsed). An `<h1>` holding only an image has no text and is skipped.
