@@ -442,6 +442,21 @@ EXECUTED on macOS, Node 24.19.0: 123 store vectors per profile, all 123
 passing, with no expected failure and no unexpected result, for both default
 and vault.
 
+## Lazy `records/` creation
+
+The default store no longer creates `records/` in its constructor, and a read-only
+call that finds no `records/` returns empty without writing `graph-index.json` or
+`alias-index.json`. The first write creates `records/` and the indexes. This lets
+a host dry run construct and read the store over an existing empty root and leave
+it empty. Construction still creates the coordination directory the host passes
+in, so a host should keep it outside the root; the CLI's default coordination
+directory is inside the root, under its migration directory. A root that does not exist yet is still created with its
+`.corpus-root-id` marker at construction: the root binding is a synchronous
+identity (path plus a random marker) that `rootBinding()` and
+`assertAdapterBoundTo` need from the first call, so deferring it would change that
+contract. `packages/store/test/lazy-records-dir.test.ts` pins both behaviors and
+drives `link`, `previewPurge` and `proposeCreate` on a fresh root.
+
 ## Canonical vault index and offline migration
 
 The vault adapter selects its path index on every operation: canonical

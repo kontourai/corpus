@@ -143,7 +143,11 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     this.graphPath = join(this.root, 'graph-index.json');
     this.aliasPath = join(this.root, 'alias-index.json');
     const newRoot = !existsSync(this.root);
-    mkdirSync(this.recordsDir, { recursive: true });
+    // `records/` is created by the first write (the file transaction layer makes
+    // parent directories), so constructing over an existing root, including a
+    // host's dry run, leaves it untouched. Reads treat a missing directory as empty.
+    // A root that does not exist yet is still created and bound here.
+    mkdirSync(this.root, { recursive: true });
     if (newRoot) scaffoldNewRootIdentity(this.root);
     try { this.binding = captureRootBinding(this.root); }
     catch { /* An unreadable marker leaves the adapter unbound; records remain readable. */ }
@@ -344,17 +348,29 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
   private loadGraph(): GraphIndex {
     const parsed = this.parseGraphFile();
     if (parsed !== undefined) return parsed;
+    if (this.readNeedsNoCache()) return emptyGraph();
     // parseGraphFile() already logged the corrupt-parse breadcrumb above; pass the
     // now-known-empty raw graph through so rebuildIndexes()'s `changed` diagnostic
     // doesn't re-parse (and silently re-warn on) the same corrupt file.
     return this.rebuildIndexes(emptyGraph()).graph;
   }
 
+  /**
+   * With no `records/` directory there is nothing to rebuild from, so a read
+   * answers empty without persisting a cache (a dry run creates nothing). In a
+   * write the self-heal still runs, so the first write creates the indexes.
+   */
+  private readNeedsNoCache(): boolean {
+    return this.files.inReadOnlyScope() && !existsSync(this.recordsDir);
+  }
+
   private loadAliasIndex(): AliasIndex {
     const idx = this.readAliasRaw();
     // A missing/corrupt cache rebuilds from authoritative records. An explicitly
     // empty but valid alias map remains valid and does not rebuild on every read.
-    return idx ?? this.rebuildIndexes().aliasIndex;
+    if (idx !== undefined) return idx;
+    if (this.readNeedsNoCache()) return emptyAliasIndex();
+    return this.rebuildIndexes().aliasIndex;
   }
 
   /** Rebuild the graph + alias index from scratch. Exposed per store-contract.md §5.2. */

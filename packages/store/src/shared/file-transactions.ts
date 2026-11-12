@@ -188,6 +188,9 @@ type Journal = {
   entries: JournalEntry[];
 };
 
+/** The operation name `read` runs under; `inReadOnlyScope` keys off the same constant. */
+const READ_OPERATION = 'read-repair';
+
 type TransactionContext = {
   journal: Journal;
   observed: Map<string, string>;
@@ -297,8 +300,13 @@ export class KnowledgeFileTransactions {
     }
   }
 
+  /** True inside a `read` (not a write), where persisting a derived-cache repair is optional. */
+  inReadOnlyScope(): boolean {
+    return this.storage.getStore()?.journal.operation === READ_OPERATION;
+  }
+
   async read<T>(body: () => T | Promise<T>): Promise<T> {
-    return this.mutate('read-repair', body);
+    return this.mutate(READ_OPERATION, body);
   }
 
   /**
