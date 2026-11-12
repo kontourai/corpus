@@ -48,6 +48,8 @@ describe('KitDefaultStoreAdapter lazy records directory', () => {
     });
     expect(statSync(join(root, 'records')).isDirectory()).toBe(true);
     expect(existsSync(join(root, 'records', `${id}.md`))).toBe(true);
+    expect(existsSync(join(root, 'graph-index.json'))).toBe(true);
+    expect(existsSync(join(root, 'alias-index.json'))).toBe(true);
     expect((await open().get(id))?.title).toBe('First');
   });
 
