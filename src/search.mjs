@@ -146,9 +146,13 @@ export function splitWords(text) {
 
 /** Names written in one piece (`requireAnchors`, `base-url`, `list_topics`), joined and lowercased. */
 function compounds(text) {
-  return (String(text ?? '').match(/[\p{L}\p{N}]+(?:[_-][\p{L}\p{N}]+|(?<=\p{Ll}|\p{N})\p{Lu}[\p{L}\p{N}]*)+/gu) ?? []).map((name) =>
-    name.replace(/[_-]/g, '').toLowerCase(),
-  );
+  // Runs joined by single `_` or `-` match without backtracking (separators and
+  // word characters never overlap); a run is a compound when it has a separator
+  // or a lower-case letter or digit followed by a capital. One regex doing both
+  // backtracked quadratically on long one-piece words.
+  return (String(text ?? '').match(/[\p{L}\p{N}]+(?:[_-][\p{L}\p{N}]+)*/gu) ?? [])
+    .filter((run) => /[_-]/.test(run) || /[\p{Ll}\p{N}]\p{Lu}/u.test(run))
+    .map((name) => name.replace(/[_-]/g, '').toLowerCase());
 }
 
 /** Stemmed index terms of a text; `withCompounds` also adds names written in one piece. */

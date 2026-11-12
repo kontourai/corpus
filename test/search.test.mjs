@@ -128,26 +128,44 @@ test('search gives headings the same slugs as analyzeMarkdown, nested and repeat
 
 test('first-search indexing time grows linearly with the number of links on a page', () => {
   // A ratio between two sizes, never a millisecond limit. 16 times the links
-  // measured about 15 times as long when linear and over 200 times as long
-  // with marked.walkTokens' quadratic walk; the limit sits between.
-  const SMALL = 500;
+  // measured about 15 times the CPU time when linear and over 200 times with
+  // marked.walkTokens' quadratic walk; the limit sits between. CPU time, not
+  // wall time, and the median of interleaved small/large pairs, so a loaded
+  // machine's scheduling does not decide the ratio (wall-time best-of-three
+  // failed 11 of 20 runs under load).
+  const SMALL = 1000;
   const LARGE = SMALL * 16;
-  const coldMs = (n) => {
-    const markdown = `# Guide\n${Array.from({ length: n }, (_, i) => `entry [link${i}](https://example.com/${i})\n`).join('')}`;
-    let best = Infinity;
-    for (let run = 0; run < 3; run++) {
-      // A new bundle object each run, so the index is built again.
-      const bundle = { product: 'links', sha: 'abc', topics: [], documents: [{ title: 'Guide', source: 'guide.md', url: 'https://example.com/guide.html', markdown }] };
-      const start = performance.now();
-      assert.equal(searchBundles([bundle], 'entry').length, 1);
-      best = Math.min(best, performance.now() - start);
-    }
-    return best;
+  const page = (n) => `# Guide\n${Array.from({ length: n }, (_, i) => `entry [link${i}](https://example.com/${i})\n`).join('')}`;
+  const pages = { [SMALL]: page(SMALL), [LARGE]: page(LARGE) };
+  const coldCpu = (n) => {
+    // A new bundle object each run, so the index is built again.
+    const bundle = { product: 'links', sha: 'abc', topics: [], documents: [{ title: 'Guide', source: 'guide.md', url: 'https://example.com/guide.html', markdown: pages[n] }] };
+    const start = process.cpuUsage();
+    assert.equal(searchBundles([bundle], 'entry').length, 1);
+    const used = process.cpuUsage(start);
+    return used.user + used.system;
   };
-  coldMs(SMALL); // warm up the JIT
-  const small = coldMs(SMALL);
-  const large = coldMs(LARGE);
-  assert.ok(large / small < 60,`${LARGE} links took ${large.toFixed(1)} ms, ${(large / small).toFixed(1)}x the ${small.toFixed(1)} ms for ${SMALL}`);
+  coldCpu(SMALL); // warm up the JIT
+  coldCpu(LARGE);
+  const ratios = [];
+  for (let pair = 0; pair < 5; pair++) {
+    const small = Math.max(coldCpu(SMALL), 1);
+    ratios.push(coldCpu(LARGE) / small);
+  }
+  ratios.sort((a, b) => a - b);
+  const median = ratios[2];
+  assert.ok(median < 60, `${LARGE} links took ${median.toFixed(1)}x the CPU time of ${SMALL} (pair ratios ${ratios.map((r) => r.toFixed(1)).join(', ')})`);
+});
+
+test('compound-name detection stays linear on a very long one-piece title', () => {
+  // A 64,000-letter lowercase word once backtracked quadratically in compounds().
+  const title = 'a'.repeat(64_000);
+  const bundle = { product: 'long', sha: 'abc', topics: [], documents: [{ title, source: 'long.md', url: 'https://example.com/long.html', markdown: 'body' }] };
+  const start = process.cpuUsage();
+  searchBundles([bundle], 'body');
+  const used = process.cpuUsage(start);
+  // Linear is a few milliseconds; the old regex took about 3 s of CPU.
+  assert.ok(used.user + used.system < 1_000_000, `took ${((used.user + used.system) / 1000).toFixed(0)} ms of CPU`);
 });
 
 test('stemming is symmetric: subscribe, subscribes, subscribed and subscribing find each other', (t) => {
