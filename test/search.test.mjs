@@ -69,7 +69,8 @@ test('a product\'s own synonyms reach its bundle at half weight, and only its bu
 });
 
 test('suite-wide synonyms join a newcomer\'s word to the docs\' word', (t) => {
-  const { bundle } = lexicon(t);
+  // Without the product's own groups, so only the suite's list can join the words.
+  const { synonyms, ...bundle } = lexicon(t).bundle;
   // "erase" is in the suite's delete group with "remove"; the docs only say "removed" and "Removes".
   assert.doesNotMatch(JSON.stringify(bundle), /erase/i);
   const [top] = searchBundles([bundle], 'erase');
