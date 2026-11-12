@@ -16,7 +16,6 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv } from '../src/git.mjs';
-import { offlineSearchProbe } from './offline-search-probe.mjs';
 import { packedFileProblems, trackedShippedFiles } from './root-package-files.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,15 +83,15 @@ assert.equal(require('@kontourai/corpus/schemas/decision-record.schema.json').ty
 await assert.rejects(import('@kontourai/corpus/src/cli.mjs'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 `);
   run(process.execPath, ['probe.mjs'], consumer);
-  // The offline search subpath resolves from the installed package and
-  // searches with the file system, child processes, the network, and fetch
-  // disabled, over the installed copies of its dependencies.
-  const searchProbe = JSON.parse(
-    run(process.execPath, ['--input-type=module', '--eval', offlineSearchProbe(join(repo, 'test/fixtures/search-bundles/station.docs-bundle.json'), 'how do I run something on a cron job')], consumer),
+  // The offline search subpath, resolved from the installed package and its
+  // registry-installed dependencies, passes the offline guard: it bundles with
+  // no imports left and searches in a sandbox with only the language built-ins.
+  const searchCheck = JSON.parse(
+    run(process.execPath, [join(repo, 'scripts/check-offline-search.mjs'), '--from', consumer, join(repo, 'test/fixtures/search-bundles/station.docs-bundle.json'), 'how do I run something on a cron job'], repo),
   );
-  assert.deepEqual(searchProbe.denied, []);
-  assert.ok(searchProbe.results.some((result) => result.kind === 'topic' && result.id === 'scheduled-jobs'), JSON.stringify(searchProbe.results));
-  console.log(`@kontourai/corpus/search: ${searchProbe.results.length} results offline, top ${searchProbe.results[0].product}/${searchProbe.results[0].id ?? searchProbe.results[0].source}`);
+  assert.ok(searchCheck.inputs.includes('node_modules/@kontourai/corpus/src/search.mjs'), searchCheck.inputs.join('\n'));
+  assert.ok(searchCheck.results.some((result) => result.kind === 'topic' && result.id === 'scheduled-jobs'), JSON.stringify(searchCheck.results));
+  console.log(`@kontourai/corpus/search: offline guard passed from the installed tarball (${searchCheck.inputs.length} modules, ${searchCheck.bytes} bytes), top ${searchCheck.results[0].product}/${searchCheck.results[0].id ?? searchCheck.results[0].source}`);
 
   // A real-shaped corpus: the "valid" docs fixture plus one product's decision
   // records copied from test/fixtures, with the decisions gate declared.
