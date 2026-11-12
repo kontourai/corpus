@@ -42,7 +42,9 @@ exact `version`. Before anything is packed,
 requires that version to equal the root `package.json` version and to be the
 first section of `CHANGELOG.md`, with no `Unreleased` section left. A release
 pull request that sets the version and moves the unreleased entries under it
-therefore lands first. Stable versions publish to `latest` and prereleases to
+therefore lands first. Corpus Store and Conformance changes are recorded in
+[`packages/store/CHANGELOG.md`](packages/store/CHANGELOG.md) instead, so a root
+release never claims them. Stable versions publish to `latest` and prereleases to
 `next`, and the version must be absent from npm; the same
 [guard](scripts/npm-publish-guard.mjs) as the workspaces refuses an existing
 version, a registry error other than E404, or an unconfirmed response.
@@ -83,7 +85,9 @@ The [publish workflow](.github/workflows/publish-npm.yml) publishes only
 on `main` with an exact `version` matching both workspace manifests. Find the
 current versions in [`packages/store/package.json`](packages/store/package.json)
 and [`packages/conformance/package.json`](packages/conformance/package.json).
-Release-please does not manage these workspace versions yet.
+Release-please does not manage these workspace versions yet. Record their
+changes in [`packages/store/CHANGELOG.md`](packages/store/CHANGELOG.md), not
+the root changelog, whose first section must be the root release.
 
 The verification job builds Store, runs its contracts and packed-consumer checks,
 and uploads the two tested `npm pack` tarballs with SHA-256 hashes, which it also
