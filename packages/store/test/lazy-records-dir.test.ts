@@ -34,6 +34,8 @@ describe('KitDefaultStoreAdapter lazy records directory', () => {
     expect(await store.listByCategory('engineering')).toEqual([]);
     expect(await store.listProposals()).toEqual([]);
     expect(readdirSync(root)).toEqual([]);
+    // The documented exception: the host-chosen coordination directory, outside the root.
+    expect(readdirSync(base).sort()).toEqual(['coordination', 'store']);
   });
 
   test('the first write still creates records/ and the record is readable', async () => {

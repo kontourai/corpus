@@ -448,7 +448,8 @@ The default store no longer creates `records/` in its constructor, and a read-on
 call that finds no `records/` returns empty without writing `graph-index.json` or
 `alias-index.json`. The first write creates `records/` and the indexes. This lets
 a host dry run construct and read the store over an existing empty root and leave
-it empty. A root that does not exist yet is still created with its
+it empty. Construction still creates the host-chosen coordination directory, which
+should live outside the root. A root that does not exist yet is still created with its
 `.corpus-root-id` marker at construction: the root binding is a synchronous
 identity (path plus a random marker) that `rootBinding()` and
 `assertAdapterBoundTo` need from the first call, so deferring it would change that
