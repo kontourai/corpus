@@ -477,7 +477,7 @@ nothing inside the root, so a host's dry run can read an empty root safely. The
 constructor still creates the coordination directory the host passes in; keep it
 outside the root for that guarantee. The `corpus-store` CLI's default
 coordination directory is inside the root (under its migration directory), so
-CLI runs do write there. A root that does not
+CLI runs write there unless `--coordination-directory` points elsewhere. A root that does not
 exist yet is the exception: the constructor creates the directory and its
 `.corpus-root-id` marker, because the root binding is a synchronous identity
 fixed at construction. A host whose dry run must create nothing should not

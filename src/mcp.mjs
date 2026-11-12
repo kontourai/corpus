@@ -10,6 +10,9 @@ import { gitStatusPorcelain, headShaOrNull } from './git.mjs';
 import { locateInBundle } from './locate.mjs';
 import { MANIFEST_FILE, RETIRED_MANIFEST_FILE, manifestFile, loadManifest, validateProducts } from './manifest.mjs';
 import { toFsPath } from './paths.mjs';
+import { hierarchyFields, searchBundles, splitWords, stamp, synonymsError } from './search.mjs';
+
+export { searchBundles };
 
 export const DEFAULT_HUB = 'https://kontourai.github.io/';
 export const HUB_CACHE_MS = 10 * 60 * 1000;
@@ -50,6 +53,11 @@ export function bundleShapeError(bundle, product) {
     if (document.lineOffset !== undefined && !(Number.isInteger(document.lineOffset) && document.lineOffset >= 0))
       return `documents[${index}].lineOffset must be a non-negative integer`;
   }
+  // Added with BM25 search; optional so older bundles stay readable.
+  if (bundle.synonyms !== undefined) {
+    const problem = synonymsError(bundle.synonyms, 'bundle synonyms');
+    if (problem) return problem;
+  }
   const ids = new Set();
   for (const [index, topic] of bundle.topics.entries()) {
     if (topic === null || typeof topic !== 'object') return `topics[${index}] is not an object`;
@@ -87,15 +95,6 @@ function topicTreeError(topics) {
     for (const id of walked) reachesRoot.add(id);
   }
   return null;
-}
-
-/** The optional hierarchy fields a topic carries, for list and search results. */
-function hierarchyFields(topic) {
-  return {
-    ...(topic.parentId !== undefined ? { parentId: topic.parentId } : {}),
-    ...(topic.tags !== undefined ? { tags: topic.tags } : {}),
-    ...(topic.summary !== undefined ? { summary: topic.summary } : {}),
-  };
 }
 
 /** A loaded snapshot: available bundles by product plus the products that failed. */
@@ -380,78 +379,6 @@ export function bundleFileSource(files) {
   return staticSource(bundles, { describe: `bundle ${resolved.join(', ')}`, label: (index) => `--bundle ${files[index]}` });
 }
 
-function words(text) {
-  return [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter(Boolean))];
-}
-
-function countOccurrences(haystack, needle) {
-  let count = 0;
-  for (let index = haystack.indexOf(needle); index !== -1; index = haystack.indexOf(needle, index + needle.length)) count++;
-  return count;
-}
-
-function snippetFor(markdown, terms, width = 220) {
-  const lower = markdown.toLowerCase();
-  const hits = terms.map((term) => lower.indexOf(term)).filter((index) => index !== -1);
-  const at = hits.length > 0 ? Math.min(...hits) : 0;
-  const start = Math.max(0, at - 80);
-  const text = markdown.slice(start, start + width).replace(/\s+/g, ' ').trim();
-  return `${start > 0 ? '…' : ''}${text}${start + width < markdown.length ? '…' : ''}`;
-}
-
-/**
- * Ranked term matching: title hits weigh 5, id/source/tag hits 3, summary
- * hits 2, body hits 1 (capped at 10 per term), scaled by the share of query
- * terms matched. Ties rank topics before documents.
- */
-export function searchBundles(bundles, query, limit = 10) {
-  const terms = words(query);
-  if (terms.length === 0) return [];
-  const results = [];
-  for (const bundle of bundles) {
-    const items = [
-      // The bundle's own fields first, so a stray `kind` or `meta` key in a bundle cannot override the computed ones.
-      ...bundle.topics.map((topic) => ({ ...topic, kind: 'topic', id: topic.id, meta: [topic.id, topic.source, ...(topic.tags ?? [])].join(' ') })),
-      ...bundle.documents.map((document) => ({ ...document, kind: 'document', meta: document.source })),
-    ];
-    for (const item of items) {
-      const title = item.title.toLowerCase();
-      const meta = item.meta.toLowerCase();
-      const body = item.markdown.toLowerCase();
-      const summary = (item.kind === 'topic' ? item.summary ?? '' : '').toLowerCase();
-      let score = 0;
-      let matched = 0;
-      for (const term of terms) {
-        const termScore =
-          countOccurrences(title, term) * 5 + countOccurrences(meta, term) * 3 + countOccurrences(summary, term) * 2 + Math.min(countOccurrences(body, term), 10);
-        if (termScore > 0) matched++;
-        score += termScore;
-      }
-      if (matched === 0) continue;
-      results.push({
-        product: bundle.product,
-        kind: item.kind,
-        ...(item.kind === 'topic' ? { id: item.id, ...hierarchyFields(item) } : {}),
-        title: item.title,
-        source: item.source,
-        url: item.url,
-        ...stamp(bundle),
-        score: Math.round(score * (matched / terms.length) * 100) / 100,
-        snippet: snippetFor(item.markdown, terms),
-      });
-    }
-  }
-  // On equal scores a topic (a curated, narrower section) outranks the whole document.
-  const kindRank = { topic: 0, document: 1 };
-  results.sort((a, b) => b.score - a.score || kindRank[a.kind] - kindRank[b.kind] || a.product.localeCompare(b.product) || a.source.localeCompare(b.source));
-  return results.slice(0, limit);
-}
-
-/** Source identity on every result: the bundle sha, plus `dirty: true` for an uncommitted checkout. */
-function stamp(bundle) {
-  return bundle.dirty ? { sha: bundle.sha, dirty: true } : { sha: bundle.sha };
-}
-
 function json(data) {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
@@ -580,7 +507,7 @@ export function createDocsServer(source) {
   tool(
     'search',
     {
-      description: 'Ranked keyword search over topics and documents of one or all products. Returns snippets with product, source, url, and the source commit sha.',
+      description: 'Ranked search (BM25, stemmed, with synonyms) over the topics, documents, and named table rows (a key, tool, command, or flag in a table\'s first column) of one or all products. Returns snippets with product, kind, source, url, and the source commit sha; a row result also carries its name and the headings above it.',
       inputSchema: z.object({
         query: z.string().describe('Words to look for, e.g. "evidence gate".'),
         product: z.string().optional().describe('Limit to one product slug.'),
@@ -589,7 +516,7 @@ export function createDocsServer(source) {
       annotations: readOnly,
     },
     async ({ query, product, limit }) => {
-      if (words(query).length === 0) return toolError('query must contain at least one word');
+      if (splitWords(query).length === 0) return toolError('query must contain at least one word');
       const loaded = await source.load();
       let bundles = [...loaded.bundles.values()];
       if (product !== undefined) {

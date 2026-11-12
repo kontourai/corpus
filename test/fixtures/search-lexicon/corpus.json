@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "product": "lexicon",
+  "title": "Lexicon",
+  "tagline": "A fixture product for search tests",
+  "repo": "kontourai/lexicon",
+  "purpose": "A fixture product for Corpus search tests.",
+  "builtOn": [],
+  "landing": "README.md",
+  "documents": [
+    { "source": "docs/reference.md", "section": "Reference" },
+    { "source": "docs/guide.md", "section": "Guide" }
+  ],
+  "topics": [
+    { "id": "settings", "title": "Settings", "source": "docs/reference.md#settings" },
+    { "id": "stuck-watcher", "title": "Stuck watcher", "source": "docs/guide.md#stuck-watcher" }
+  ],
+  "synonyms": [["quokka", "marsupial"]]
+}
