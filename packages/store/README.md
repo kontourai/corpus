@@ -470,6 +470,14 @@ serializer remains the writer for changed fields and new records. Station-writte
 fixtures include all mutation evidence shapes and round-trip byte for byte.
 
 Default layout: `records/<id>.md`, `graph-index.json`, `alias-index.json`.
+The default store creates `records/` and the two indexes on the first write, not
+at construction. Constructing it over an existing root, and read-only calls such
+as `get` and the list methods on a root with no `records/`, create and change
+nothing, so a host's dry run can read an empty root safely. A root that does not
+exist yet is the exception: the constructor creates the directory and its
+`.corpus-root-id` marker, because the root binding is a synchronous identity
+fixed at construction. A host whose dry run must create nothing should not
+construct the store over a missing root.
 Vault layout: category-routed notes, `people/`, archives, `path-index.json`,
 `graph-index.json`, `alias-index.json`, and collision-safe body sentinels.
 Graph and alias indexes can be rebuilt; vault path mappings remain authoritative.
