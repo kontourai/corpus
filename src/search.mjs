@@ -4,8 +4,32 @@ import { analyzeMarkdown, plainText } from './markdown.mjs';
 //
 // The approach (BM25 over a part's fields, a part per table row that names a
 // thing, half-weight synonyms, and a light stemmer applied to both sides) is
-// adapted from pmndrs/pine's `src/manual.ts` (MIT, https://github.com/pmndrs/pine).
-// The code here is written for Corpus bundles, not copied.
+// adapted from pmndrs/pine's `src/manual.ts` (https://github.com/pmndrs/pine,
+// MIT License, Copyright (c) 2026 Paul Henschel). `stem` follows pine's
+// stemmer closely, and some suite synonym groups start from pine's list; the
+// rest is written for Corpus bundles. pine's license, for those portions:
+//
+//   MIT License
+//
+//   Copyright (c) 2026 Paul Henschel
+//
+//   Permission is hereby granted, free of charge, to any person obtaining a copy
+//   of this software and associated documentation files (the "Software"), to deal
+//   in the Software without restriction, including without limitation the rights
+//   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//   copies of the Software, and to permit persons to whom the Software is
+//   furnished to do so, subject to the following conditions:
+//
+//   The above copyright notice and this permission notice shall be included in all
+//   copies or substantial portions of the Software.
+//
+//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//   SOFTWARE.
 //
 // A bundle is indexed the first time it is searched and the index is kept for
 // as long as the bundle object lives. Row parts are derived from each
@@ -78,7 +102,7 @@ const STOP_WORDS = new Set(
   (
     'a an the and or of to in on for with by is are was were be been being how do does did i my me it its that this these those from as at into ' +
     'via can could should would will what which when where who whom why you your we our us there here if then than so not no yes use using ' +
-    'want need about have has had mean means tell please just one some any each also way something anything everything thing things happen happens see would anyway still may might'
+    'want need about have has had mean means tell please just one some any each also way something anything everything thing things happen happens see anyway still may might'
   ).split(' '),
 );
 
