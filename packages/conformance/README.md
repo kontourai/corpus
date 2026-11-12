@@ -1,6 +1,6 @@
 # Corpus store conformance
 
-Version `0.1.0-next.4` is intended for the `next` dist-tag alongside Corpus Store
+Version `0.1.0-next.5` is intended for the `next` dist-tag alongside Corpus Store
 through the [workspace publish workflow](../../README.md#publishing-the-store-workspaces).
 This package has no dependencies; Store uses it only for development tests,
 so neither package requires the other to be published first.
