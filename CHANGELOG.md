@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+Additive: a new package subpath. The root entry, the CLI, and the MCP server are unchanged.
+
+- **`@kontourai/corpus/search` embeds ranked search offline.** The new subpath exports `searchBundles(bundles, query, limit)`, the ranking behind the MCP `search` tool, for hosts that hold their own `docs-bundle.json` and run without file, network, or process access. The root entry reads its own files at import time (the package version and the site script), so a bundled copy failed at load with `ENOENT`; the subpath loads only `src/search.mjs`, `src/markdown.mjs`, `node:path`, `marked`, `github-slugger`, and `htmlparser2`. A new test walks the subpath's import graph and fails on any other built-in, file read, `import.meta`, `fetch`, `process`, `require`, or dynamic import, and it imports the subpath in a child process with the file system, child processes, the network, and `fetch` made to throw, then searches a real bundle. `npm run verify:pack` runs the same probe against the installed tarball. See [Embedding search offline](README.md#embedding-search-offline).
+
 ## 0.8.0
 
 The first version published to npm. Breaking for repositories that still have a v1 manifest (see below), and MCP `search` scores are on a new scale. Corpus Store and Corpus Conformance changes from the same period shipped in their own prereleases and are in [packages/store/CHANGELOG.md](packages/store/CHANGELOG.md).

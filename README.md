@@ -428,6 +428,20 @@ args = ["-y", "--package=@kontourai/corpus@<version>", "--", "corpus", "mcp"]
 
 To serve local checkouts while you write docs, add `--workspace ~/dev/github/kontourai` or `--repo .` after `mcp`.
 
+## Embedding search offline
+
+A host that ships its own docs bundle can rank results in-process, without running the MCP server:
+
+```js
+import { searchBundles } from '@kontourai/corpus/search';
+
+const results = searchBundles([bundle], 'how do I run something on a cron job', 10);
+```
+
+`bundles` is an array of parsed `docs-bundle.json` objects and `limit` defaults to 10. Results have the same shape and ranking as the MCP `search` tool (see [Search ranking](#search-ranking)). `searchBundles` is this subpath's only export.
+
+The subpath is safe to bundle into an offline, credential-free server. Nothing it loads reads files, uses the network or child processes, or touches `process`, either when it is imported or when it searches. Its only dependencies are `marked`, `github-slugger`, `htmlparser2`, and `node:path`. The root `@kontourai/corpus` entry is different: it reads its own files when it is imported, so a bundler that inlines it fails at load time. A test walks the subpath's import graph and imports it with the file system, child processes, the network, and `fetch` disabled, so a change that adds I/O fails CI. Validating a bundle's shape (`bundleShapeError`) is still exported only from the root entry.
+
 ## Adopting corpus in a repo
 
 1. Add Corpus as an exact-pinned dev dependency and commit the lockfile, so CI installs the same Corpus and the same dependency tree every time. For an unreleased commit, use `https://codeload.github.com/kontourai/corpus/tar.gz/<sha>` (full sha) as the spec instead.

@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv } from '../src/git.mjs';
+import { offlineSearchProbe } from './offline-search-probe.mjs';
 import { packedFileProblems, trackedShippedFiles } from './root-package-files.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,11 +76,23 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const corpus = await import('@kontourai/corpus');
 assert.equal(typeof corpus.validateDecisions, 'function');
+const search = await import('@kontourai/corpus/search');
+assert.deepEqual(Object.keys(search), ['searchBundles']);
+assert.equal(search.searchBundles, corpus.searchBundles);
 const require = createRequire(import.meta.url);
 assert.equal(require('@kontourai/corpus/schemas/decision-record.schema.json').type, 'object');
 await assert.rejects(import('@kontourai/corpus/src/cli.mjs'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 `);
   run(process.execPath, ['probe.mjs'], consumer);
+  // The offline search subpath resolves from the installed package and
+  // searches with the file system, child processes, the network, and fetch
+  // disabled, over the installed copies of its dependencies.
+  const searchProbe = JSON.parse(
+    run(process.execPath, ['--input-type=module', '--eval', offlineSearchProbe(join(repo, 'test/fixtures/search-bundles/station.docs-bundle.json'), 'how do I run something on a cron job')], consumer),
+  );
+  assert.deepEqual(searchProbe.denied, []);
+  assert.ok(searchProbe.results.some((result) => result.kind === 'topic' && result.id === 'scheduled-jobs'), JSON.stringify(searchProbe.results));
+  console.log(`@kontourai/corpus/search: ${searchProbe.results.length} results offline, top ${searchProbe.results[0].product}/${searchProbe.results[0].id ?? searchProbe.results[0].source}`);
 
   // A real-shaped corpus: the "valid" docs fixture plus one product's decision
   // records copied from test/fixtures, with the decisions gate declared.
