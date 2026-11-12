@@ -28,7 +28,7 @@
 //            project with the packed tarball installed)
 //   --entry  check this module instead of the subpath (negative controls)
 // Prints a JSON summary on stdout. Exit 0 pass, 1 guard failure, 2 usage.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -166,4 +166,6 @@ async function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+// Compare real paths: run through a symlink (macOS /tmp is one) the plain paths
+// differ, and a guard that silently skips main() would pass without checking.
+if (process.argv[1] && realpathSync(path.resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) await main();
