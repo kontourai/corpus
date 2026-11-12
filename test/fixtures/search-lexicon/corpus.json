@@ -12,7 +12,8 @@
     { "source": "docs/guide.md", "section": "Guide" }
   ],
   "topics": [
-    { "id": "settings", "title": "Settings", "source": "docs/reference.md#settings" }
+    { "id": "settings", "title": "Settings", "source": "docs/reference.md#settings" },
+    { "id": "stuck-watcher", "title": "Stuck watcher", "source": "docs/guide.md#stuck-watcher" }
   ],
   "synonyms": [["quokka", "marsupial"]]
 }

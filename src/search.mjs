@@ -1,4 +1,4 @@
-import { analyzeMarkdown, plainText } from './markdown.mjs';
+import { lexWithSlugs, plainText } from './markdown.mjs';
 
 // Ranked search over docs bundles.
 //
@@ -196,22 +196,42 @@ function codeSpans(markdown) {
   return (markdown.match(/`[^`\n]{1,64}`/g) ?? []).join(' ');
 }
 
+/** The first code span in some inline tokens, looking inside emphasis, links and other inline formatting. */
+function firstCodespan(tokens = []) {
+  for (const token of tokens) {
+    if (token.type === 'codespan') return token;
+    const inner = firstCodespan(token.tokens);
+    if (inner) return inner;
+  }
+  return null;
+}
+
 /**
  * Cut Markdown into passages at its headings of levels 1 to 3 (deeper
  * headings stay inside their passage), and collect the table rows that name
  * a thing: a row whose first cell has a code span (a key, a tool, a command,
- * a flag) and at least one more cell. A row's title is its first cell as it
- * reads and its name the first code span. Each carries the headings above it.
- * Only headings and tables outside lists and quotes count, as for topics.
+ * a flag), even inside bold or a link, and at least one more cell. A row's
+ * title is its first cell as it reads and its name the first code span. Each
+ * carries the headings above it. Only headings and tables outside lists and
+ * quotes count, as for topics.
+ *
+ * `owned` holds slugs of headings whose sections a topic already covers, at
+ * any level: a section runs from its heading to the next heading of the same
+ * or a higher level, as the builder cuts topics (`extractSection`). Their
+ * text is left out of the passages (rows are still collected), so a topic's
+ * text never ranks again as its document, whatever level its heading is.
  */
-export function outline(markdown) {
-  const { tokens } = analyzeMarkdown(markdown);
+export function outline(markdown, owned = null) {
+  const tokens = lexWithSlugs(markdown);
   const passages = [];
   const rows = [];
   const stack = []; // { depth, text, slug } of the headings above
   let current = { headings: [], text: '' };
+  let ownedDepth = 0; // depth of the topic heading whose section this is, or 0
   for (const token of tokens) {
     if (token.type === 'heading') {
+      if (ownedDepth > 0 && token.depth <= ownedDepth) ownedDepth = 0;
+      if (ownedDepth === 0 && owned?.has(token.slugId)) ownedDepth = token.depth;
       while (stack.length > 0 && stack.at(-1).depth >= token.depth) stack.pop();
       stack.push({ depth: token.depth, text: plainText(token.tokens).trim(), slug: token.slugId });
       if (token.depth <= 3) {
@@ -219,11 +239,11 @@ export function outline(markdown) {
         current = { headings: [...stack], text: '' };
       }
     }
-    current.text += token.raw;
+    if (ownedDepth === 0) current.text += token.raw;
     if (token.type !== 'table') continue;
     const header = token.header.map((cell) => plainText(cell.tokens).trim());
     for (const row of token.rows) {
-      const name = row[0]?.tokens.find((inline) => inline.type === 'codespan');
+      const name = firstCodespan(row[0]?.tokens);
       if (!name || row.length < 2) continue;
       const told = row
         .slice(1)
@@ -262,10 +282,11 @@ const anchorUrl = (url, anchor) => `${url.replace(/#.*$/, '')}#${encodeURICompon
 
 /**
  * The bundle's searchable units (topics, documents, table rows), each with
- * the passages it is scored by. A document passage that a topic of the same
- * source covers (the topic's anchor is one of the headings it stands under,
- * or the topic is the whole file) belongs to that topic only, so one passage
- * never ranks twice. Rows come from documents.
+ * the passages it is scored by. Document text that a topic of the same source
+ * covers (the section under the topic's heading, or the whole file) belongs
+ * to that topic only, so one passage never ranks twice. A document with no
+ * text at all still has one empty passage, so its title and source find it.
+ * Rows come from documents.
  */
 function buildIndex(bundle) {
   const units = [];
@@ -286,10 +307,11 @@ function buildIndex(bundle) {
   }
   for (const document of bundle.documents) {
     const covering = topicsBySource.get(document.source) ?? [];
-    const covered = (headings) => covering.some((anchor) => anchor === null || headings.some((heading) => heading.slug === anchor));
+    const wholeFile = covering.includes(null);
     const own = [terms(document.title, true), terms(document.source, true), []];
-    const { passages, rows } = outline(document.markdown);
-    const free = passages.filter((p) => !covered(p.headings));
+    const { passages, rows } = outline(document.markdown, new Set(covering));
+    let free = wholeFile ? [] : passages;
+    if (!wholeFile && !document.markdown.trim()) free = [{ headings: [], text: '' }];
     if (free.length > 0) units.push({ result: { kind: 'document', document }, kindRank: 2, passages: free.map((p) => passage(own, p.headings, p.text, { markdown: p.text })) });
     for (const row of rows) {
       const anchor = row.headings.at(-1)?.slug;

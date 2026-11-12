@@ -7,7 +7,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { BIN, FIXTURES, commitAll, fixtureRepo, runCli } from './helpers.mjs';
 import { bundleFromCheckout } from '../src/bundle.mjs';
 import { bundleShapeError, searchBundles, staticSource } from '../src/mcp.mjs';
-import { stem } from '../src/search.mjs';
+import { analyzeMarkdown, lexWithSlugs } from '../src/markdown.mjs';
+import { outline, stem } from '../src/search.mjs';
 
 /** The lexicon fixture built by the real builder, as `build` and `mcp --repo` assemble it. */
 function lexicon(t) {
@@ -45,6 +46,108 @@ test('a document passage under a topic is returned as the topic, not again as th
   assert.ok(!results.some((result) => result.kind === 'document' && result.source === 'docs/reference.md'), JSON.stringify(results, null, 2));
   // Its passages outside the topic still find the document.
   assert.equal(searchBundles([bundle], 'every command it has')[0].source, 'docs/reference.md');
+});
+
+test('a topic on an H4 heading owns its section: the document does not take a second result for it', (t) => {
+  const { bundle } = lexicon(t);
+  assert.ok(bundle.topics.some((topic) => topic.id === 'stuck-watcher'), 'the builder made the H4 topic');
+  // Only the H4 section has these words, so only its owner may answer.
+  const results = searchBundles([bundle], 'stuck heartbeats', 50);
+  assert.equal(results[0].kind, 'topic');
+  assert.equal(results[0].id, 'stuck-watcher');
+  assert.ok(!results.some((result) => result.kind === 'document' && result.source === 'docs/guide.md'), JSON.stringify(results, null, 2));
+  // The H3 passage around it is still the document's, before and after the topic's section.
+  for (const query of ['network side', 'cold boot first poll']) {
+    const [top] = searchBundles([bundle], query);
+    assert.equal(top.kind, 'document', query);
+    assert.equal(top.source, 'docs/guide.md', query);
+  }
+});
+
+test('a row whose name is bold or linked code is still a row, named by the code', (t) => {
+  const { bundle } = lexicon(t);
+  for (const [query, name, title] of [
+    ['maxAttempts', 'maxAttempts', 'maxAttempts'],
+    ['backoffMs', 'backoffMs', 'backoffMs'],
+  ]) {
+    const [top] = searchBundles([bundle], query);
+    assert.equal(top.kind, 'row', query);
+    assert.equal(top.name, name, query);
+    assert.equal(top.title, title, query);
+    assert.deepEqual(top.headings, ['Reference', 'Limits'], query);
+  }
+  // Emphasis and links nest: the first code span is found at any depth.
+  const [row] = outline('| Key | Meaning |\n| --- | --- |\n| ***[see `deep`](#x)*** then `later` | nested |\n').rows;
+  assert.equal(row?.name, 'deep');
+});
+
+test('a document with no text is still found by its title and source', () => {
+  for (const markdown of ['', '\n\n  \n']) {
+    const bundle = {
+      schemaVersion: 2,
+      product: 'empty',
+      title: 'Empty',
+      tagline: '',
+      purpose: 'A product with an empty page.',
+      builtOn: [],
+      repo: 'kontourai/empty',
+      sha: 'abc',
+      builtAt: '',
+      siteUrl: 'https://example.com/',
+      digest: 'abc',
+      documents: [{ source: 'docs/placeholder.md', section: null, title: 'Quokkazebra', landing: true, url: 'https://example.com/placeholder.html', repoPath: 'docs/placeholder.md', lineOffset: 0, markdown }],
+      topics: [],
+    };
+    assert.equal(bundleShapeError(bundle), null);
+    const [top] = searchBundles([bundle], 'Quokkazebra');
+    assert.equal(top?.kind, 'document', JSON.stringify(markdown));
+    assert.equal(top.source, 'docs/placeholder.md');
+    assert.equal(searchBundles([bundle], 'placeholder')[0]?.source, 'docs/placeholder.md', 'by its source');
+    // A topic over the whole file still owns it: one result, the topic.
+    const covered = { ...bundle, topics: [{ id: 'all', title: 'Quokkazebra', source: 'docs/placeholder.md', url: 'https://example.com/placeholder.html', markdown }] };
+    assert.deepEqual(
+      searchBundles([covered], 'Quokkazebra').map((result) => result.kind),
+      ['topic'],
+    );
+  }
+});
+
+test('search gives headings the same slugs as analyzeMarkdown, nested and repeated headings included', () => {
+  const markdown = '# Setup\n\n## Setup\n\n> ## Setup\n\n- ## Setup\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n### Setup\n\n## Other `code` *em*\n';
+  const slugs = [];
+  const visit = (tokens) => {
+    for (const token of tokens) {
+      if (token.type === 'heading') slugs.push(token.slugId);
+      visit(token.type === 'list' ? token.items : (token.tokens ?? []));
+    }
+  };
+  visit(lexWithSlugs(markdown));
+  assert.deepEqual(slugs, analyzeMarkdown(markdown).headings.map((heading) => heading.slug));
+  assert.deepEqual(slugs, ['setup', 'setup-1', 'setup-2', 'setup-3', 'setup-4', 'other-code-em']);
+});
+
+test('first-search indexing time grows linearly with the number of links on a page', () => {
+  // A ratio between two sizes, never a millisecond limit. 16 times the links
+  // measured about 15 times as long when linear and over 200 times as long
+  // with marked.walkTokens' quadratic walk; the limit sits between.
+  const SMALL = 500;
+  const LARGE = SMALL * 16;
+  const coldMs = (n) => {
+    const markdown = `# Guide\n${Array.from({ length: n }, (_, i) => `entry [link${i}](https://example.com/${i})\n`).join('')}`;
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      // A new bundle object each run, so the index is built again.
+      const bundle = { product: 'links', sha: 'abc', topics: [], documents: [{ title: 'Guide', source: 'guide.md', url: 'https://example.com/guide.html', markdown }] };
+      const start = performance.now();
+      assert.equal(searchBundles([bundle], 'entry').length, 1);
+      best = Math.min(best, performance.now() - start);
+    }
+    return best;
+  };
+  coldMs(SMALL); // warm up the JIT
+  const small = coldMs(SMALL);
+  const large = coldMs(LARGE);
+  assert.ok(large / small < 60,`${LARGE} links took ${large.toFixed(1)} ms, ${(large / small).toFixed(1)}x the ${small.toFixed(1)} ms for ${SMALL}`);
 });
 
 test('stemming is symmetric: subscribe, subscribes, subscribed and subscribing find each other', (t) => {
