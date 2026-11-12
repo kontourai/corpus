@@ -297,6 +297,11 @@ export class KnowledgeFileTransactions {
     }
   }
 
+  /** True inside a `read` (not a write), where persisting a derived-cache repair is optional. */
+  inReadOnlyScope(): boolean {
+    return this.storage.getStore()?.journal.operation === 'read-repair';
+  }
+
   async read<T>(body: () => T | Promise<T>): Promise<T> {
     return this.mutate('read-repair', body);
   }

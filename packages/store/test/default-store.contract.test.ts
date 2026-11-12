@@ -1,6 +1,7 @@
 import { standaloneFileMutationLock } from '../src/index.js';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -178,6 +179,7 @@ describe('KitDefaultStoreAdapter — on-disk fixture proof (store-contract.md §
     // Exact bytes Station wrote before the compiled-source rule; never created through the constructor.
     const legacy = readFileSync(new URL('./fixtures/station/contract-record.md', import.meta.url), 'utf8');
     expect(legacy).not.toMatch(/kind: source/);
+    mkdirSync(join(dir, 'records'));
     writeFileSync(join(dir, 'records', 'station-fixture-record.md'), legacy);
     const record = await adapter.get('station-fixture-record');
     expect(record?.type).toBe('compiled');

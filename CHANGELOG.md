@@ -8,6 +8,8 @@
 
 ## Unreleased — Corpus
 
+- **corpus-store: constructing and reading the default store creates nothing in an existing root.** `KitDefaultStoreAdapter` no longer creates `records/` in its constructor, and a read that finds no `records/` directory answers empty without writing `graph-index.json` or `alias-index.json`, so a host's dry run (for example the Knowledge kit's `dream --dry-run`) leaves the root as it found it. The first write creates `records/` and the indexes as before. A root that does not exist yet is still created and bound at construction. Not yet published.
+
 - Add a host-authorized, exact-record reviewed-confidence snapshot and conditional update with evidence revisions and durable replay receipts. Purge retires receipts tied to erased targets or evidence. Hosts authenticate reviewers and bind decisions; the store does not infer human authority.
 
 - Clarify store erasure results and retained reasons. A record purge identifies an exact readable proposal id under `NOT_FOUND`, and root initialization reports a non-private `coordinationDirectory` without disguising it as a root-binding mismatch.
