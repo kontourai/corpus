@@ -23,6 +23,8 @@ import type {
   CategoryListOptions,
   CreateInput,
   CreateProposalListOptions,
+  ProposeCreateResult,
+  KnowledgeStoreCreateProposalResults,
   KitCreateProposal,
   KitLink,
   KitMutationLogEntry,
@@ -473,7 +475,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
  */
 const TOMBSTONE_DIR = 'archive/purged';
 
-export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
+export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStoreCreateProposalResults, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -615,7 +617,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   private mutate<T>(
     operation: string,
     body: () => T,
-    options: { erasure?: boolean } = {},
+    options: { erasure?: boolean; requireDirectAcknowledgement?: boolean } = {},
   ): Promise<T> {
     return this.files.mutate(operation, () => {
       this.assertWritableFormat(operation);
@@ -1687,6 +1689,29 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
             this.readRecord(id, this.loadPathIndex()),
           ),
       ),
+    );
+  }
+
+  async proposeCreateWithResult(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+    options?: { requestKey?: string },
+  ): Promise<ProposeCreateResult> {
+    return this.mutate('proposeCreate', () =>
+      this.proposals.stageWithResult(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => this.readRecord(id, this.loadPathIndex()) !== null,
+        options,
+        (validated, origin) => this.assertCandidateFits(validated, origin),
+        (stored) =>
+          assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+            this.readRecord(id, this.loadPathIndex()),
+          ),
+      ),
+      { requireDirectAcknowledgement: true },
     );
   }
 

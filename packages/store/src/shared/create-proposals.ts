@@ -14,6 +14,7 @@ import type {
   PurgeEvidence,
   CreateProposalListOptions,
   CreateProposalState,
+  ProposeCreateResult,
   KitCreateProposal,
   KitMutationLogEntry,
   ProposalPurgeResult,
@@ -137,8 +138,21 @@ export class CreateProposals {
 
   // ── writes (call inside a mutation) ──────────────────────────────────────
 
-  /** Validate and store a pending proposal. Returns its id. */
+  /** Legacy ID-only entry point. */
   stage(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+    recordExists: (id: string) => boolean,
+    options?: { requestKey?: string },
+    assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
+    guard?: (candidate: CreateInput) => void,
+  ): string {
+    return this.stageWithResult(candidate, proposerId, evidence, recordExists, options, assertFits, guard).proposalId;
+  }
+
+  /** Report the decision made inside the owning mutation. */
+  stageWithResult(
     candidate: CreateInput,
     proposerId: string,
     evidence: ProposeEvidence,
@@ -153,7 +167,7 @@ export class CreateProposals {
     assertFits?: (candidate: CreateInput, origin: KitMutationLogEntry) => void,
     /** Purge: a candidate may not cite an erased record as a source. Runs before the profile's own checks. */
     guard?: (candidate: CreateInput) => void,
-  ): string {
+  ): ProposeCreateResult {
     if (!isNonemptyString(proposerId)) {
       throw new MissingEvidenceError('proposeCreate: missing required field: proposerId');
     }
@@ -204,7 +218,7 @@ export class CreateProposals {
     const requestDigest = key === undefined ? undefined : hash(canonical({ candidate: stored, proposerId, evidence: { agent, proposal } }));
     if (existing) {
       if (existing.request_digest !== requestDigest) throw new RequestKeyConflictError();
-      return existing.id;
+      return { proposalId: existing.id, disposition: 'reused', state: existing.state };
     }
     // A candidate may not cite an erased record as a source (purge, 2026-11-03).
     guard?.(stored);
@@ -248,7 +262,7 @@ export class CreateProposals {
       },
       MAX_PROPOSAL_BYTES - SETTLEMENT_HEADROOM_BYTES,
     );
-    return id;
+    return { proposalId: id, disposition: 'created', state: 'pending' };
   }
 
   /**

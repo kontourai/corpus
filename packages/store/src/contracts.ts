@@ -308,6 +308,20 @@ export interface PurgeOptions {
 /** A create proposal is `pending` until a reviewer settles it as `applied` or `rejected`. */
 export type CreateProposalState = 'pending' | 'applied' | 'rejected';
 
+/** Result of one create-proposal producer transaction. */
+export interface ProposeCreateResult {
+  proposalId: string;
+  disposition: 'created' | 'reused';
+  /** State observed inside the producer transaction; it can change afterward. */
+  state: CreateProposalState;
+}
+
+/** Optional capability implemented by the bundled create-proposal adapters. */
+export interface KnowledgeStoreCreateProposalResults {
+  /** A rejected or lost response does not establish whether publication occurred. */
+  proposeCreateWithResult(candidate: CreateInput, proposerId: string, evidence: ProposeEvidence, options?: { requestKey?: string }): Promise<ProposeCreateResult>;
+}
+
 /**
  * A staged request to create a record. It is not a record: the candidate is held
  * here whole, and no record exists under its id until the proposal is `applied`.
@@ -534,9 +548,10 @@ export interface KnowledgeStorePurger {
  */
 export interface KnowledgeStoreCreateProposals {
   /**
-   * Stage a request to create `candidate`. Returns the proposal id; the proposal is
-   * `pending` and no record exists. The candidate is checked against the same
-   * required fields as `create`, and `evidence` needs `agent` and `proposal`.
+   * Stage a request to create `candidate`. Returns the proposal id; a new proposal is
+   * `pending` and no record exists yet. A keyed reuse can already be settled.
+   * The candidate is checked against the same required fields as `create`, and
+   * `evidence` needs `agent` and `proposal`.
    * `proposerId` is an identity, not a record id. Put session, transcript and
    * source references in `candidate.provenance`: they become the created record's
    * provenance on `applyCreate`. An optional requestKey is store-wide, nonempty
