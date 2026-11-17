@@ -617,7 +617,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
   private mutate<T>(
     operation: string,
     body: () => T,
-    options: { erasure?: boolean } = {},
+    options: { erasure?: boolean; requireDirectAcknowledgement?: boolean } = {},
   ): Promise<T> {
     return this.files.mutate(operation, () => {
       this.assertWritableFormat(operation);
@@ -1676,7 +1676,20 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     evidence: ProposeEvidence,
     options?: { requestKey?: string },
   ): Promise<string> {
-    return (await this.proposeCreateWithResult(candidate, proposerId, evidence, options)).proposalId;
+    return this.mutate('proposeCreate', () =>
+      this.proposals.stage(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => this.readRecord(id, this.loadPathIndex()) !== null,
+        options,
+        (validated, origin) => this.assertCandidateFits(validated, origin),
+        (stored) =>
+          assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+            this.readRecord(id, this.loadPathIndex()),
+          ),
+      ),
+    );
   }
 
   async proposeCreateWithResult(
@@ -1698,6 +1711,7 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
             this.readRecord(id, this.loadPathIndex()),
           ),
       ),
+      { requireDirectAcknowledgement: true },
     );
   }
 

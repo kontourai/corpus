@@ -224,6 +224,22 @@ describe.each([
     expect(results.map(result => result.state)).toEqual(['pending', 'pending']);
   });
 
+  test('a commit acknowledgement failure does not produce a receipt from readback', async () => {
+    const files = (store as unknown as { files: { hooks: { afterCommitMarker?: () => void }; allEntriesMatch(...args: unknown[]): boolean } }).files;
+    const readback = vi.spyOn(files, 'allEntriesMatch');
+    let markerReached = false; let delivered = false;
+    files.hooks.afterCommitMarker = () => { markerReached = true; throw new Error('commit acknowledgement lost'); };
+    try { await store.proposeCreateWithResult(candidate(), 'agent-a', evidence, { requestKey: 'commit-ack-lost' }); delivered = true; } catch { /* Effect and acknowledgement are unknown to the caller. */ }
+    finally { delete files.hooks.afterCommitMarker; }
+    expect(markerReached).toBe(true); expect(delivered).toBe(false); expect(readback).not.toHaveBeenCalled(); readback.mockRestore();
+    // No post-error list/readback or automatic retry infers the invocation result.
+  });
+
+  test('an enclosing uncommitted mutation cannot issue a producer receipt', async () => {
+    const files = (store as unknown as { files: { mutate<T>(operation: string, body: () => Promise<T>): Promise<T> } }).files;
+    await expect(files.mutate('outer', () => store.proposeCreateWithResult(candidate(), 'agent-a', evidence))).rejects.toBeDefined();
+  });
+
   test('a lost response after the owner returns provides no result', async () => {
     let ownerReturned = false; let callerReceived = false;
     const transport = async () => { await store.proposeCreateWithResult(candidate(), 'agent-a', evidence, { requestKey: 'lost-response' }); ownerReturned = true; throw new Error('response lost'); };

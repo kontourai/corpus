@@ -908,7 +908,19 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     evidence: ProposeEvidence,
     options?: { requestKey?: string },
   ): Promise<string> {
-    return (await this.proposeCreateWithResult(candidate, proposerId, evidence, options)).proposalId;
+    return this.files.mutate('proposeCreate', () =>
+      this.proposals.stage(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => isSafePathSegment(id) && this.readRecord(id) !== null,
+        options,
+        undefined,
+        (stored) => assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          isSafePathSegment(id) ? this.readRecord(id) : null,
+        ),
+      ),
+    );
   }
 
   async proposeCreateWithResult(
@@ -929,6 +941,7 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
           isSafePathSegment(id) ? this.readRecord(id) : null,
         ),
       ),
+      { requireDirectAcknowledgement: true },
     );
   }
 
