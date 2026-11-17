@@ -23,6 +23,8 @@ import type {
   CategoryListOptions,
   CreateInput,
   CreateProposalListOptions,
+  ProposeCreateResult,
+  KnowledgeStoreCreateProposalResults,
   KitCreateProposal,
   KitLink,
   KitMutationLogEntry,
@@ -473,7 +475,7 @@ const CREATE_IDENTITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
  */
 const TOMBSTONE_DIR = 'archive/purged';
 
-export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
+export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStoreCreateProposalResults, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -1674,8 +1676,17 @@ export class KitObsidianStoreAdapter implements KnowledgeStoreAdapter, Knowledge
     evidence: ProposeEvidence,
     options?: { requestKey?: string },
   ): Promise<string> {
+    return (await this.proposeCreateWithResult(candidate, proposerId, evidence, options)).proposalId;
+  }
+
+  async proposeCreateWithResult(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+    options?: { requestKey?: string },
+  ): Promise<ProposeCreateResult> {
     return this.mutate('proposeCreate', () =>
-      this.proposals.stage(
+      this.proposals.stageWithResult(
         candidate,
         proposerId,
         evidence,

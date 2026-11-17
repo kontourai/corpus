@@ -49,6 +49,11 @@ for (const Constructor of [KitDefaultStoreAdapter, KitObsidianStoreAdapter]) {
  const adapter = new Constructor({ storeRoot: new URL('./' + Constructor.name, import.meta.url).pathname, coordinationDirectory: new URL('./coordination', import.meta.url).pathname, coordinationIdentity: () => () => {}, lock: standaloneFileMutationLock, allowReviewedConfidence: true, allowPurge: true });
  const id = await adapter.create({ type: 'raw', title: 'Installed', body: 'Consumer body', category: 'testing', provenance: { agent: 'consumer' } });
  assert.equal((await adapter.get(id)).body, 'Consumer body');
+ const proposalInput = { id: 'packed-proposal-record', type: 'raw', title: 'Proposal', body: 'body', category: 'testing', provenance: { agent: 'consumer' } };
+ const firstProposal = await adapter.proposeCreateWithResult(proposalInput, 'consumer', { agent: 'consumer', proposal: 'p' }, { requestKey: 'packed-proposal' });
+ assert.equal(firstProposal.disposition, 'created'); assert.equal(firstProposal.state, 'pending');
+ const reusedProposal = await adapter.proposeCreateWithResult(proposalInput, 'consumer', { agent: 'consumer', proposal: 'p' }, { requestKey: 'packed-proposal' });
+ assert.deepEqual(reusedProposal, { proposalId: firstProposal.proposalId, disposition: 'reused', state: 'pending' });
  for (const item of ['review-target', 'review-source']) await adapter.create({ id: item, type: 'raw', title: item, body: 'body', category: 'testing', confidence: 0.3, provenance: { agent: 'consumer' } });
  const target = await adapter.reviewedConfidenceSnapshot('review-target');
  const source = await adapter.reviewedConfidenceSnapshot('review-source');
@@ -88,7 +93,7 @@ await assert.rejects(import('@kontourai/corpus-store/storage'), { code: 'ERR_PAC
   console.log(run(process.execPath, ['conformance.mjs'], js, 600_000));
   console.log(run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', store, 'typescript@5.9.3', '@types/node@24.19.2'], ts));
   writeFileSync(join(ts, 'probe.ts'), `
-import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStorePurger, type PurgeResult, type ProposalPurgeResult, type StoreOptions, type FileMutationLock, type KitRecord, type KnowledgeStoreReviewedConfidence, type ReviewedConfidenceSnapshot, type ReviewedConfidenceRequest, type ReviewedConfidenceReceipt, reviewedConfidenceCandidateDigest } from '@kontourai/corpus-store';
+import { assertAdapterBoundTo, KitDefaultStoreAdapter, KitObsidianStoreAdapter, type KnowledgeStoreAdapter, type RootBoundAdapter, type KnowledgeStoreCreateProposals, type KnowledgeStoreCreateProposalResults, type ProposeCreateResult, type KnowledgeStorePurger, type PurgeResult, type ProposalPurgeResult, type StoreOptions, type FileMutationLock, type KitRecord, type KnowledgeStoreReviewedConfidence, type ReviewedConfidenceSnapshot, type ReviewedConfidenceRequest, type ReviewedConfidenceReceipt, reviewedConfidenceCandidateDigest } from '@kontourai/corpus-store';
 import { MissingEvidenceError } from '@kontourai/corpus-store/errors';
 import { observeExactKnowledgeRecordFile } from '@kontourai/corpus-store/observation';
 import assert from 'node:assert/strict';
@@ -139,6 +144,9 @@ function proposalTypes(): void {
   const conceptReject: Parameters<KitObsidianStoreAdapter['reject']> = ['target', 'proposer', { agent: 'a', reason: 'r' }];
   const proposals: KnowledgeStoreCreateProposals[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
   const proposalId: Promise<string> = proposals[0].proposeCreate({ type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'consumer' } }, 'proposer', { agent: 'consumer', proposal: 'p' });
+  const producerResults: KnowledgeStoreCreateProposalResults[] = [new KitDefaultStoreAdapter(options), new KitObsidianStoreAdapter(options)];
+  const producerResult: Promise<ProposeCreateResult> = producerResults[0].proposeCreateWithResult({ type: 'raw', title: 't', body: 'b', category: 'testing', provenance: { agent: 'consumer' } }, 'proposer', { agent: 'consumer', proposal: 'p' });
+  void producerResult;
   const applied: Promise<string> = proposals[0].applyCreate('proposal', 'reviewer');
   const rejected: Promise<void> = proposals[1].rejectCreate('proposal', 'reviewer', 'rationale');
   void conceptApply; void conceptReject; void proposalId; void applied; void rejected;

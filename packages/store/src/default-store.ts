@@ -17,6 +17,8 @@ import type {
   CategoryListOptions,
   CreateInput,
   CreateProposalListOptions,
+  ProposeCreateResult,
+  KnowledgeStoreCreateProposalResults,
   KitCreateProposal,
   KitLink,
   KitMutationLogEntry,
@@ -124,7 +126,7 @@ export type { ReindexResult };
 
 export interface KitDefaultStoreOptions extends StoreOptions {}
 
-export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
+export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStoreCreateProposalResults, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -906,8 +908,17 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
     evidence: ProposeEvidence,
     options?: { requestKey?: string },
   ): Promise<string> {
+    return (await this.proposeCreateWithResult(candidate, proposerId, evidence, options)).proposalId;
+  }
+
+  async proposeCreateWithResult(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+    options?: { requestKey?: string },
+  ): Promise<ProposeCreateResult> {
     return this.files.mutate('proposeCreate', () =>
-      this.proposals.stage(
+      this.proposals.stageWithResult(
         candidate,
         proposerId,
         evidence,

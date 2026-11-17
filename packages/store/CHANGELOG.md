@@ -4,6 +4,10 @@
 
 Until `0.1.0-next.5`, these entries lived in the root changelog's unreleased section. Each is listed under the first prerelease published from `main` after it merged. Pull requests that had no entry at the time are listed by title.
 
+## Unreleased
+
+- Add an optional create-proposal producer result that reports this invocation’s creation or keyed reuse and the state observed inside its transaction. The existing ID-only API remains available.
+
 ## 0.1.0-next.5
 
 - **corpus-store: constructing and reading the default store creates nothing in an existing root.** `KitDefaultStoreAdapter` no longer creates `records/` in its constructor, and a read that finds no `records/` directory answers empty without writing `graph-index.json` or `alias-index.json`, so a host's dry run (for example the Knowledge kit's `dream --dry-run`) leaves the root as it found it. The first write creates `records/` and the indexes as before. A root that does not exist yet is still created and bound at construction.
