@@ -4,7 +4,7 @@
 
 Until `0.1.0-next.5`, these entries lived in the root changelog's unreleased section. Each is listed under the first prerelease published from `main` after it merged. Pull requests that had no entry at the time are listed by title.
 
-## Unreleased
+## 0.1.0-next.6
 
 - Add an optional create-proposal producer result that reports this invocation’s creation or keyed reuse and the state observed inside its transaction. The existing ID-only API remains available.
 
