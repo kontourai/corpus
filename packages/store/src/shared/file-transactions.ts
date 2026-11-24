@@ -318,9 +318,13 @@ export class KnowledgeFileTransactions {
   async mutate<T>(
     operation: string,
     body: () => T | Promise<T>,
-    options: { erasure?: boolean } = {},
+    options: { erasure?: boolean; requireDirectAcknowledgement?: boolean } = {},
   ): Promise<T> {
-    if (this.storage.getStore()) return body();
+    if (this.storage.getStore()) {
+      // An enclosing mutation has not published yet and cannot issue a receipt.
+      if (options.requireDirectAcknowledgement) throw new KnowledgeStoreUnavailableError();
+      return body();
+    }
     let release: () => void | Promise<void>;
     try {
       this.validateRootIdentity();
@@ -389,6 +393,11 @@ export class KnowledgeFileTransactions {
         if (context.journal.phase === 'prepared') {
           this.rollback(context.journal);
           this.removeJournal();
+        } else if (options.requireDirectAcknowledgement) {
+          // A producer receipt must not be inferred from a post-error readback.
+          // Leave the committed journal for the normal recovery path.
+          this.observe(operation, 'unavailable');
+          throw unavailable(error);
         } else if (this.allEntriesMatch(context.journal, 'after')) {
           // Every authoritative/derived target is durably published. A lost
           // commit-marker response or cleanup error cannot turn that applied

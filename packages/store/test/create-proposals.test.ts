@@ -11,10 +11,11 @@ import {
   type CreateInput,
   type KnowledgeStoreAdapter,
   type KnowledgeStoreCreateProposals,
+  type KnowledgeStoreCreateProposalResults,
 } from '../src/index.js';
 import { SelfApprovalError, isKnowledgeStoreError } from '../src/errors.js';
 
-type Store = KnowledgeStoreAdapter & KnowledgeStoreCreateProposals;
+type Store = KnowledgeStoreAdapter & KnowledgeStoreCreateProposals & KnowledgeStoreCreateProposalResults;
 
 const evidence = { agent: 'distiller', proposal: 'Keep this finding from the session' };
 const candidate = (fields: Partial<CreateInput> = {}): CreateInput => ({
@@ -198,6 +199,53 @@ describe.each([
     const before = tree(root);
     expect(await code(store.create(candidate({ id: 'class-ref', provenance: { agent: 'writer', source_refs: [new Ref()] } })))).toBe('MISSING_EVIDENCE');
     expect(tree(root)).toEqual(before);
+  });
+
+  test('producer result reports this invocation and its observed state', async () => {
+    const options = { requestKey: 'producer-result' }; const input = candidate();
+    const first = await store.proposeCreateWithResult(input, 'agent-a', evidence, options);
+    expect(first).toMatchObject({ disposition: 'created', state: 'pending' });
+    expect(await open().proposeCreateWithResult(input, 'agent-a', evidence, options)).toEqual({ proposalId: first.proposalId, disposition: 'reused', state: 'pending' });
+    await store.applyCreate(first.proposalId, 'reviewer');
+    expect(await open().proposeCreateWithResult(input, 'agent-a', evidence, options)).toEqual({ proposalId: first.proposalId, disposition: 'reused', state: 'applied' });
+    expect(await store.proposeCreate(input, 'agent-a', evidence, options)).toBe(first.proposalId);
+    const rejectedInput = candidate({ id: 'reject-result' }); const rejectedOptions = { requestKey: 'reject-result' };
+    const rejected = await store.proposeCreateWithResult(rejectedInput, 'agent-a', evidence, rejectedOptions);
+    await store.rejectCreate(rejected.proposalId, 'reviewer', 'no');
+    expect(await open().proposeCreateWithResult(rejectedInput, 'agent-a', evidence, rejectedOptions)).toEqual({ proposalId: rejected.proposalId, disposition: 'reused', state: 'rejected' });
+    await expect(store.proposeCreateWithResult(candidate({ title: 'different' }), 'agent-a', evidence, options)).rejects.toMatchObject({ code: 'REQUEST_KEY_CONFLICT' });
+  });
+
+  test('concurrent keyed producers distinguish creation from reuse', async () => {
+    const options = { requestKey: 'producer-race' }; const other = open();
+    const results = await Promise.all([store.proposeCreateWithResult(candidate(), 'agent-a', evidence, options), other.proposeCreateWithResult(candidate(), 'agent-a', evidence, options)]);
+    expect(results[0].proposalId).toBe(results[1].proposalId);
+    expect(results.map(result => result.disposition).sort()).toEqual(['created', 'reused']);
+    expect(results.map(result => result.state)).toEqual(['pending', 'pending']);
+  });
+
+  test('a commit acknowledgement failure does not produce a receipt from readback', async () => {
+    const files = (store as unknown as { files: { hooks: { afterCommitMarker?: () => void }; allEntriesMatch(...args: unknown[]): boolean } }).files;
+    const readback = vi.spyOn(files, 'allEntriesMatch');
+    let markerReached = false; let delivered = false;
+    files.hooks.afterCommitMarker = () => { markerReached = true; throw new Error('commit acknowledgement lost'); };
+    try { await store.proposeCreateWithResult(candidate(), 'agent-a', evidence, { requestKey: 'commit-ack-lost' }); delivered = true; } catch { /* Effect and acknowledgement are unknown to the caller. */ }
+    finally { delete files.hooks.afterCommitMarker; }
+    expect(markerReached).toBe(true); expect(delivered).toBe(false); expect(readback).not.toHaveBeenCalled(); readback.mockRestore();
+    // No post-error list/readback or automatic retry infers the invocation result.
+  });
+
+  test('an enclosing uncommitted mutation cannot issue a producer receipt', async () => {
+    const files = (store as unknown as { files: { mutate<T>(operation: string, body: () => Promise<T>): Promise<T> } }).files;
+    await expect(files.mutate('outer', () => store.proposeCreateWithResult(candidate(), 'agent-a', evidence))).rejects.toBeDefined();
+  });
+
+  test('a lost response after the owner returns provides no result', async () => {
+    let ownerReturned = false; let callerReceived = false;
+    const transport = async () => { await store.proposeCreateWithResult(candidate(), 'agent-a', evidence, { requestKey: 'lost-response' }); ownerReturned = true; throw new Error('response lost'); };
+    try { await transport(); callerReceived = true; } catch { /* Caller has no result for the first invocation. */ }
+    expect(ownerReturned).toBe(true); expect(callerReceived).toBe(false);
+    // No list, readback, or automatic replay infers the lost invocation's disposition.
   });
 
   test('request key retries return the original receipt and conflicts write nothing', async () => {

@@ -17,6 +17,8 @@ import type {
   CategoryListOptions,
   CreateInput,
   CreateProposalListOptions,
+  ProposeCreateResult,
+  KnowledgeStoreCreateProposalResults,
   KitCreateProposal,
   KitLink,
   KitMutationLogEntry,
@@ -124,7 +126,7 @@ export type { ReindexResult };
 
 export interface KitDefaultStoreOptions extends StoreOptions {}
 
-export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
+export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeStoreCreateProposals, KnowledgeStoreCreateProposalResults, KnowledgeStorePurger, KnowledgeStoreReviewedConfidence {
   private readonly services: ResolvedServices;
   private readonly root: string;
   private readonly binding: string | undefined;
@@ -918,6 +920,28 @@ export class KitDefaultStoreAdapter implements KnowledgeStoreAdapter, KnowledgeS
           isSafePathSegment(id) ? this.readRecord(id) : null,
         ),
       ),
+    );
+  }
+
+  async proposeCreateWithResult(
+    candidate: CreateInput,
+    proposerId: string,
+    evidence: ProposeEvidence,
+    options?: { requestKey?: string },
+  ): Promise<ProposeCreateResult> {
+    return this.files.mutate('proposeCreate', () =>
+      this.proposals.stageWithResult(
+        candidate,
+        proposerId,
+        evidence,
+        (id) => isSafePathSegment(id) && this.readRecord(id) !== null,
+        options,
+        undefined,
+        (stored) => assertNoPurgedSupport('proposeCreate', stored.links ?? [], stored.provenance?.source_ids, (id) =>
+          isSafePathSegment(id) ? this.readRecord(id) : null,
+        ),
+      ),
+      { requireDirectAcknowledgement: true },
     );
   }
 

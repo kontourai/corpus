@@ -560,9 +560,15 @@ issue decision’s matching-retry rule after purge.
 The shared proposal-write seam also retires the key and removes the old digest if
 a partial scrub changes hashed candidate or evidence content, marking the key
 as `request_key_retired`. A partially scrubbed proposal can remain pending and
-applicable. To recover a lost receipt without minting another proposal, compute
-the SHA-256 hex digest of the original UTF-8 key and find its `request_key_hash`
-in `listProposals()`, then inspect its state. Live keyed proposals with a mismatching stored digest
+applicable. A later lookup can show a retained key and its current state, but it
+cannot establish whether a particular lost invocation created the proposal. The
+optional `proposeCreateWithResult` returns creation versus keyed reuse and the state
+observed in the producer transaction; it does not produce a result after a commit-stage
+error by inspecting the after-image. Lost responses remain unknown and are not replayed
+automatically. The existing ID-only method remains available. The both-profile proposal
+suite covers pending and settled reuse, concurrent keyed calls, and acknowledgement
+loss; the packed JS and TypeScript consumers check the public capability. Live keyed
+proposals with a mismatching stored digest
 are refused as corrupt. Four purge-integration vectors pass on the real purge
 implementation in both profiles. Completed full-purge and partial-label-scrub
 tests also check that store and coordination bytes do not retain the old digest.
